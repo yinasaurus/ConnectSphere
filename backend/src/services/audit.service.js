@@ -1,18 +1,18 @@
-const { db } = require('../config/db');
+const { insertOne } = require('../config/db');
 
 async function writeAudit(actorId, action, entityType, entityId, metadata) {
-  await db('audit_logs').insert({
+  await insertOne('audit_logs', {
     actor_id: actorId,
     action,
     entity_type: entityType,
     entity_id: entityId,
-    metadata: metadata ? JSON.stringify(metadata) : null,
+    metadata: metadata || null,
   });
 }
 
 async function notifyUser(userId, type, title, body, eventId) {
   if (!userId) return;
-  await db('notifications').insert({
+  await insertOne('notifications', {
     user_id: userId,
     event_id: eventId || null,
     type,

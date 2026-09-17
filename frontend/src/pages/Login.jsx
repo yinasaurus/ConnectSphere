@@ -1,27 +1,60 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../auth';
-import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../constants';
+import { DEMO_ACCOUNTS, DEMO_PASSWORD, homePathForRoles } from '../constants';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function validateLogin(email, password) {
+  const fieldErrors = {};
+  const trimmed = email.trim();
+  if (!trimmed) fieldErrors.email = 'Email is required';
+  else if (!EMAIL_PATTERN.test(trimmed)) fieldErrors.email = 'Enter a valid email address';
+  if (!password) fieldErrors.password = 'Password is required';
+  return fieldErrors;
+}
+
+function messageForLoginError(err) {
+  if (err.code === 'NETWORK_ERROR' || err.status === 0) {
+    return 'We could not reach the server. Check your connection and try again.';
+  }
+  if (err.status === 401 || err.code === 'INVALID_CREDENTIALS') {
+    return 'Invalid email or password.';
+  }
+  if (err.status === 400) {
+    return err.message || 'Check your email and password and try again.';
+  }
+  return 'Something went wrong. Please try again.';
+}
 
 export default function Login() {
-  const { user, login } = useAuth();
-  const navigate = useNavigate();
-  const [email, setEmail] = useState('organiser@acme.example');
-  const [password, setPassword] = useState(DEMO_PASSWORD);
-  const [error, setError] = useState('');
+  const { user, loading, login } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to="/app" replace />;
+  if (loading) {
+    return <p className="muted session-loading">Checking session…</p>;
+  }
+
+  if (user) {
+    return <Navigate to={homePathForRoles(user.roles)} replace />;
+  }
 
   async function onSubmit(event) {
     event.preventDefault();
+    const nextFieldErrors = validateLogin(email, password);
+    setFieldErrors(nextFieldErrors);
+    setFormError('');
+    if (Object.keys(nextFieldErrors).length) return;
+
     setBusy(true);
-    setError('');
     try {
-      await login(email, password);
-      navigate('/app');
+      await login(email.trim(), password);
     } catch (err) {
-      setError(err.message);
+      setFormError(messageForLoginError(err));
     } finally {
       setBusy(false);
     }
@@ -43,12 +76,42 @@ export default function Login() {
       <section className="auth-card">
         <h2>Sign in</h2>
         <p className="muted">Demo accounts all use <code>{DEMO_PASSWORD}</code>.</p>
-        {error && <div className="alert">{error}</div>}
-        <form onSubmit={onSubmit}>
+        {formError && <div className="alert" role="alert">{formError}</div>}
+        <form onSubmit={onSubmit} noValidate>
           <label htmlFor="email">Email</label>
-          <input id="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="username"
+            value={email}
+            aria-invalid={Boolean(fieldErrors.email)}
+            className={fieldErrors.email ? 'invalid' : ''}
+            disabled={busy}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setFieldErrors((current) => ({ ...current, email: undefined }));
+            }}
+          />
+          {fieldErrors.email && <p className="field-error">{fieldErrors.email}</p>}
+
           <label htmlFor="password">Password</label>
-          <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            aria-invalid={Boolean(fieldErrors.password)}
+            className={fieldErrors.password ? 'invalid' : ''}
+            disabled={busy}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setFieldErrors((current) => ({ ...current, password: undefined }));
+            }}
+          />
+          {fieldErrors.password && <p className="field-error">{fieldErrors.password}</p>}
+
           <div style={{ marginTop: 18 }}>
             <button className="btn" disabled={busy} type="submit">
               {busy ? 'Signing in…' : 'Continue'}
@@ -60,9 +123,12 @@ export default function Login() {
             <button
               key={account.email}
               type="button"
+              disabled={busy}
               onClick={() => {
                 setEmail(account.email);
                 setPassword(DEMO_PASSWORD);
+                setFieldErrors({});
+                setFormError('');
               }}
             >
               {account.role}

@@ -31,6 +31,8 @@ Thumbs.db
 .cache/
 .eslintcache
 .tmp/
+cypress/videos/
+cypress/screenshots/
 
 # Uploads (event supporting documents)
 backend/uploads/*

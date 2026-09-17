@@ -95,7 +95,9 @@ input, select, textarea {
   border-radius: 12px;
   padding: 12px 14px;
 }
-textarea { min-height: 90px; resize: vertical; }
+input.invalid { border-color: var(--bad); }
+.field-error { color: var(--bad); font-size: 0.8rem; margin: 6px 0 0; }
+.session-loading { padding: 48px 32px; }
 
 .btn {
   border: 0;
