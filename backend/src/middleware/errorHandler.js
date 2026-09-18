@@ -7,6 +7,10 @@ function errorHandler(err, req, res, _next) {
       : err.message || 'Something went wrong',
   };
 
+  if (err.details) {
+    payload.details = err.details;
+  }
+
   if (process.env.NODE_ENV !== 'production' && status === 500) {
     payload.stack = err.stack;
   }
@@ -22,10 +26,11 @@ function notFound(_req, res) {
   res.status(404).json({ error: 'NOT_FOUND', message: 'Route not found' });
 }
 
-function httpError(status, message, code) {
+function httpError(status, message, code, details) {
   const err = new Error(message);
   err.status = status;
   if (code) err.code = code;
+  if (details) err.details = details;
   return err;
 }
 
