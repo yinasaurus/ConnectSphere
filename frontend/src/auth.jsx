@@ -1,22 +1,27 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { api, getToken, setToken } from './api';
+import { api } from './api';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(Boolean(getToken()));
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!getToken()) return undefined;
+    let cancelled = false;
     api('/api/auth/me')
-      .then((data) => setUser(data.user))
-      .catch(() => {
-        setToken(null);
-        setUser(null);
+      .then((data) => {
+        if (!cancelled) setUser(data.user);
       })
-      .finally(() => setLoading(false));
-    return undefined;
+      .catch(() => {
+        if (!cancelled) setUser(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const value = useMemo(() => ({
@@ -25,12 +30,15 @@ export function AuthProvider({ children }) {
     hasRole: (...roles) => Boolean(user?.roles?.some((role) => roles.includes(role))),
     async login(email, password) {
       const data = await api('/api/auth/login', { method: 'POST', body: { email, password } });
-      setToken(data.token);
       setUser(data.user);
       return data.user;
     },
-    logout() {
-      setToken(null);
+    async logout() {
+      try {
+        await api('/api/auth/logout', { method: 'POST' });
+      } catch {
+        // Clear local session even if the network call fails.
+      }
       setUser(null);
     },
   }), [user, loading]);

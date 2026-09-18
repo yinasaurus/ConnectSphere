@@ -48,3 +48,12 @@ export const DEMO_ACCOUNTS = [
 ];
 
 export const DEMO_PASSWORD = 'Password123!';
+
+export function homePathForRoles(roles = []) {
+  if (roles.includes(ROLES.EVENT_COORDINATOR)) return '/app';
+  if (roles.includes(ROLES.VENUE_STAFF)) return '/app/venues';
+  if (roles.includes(ROLES.TECHNICAL_SUPPORT)) return '/app/equipment';
+  if (roles.includes(ROLES.EVENT_ORGANISER)) return '/app/events';
+  if (roles.includes(ROLES.ATTENDEE)) return '/app/events';
+  return '/app';
+}

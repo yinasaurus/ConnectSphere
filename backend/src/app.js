@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
 const { env } = require('./config/env');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 
@@ -16,7 +17,9 @@ function createApp() {
   const app = express();
 
   app.use(helmet());
+  // Reflect a single origin (not *) so credentialed cookies are allowed.
   app.use(cors({ origin: env.corsOrigin, credentials: true }));
+  app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
   app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 

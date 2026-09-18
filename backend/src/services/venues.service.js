@@ -1,4 +1,4 @@
-const { db } = require('../config/db');
+const { supabase, fetchMany, fetchOne, insertOne, insertMany, updateById } = require('../config/db');
 const { ROLES } = require('../constants/roles');
 const { BOOKING_STATUS } = require('../constants/statuses');
 const { httpError } = require('../middleware/errorHandler');
@@ -21,8 +21,10 @@ function mapVenue(row) {
 }
 
 async function listVenues() {
-  const rows = await db('venues').where({ is_active: 1 }).orderBy('name');
-  const layouts = await db('venue_layouts');
+  const rows = await fetchMany(
+    supabase.from('venues').select('*').eq('is_active', true).order('name')
+  );
+  const layouts = await fetchMany(supabase.from('venue_layouts').select('*'));
   const byVenue = layouts.reduce((acc, layout) => {
     acc[layout.venue_id] = acc[layout.venue_id] || [];
     acc[layout.venue_id].push(layout.layout);
@@ -37,7 +39,7 @@ async function createVenue(user, payload) {
   }
   if (!payload.name) throw httpError(400, 'Venue name is required', 'VALIDATION_ERROR');
 
-  const [id] = await db('venues').insert({
+  const created = await insertOne('venues', {
     name: payload.name,
     location: payload.location || null,
     capacity: payload.capacity || 0,
@@ -49,21 +51,21 @@ async function createVenue(user, payload) {
   });
 
   if (payload.layouts?.length) {
-    await db('venue_layouts').insert(
-      payload.layouts.map((layout) => ({ venue_id: id, layout }))
+    await insertMany(
+      'venue_layouts',
+      payload.layouts.map((layout) => ({ venue_id: created.id, layout }))
     );
   }
 
-  await writeAudit(user.id, 'VENUE_CREATED', 'venue', id, payload);
-  const [created] = (await listVenues()).filter((venue) => venue.id === id);
-  return created;
+  await writeAudit(user.id, 'VENUE_CREATED', 'venue', created.id, payload);
+  return (await listVenues()).find((venue) => venue.id === created.id);
 }
 
 async function updateVenue(user, id, payload) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can manage the catalogue', 'FORBIDDEN');
   }
-  await db('venues').where({ id }).update({
+  const patch = {
     name: payload.name,
     location: payload.location,
     capacity: payload.capacity,
@@ -72,22 +74,28 @@ async function updateVenue(user, id, payload) {
     operating_hours: payload.operatingHours,
     setup_minutes: payload.setupMinutes,
     teardown_minutes: payload.teardownMinutes,
-    is_active: payload.isActive === undefined ? undefined : payload.isActive ? 1 : 0,
-    updated_at: db.fn.now(),
-  });
+    updated_at: new Date().toISOString(),
+  };
+  if (payload.isActive !== undefined) patch.is_active = Boolean(payload.isActive);
+  await updateById('venues', id, patch);
   return (await listVenues()).find((venue) => venue.id === Number(id));
 }
 
 async function listBookings(filters = {}) {
-  const query = db('venue_bookings as b')
-    .join('venues as v', 'v.id', 'b.venue_id')
-    .join('events as e', 'e.id', 'b.event_id')
-    .select('b.*', 'v.name as venue_name', 'e.name as event_name')
-    .orderBy('b.start_at');
+  let query = supabase
+    .from('venue_bookings')
+    .select('*, venues ( name ), events ( name )')
+    .order('start_at');
 
-  if (filters.venueId) query.where('b.venue_id', filters.venueId);
-  if (filters.status) query.where('b.status', filters.status);
-  return query;
+  if (filters.venueId) query = query.eq('venue_id', filters.venueId);
+  if (filters.status) query = query.eq('status', filters.status);
+
+  const rows = await fetchMany(query);
+  return rows.map((row) => ({
+    ...row,
+    venue_name: row.venues?.name,
+    event_name: row.events?.name,
+  }));
 }
 
 async function requestBooking(user, payload) {
@@ -106,7 +114,7 @@ async function requestBooking(user, payload) {
     throw httpError(409, 'This venue already has a confirmed/pending booking in that window', 'BOOKING_CONFLICT');
   }
 
-  const [id] = await db('venue_bookings').insert({
+  const created = await insertOne('venue_bookings', {
     event_id: payload.eventId,
     venue_id: payload.venueId,
     requested_by: user.id,
@@ -118,8 +126,8 @@ async function requestBooking(user, payload) {
     notes: payload.notes || null,
   });
 
-  await writeAudit(user.id, 'BOOKING_REQUESTED', 'venue_booking', id, payload);
-  return db('venue_bookings').where({ id }).first();
+  await writeAudit(user.id, 'BOOKING_REQUESTED', 'venue_booking', created.id, payload);
+  return created;
 }
 
 async function decideBooking(user, id, decision) {
@@ -127,19 +135,19 @@ async function decideBooking(user, id, decision) {
     throw httpError(403, 'Only venue staff can approve or reject bookings', 'FORBIDDEN');
   }
 
-  const booking = await db('venue_bookings').where({ id }).first();
+  const booking = await fetchOne(supabase.from('venue_bookings').select('*').eq('id', id));
   if (!booking) throw httpError(404, 'Booking not found', 'NOT_FOUND');
 
   const status = decision.approve ? BOOKING_STATUS.APPROVED : BOOKING_STATUS.REJECTED;
-  await db('venue_bookings').where({ id }).update({
+  const updated = await updateById('venue_bookings', id, {
     status,
     decided_by: user.id,
     decision_reason: decision.reason || null,
     alternative_suggestion: decision.alternativeSuggestion || null,
-    decided_at: db.fn.now(),
+    decided_at: new Date().toISOString(),
   });
 
-  const event = await db('events').where({ id: booking.event_id }).first();
+  const event = await fetchOne(supabase.from('events').select('*').eq('id', booking.event_id));
   if (event?.coordinator_id) {
     await notifyUser(
       event.coordinator_id,
@@ -150,7 +158,7 @@ async function decideBooking(user, id, decision) {
     );
   }
 
-  return db('venue_bookings').where({ id }).first();
+  return updated;
 }
 
 async function findConflict(venueId, startAt, endAt, setupMinutes = 30, teardownMinutes = 30) {
@@ -159,32 +167,36 @@ async function findConflict(venueId, startAt, endAt, setupMinutes = 30, teardown
   start.setMinutes(start.getMinutes() - Number(setupMinutes || 30));
   end.setMinutes(end.getMinutes() + Number(teardownMinutes || 30));
 
-  return db('venue_bookings')
-    .where({ venue_id: venueId })
-    .whereIn('status', [BOOKING_STATUS.PENDING, BOOKING_STATUS.TENTATIVE, BOOKING_STATUS.APPROVED])
-    .where('start_at', '<', end)
-    .where('end_at', '>', start)
-    .first();
+  const rows = await fetchMany(
+    supabase
+      .from('venue_bookings')
+      .select('id')
+      .eq('venue_id', venueId)
+      .in('status', [BOOKING_STATUS.PENDING, BOOKING_STATUS.TENTATIVE, BOOKING_STATUS.APPROVED])
+      .lt('start_at', end.toISOString())
+      .gt('end_at', start.toISOString())
+      .limit(1)
+  );
+  return rows[0] || null;
 }
 
 async function listUnavailability(venueId) {
-  const query = db('venue_unavailability').orderBy('start_at');
-  if (venueId) query.where({ venue_id: venueId });
-  return query;
+  let query = supabase.from('venue_unavailability').select('*').order('start_at');
+  if (venueId) query = query.eq('venue_id', venueId);
+  return fetchMany(query);
 }
 
 async function blockVenue(user, payload) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can block venues', 'FORBIDDEN');
   }
-  const [id] = await db('venue_unavailability').insert({
+  return insertOne('venue_unavailability', {
     venue_id: payload.venueId,
     reason: payload.reason || 'Maintenance',
     start_at: payload.startAt,
     end_at: payload.endAt,
     created_by: user.id,
   });
-  return db('venue_unavailability').where({ id }).first();
 }
 
 module.exports = {

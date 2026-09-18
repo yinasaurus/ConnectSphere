@@ -11,18 +11,17 @@
     "dev": "concurrently -n api,web -c blue,green \"npm run dev -w backend\" \"npm run dev -w frontend\"",
     "dev:backend": "npm run dev -w backend",
     "dev:frontend": "npm run dev -w frontend",
-    "db:up": "docker compose up -d mysql",
-    "db:down": "docker compose down",
-    "migrate": "npm run migrate -w backend",
-    "migrate:rollback": "npm run migrate:rollback -w backend",
     "seed": "npm run seed -w backend",
-    "setup": "npm run db:up && npm run migrate && npm run seed",
+    "setup": "npm run seed",
     "test": "npm run test -w backend && npm run test -w frontend",
+    "test:e2e": "cypress run",
+    "test:e2e:open": "cypress open",
     "lint": "npm run lint -w backend && npm run lint -w frontend",
     "build": "npm run build -w frontend"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "cypress": "^13.17.0"
   },
   "engines": {
     "node": ">=20"

@@ -1,4 +1,4 @@
-const { db } = require('../config/db');
+const { supabase, fetchMany, fetchOne, insertOne, updateById } = require('../config/db');
 const { ROLES } = require('../constants/roles');
 const { EQUIPMENT_STATUS } = require('../constants/statuses');
 const { httpError } = require('../middleware/errorHandler');
@@ -6,7 +6,7 @@ const { hasRole } = require('../middleware/auth');
 const { writeAudit, notifyUser } = require('./audit.service');
 
 async function listEquipment() {
-  return db('equipment').orderBy('name');
+  return fetchMany(supabase.from('equipment').select('*').order('name'));
 }
 
 async function upsertEquipment(user, payload, id) {
@@ -24,30 +24,33 @@ async function upsertEquipment(user, payload, id) {
   };
 
   if (id) {
-    await db('equipment').where({ id }).update({ ...row, updated_at: db.fn.now() });
-    return db('equipment').where({ id }).first();
+    return updateById('equipment', id, { ...row, updated_at: new Date().toISOString() });
   }
 
-  const [createdId] = await db('equipment').insert(row);
-  await writeAudit(user.id, 'EQUIPMENT_CREATED', 'equipment', createdId, row);
-  return db('equipment').where({ id: createdId }).first();
+  const created = await insertOne('equipment', row);
+  await writeAudit(user.id, 'EQUIPMENT_CREATED', 'equipment', created.id, row);
+  return created;
 }
 
 async function listRequests(eventId) {
-  return db('equipment_requests as r')
-    .leftJoin('equipment as eq', 'eq.id', 'r.equipment_id')
-    .modify((query) => {
-      if (eventId) query.where('r.event_id', eventId);
-    })
-    .select('r.*', 'eq.name as equipment_name', 'eq.status as equipment_status')
-    .orderBy('r.id', 'desc');
+  let query = supabase
+    .from('equipment_requests')
+    .select('*, equipment ( name, status )')
+    .order('id', { ascending: false });
+  if (eventId) query = query.eq('event_id', eventId);
+  const rows = await fetchMany(query);
+  return rows.map((row) => ({
+    ...row,
+    equipment_name: row.equipment?.name,
+    equipment_status: row.equipment?.status,
+  }));
 }
 
 async function createRequest(user, payload) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only coordinators can request equipment', 'FORBIDDEN');
   }
-  const [id] = await db('equipment_requests').insert({
+  return insertOne('equipment_requests', {
     event_id: payload.eventId,
     equipment_id: payload.equipmentId || null,
     quantity: payload.quantity || 1,
@@ -55,7 +58,6 @@ async function createRequest(user, payload) {
     status: 'PENDING',
     requested_by: user.id,
   });
-  return db('equipment_requests').where({ id }).first();
 }
 
 async function decideRequest(user, id, decision) {
@@ -63,19 +65,19 @@ async function decideRequest(user, id, decision) {
     throw httpError(403, 'Only technical support staff can reserve equipment', 'FORBIDDEN');
   }
 
-  const request = await db('equipment_requests').where({ id }).first();
+  const request = await fetchOne(supabase.from('equipment_requests').select('*').eq('id', id));
   if (!request) throw httpError(404, 'Equipment request not found', 'NOT_FOUND');
 
   const status = decision.approve ? 'RESERVED' : 'UNAVAILABLE';
-  await db('equipment_requests').where({ id }).update({
+  const updated = await updateById('equipment_requests', id, {
     status,
     decided_by: user.id,
     decision_reason: decision.reason || null,
-    decided_at: db.fn.now(),
+    decided_at: new Date().toISOString(),
   });
 
   if (decision.approve && request.equipment_id) {
-    await db('equipment_reservations').insert({
+    await insertOne('equipment_reservations', {
       event_id: request.event_id,
       equipment_id: request.equipment_id,
       quantity: request.quantity,
@@ -83,7 +85,7 @@ async function decideRequest(user, id, decision) {
     });
   }
 
-  const event = await db('events').where({ id: request.event_id }).first();
+  const event = await fetchOne(supabase.from('events').select('*').eq('id', request.event_id));
   if (event?.coordinator_id) {
     await notifyUser(
       event.coordinator_id,
@@ -94,7 +96,7 @@ async function decideRequest(user, id, decision) {
     );
   }
 
-  return db('equipment_requests').where({ id }).first();
+  return updated;
 }
 
 module.exports = {

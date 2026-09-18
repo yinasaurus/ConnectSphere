@@ -37,8 +37,8 @@ export default function Layout() {
           </div>
           <button
             className="btn ghost"
-            onClick={() => {
-              logout();
+            onClick={async () => {
+              await logout();
               navigate('/');
             }}
           >

@@ -8,17 +8,20 @@ The customer briefing says not to sprint the full system before Week 4 names the
 
 - **Frontend:** React 18, Vite, React Router
 - **Backend:** Node.js, Express
-- **Database:** MySQL 8, schema changes through **Knex migrations**
+- **Database:** Supabase Postgres via `@supabase/supabase-js` (service role)
 - **CI:** GitHub Actions (lint + backend tests + frontend build)
+
+Login (SCUM-12) reads the `public.users` table, verifies bcrypt hashes, and sets an httpOnly JWT cookie. We are **not** using Supabase Auth for this release, so roles stay in `user_roles`.
 
 Run everything from the repo root with npm workspaces (`frontend/` and `backend/`).
 
 ## How to run it
 
+1. Create a Supabase project and run `supabase/schema.sql` in the SQL editor.
+2. Put `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `backend/.env`.
+
 ```bash
 npm install
-npm run db:up          # Docker MySQL on port 3306
-npm run migrate
 npm run seed
 npm run dev            # API :3001 and web :5173
 ```
@@ -29,7 +32,7 @@ Open http://localhost:5173. Every demo user uses password `Password123!`. The lo
 
 ```
 frontend/src/
-  api.js                 fetch wrapper + JWT
+  api.js                 fetch wrapper (cookies, credentials: include)
   auth.jsx               session context
   pages/                 screens (dashboard, events, venues, …)
   components/            layout, status badge, route guard
@@ -37,16 +40,16 @@ frontend/src/
 backend/src/
   app.js                 Express app (also used by tests)
   server.js              process start
+  config/db.js           Supabase client
   routes/                HTTP paths
   controllers/           thin request/response
   services/              business rules
   domain/statusMachine.js  allowed event status transitions
-  middleware/auth.js     JWT + role checks
+  middleware/auth.js     JWT cookie + role checks
   constants/             roles and statuses
 
-backend/migrations/      source of truth for MySQL
-backend/seeds/           demo orgs, users, venues, equipment
-.github/workflows/ci.yml
+supabase/schema.sql
+backend/scripts/seed.js
 ```
 
 Put new features in **services**, then expose them through a controller/route. Keep React screens dumb: they call `/api/...` and render.
@@ -106,7 +109,7 @@ Once the customer names Release 1, likely extensions:
 
 ## How to add a feature without making a mess
 
-1. New table? `npm run migrate:make --workspace=backend -- descriptive_name` then `npm run migrate`
+1. New table? Add it in `supabase/schema.sql` and re-run that section in the SQL editor
 2. New rule? Service function + status machine if it is a lifecycle change
 3. New endpoint? Route → controller → service. Return JSON `{ resource }`
 4. New screen? Page under `frontend/src/pages`, link it in `Layout.jsx` if a role should see it
@@ -123,4 +126,4 @@ Once the customer names Release 1, likely extensions:
 
 Acme vs Apex organisers are seeded so you can show that client data is isolated.
 
-If something fails locally: MySQL not up, or `.env` password does not match Docker (`root` / `root` / database `connectsphere`).
+If login fails locally: schema not applied, `.env` missing the service role key, or seed not run.

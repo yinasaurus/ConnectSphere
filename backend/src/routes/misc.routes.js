@@ -1,5 +1,5 @@
 const express = require('express');
-const { db } = require('../config/db');
+const { supabase, fetchMany, insertOne, pingDatabase } = require('../config/db');
 const { asyncHandler } = require('../utils/asyncHandler');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { ROLES } = require('../constants/roles');
@@ -12,7 +12,7 @@ router.get('/health', (_req, res) => {
 });
 
 router.get('/health/db', asyncHandler(async (_req, res) => {
-  await db.raw('select 1 as ok');
+  await pingDatabase();
   res.json({ status: 'ok', database: 'up' });
 }));
 
@@ -21,33 +21,46 @@ router.get('/users', requireAuth, requireRole(
   ROLES.VENUE_STAFF,
   ROLES.TECHNICAL_SUPPORT
 ), asyncHandler(async (req, res) => {
-  const role = req.query.role;
-  const query = db('users as u')
-    .join('user_roles as ur', 'ur.user_id', 'u.id')
-    .where('u.is_active', 1)
-    .select('u.id', 'u.full_name as fullName', 'u.email', 'ur.role')
-    .orderBy('u.full_name');
-  if (role) query.where('ur.role', role);
-  res.json({ users: await query });
+  let query = supabase
+    .from('user_roles')
+    .select('role, users!inner ( id, full_name, email, is_active )')
+    .eq('users.is_active', true);
+  if (req.query.role) query = query.eq('role', req.query.role);
+  const rows = await fetchMany(query);
+  const users = rows
+    .map((row) => ({
+      id: row.users.id,
+      fullName: row.users.full_name,
+      email: row.users.email,
+      role: row.role,
+    }))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
+  res.json({ users });
 }));
 
 router.get('/comments/:eventId', requireAuth, asyncHandler(async (req, res) => {
-  const comments = await db('event_comments as c')
-    .join('users as u', 'u.id', 'c.author_id')
-    .where('c.event_id', req.params.eventId)
-    .orderBy('c.created_at')
-    .select('c.*', 'u.full_name as author_name');
-  res.json({ comments });
+  const comments = await fetchMany(
+    supabase
+      .from('event_comments')
+      .select('*, author:users!author_id ( full_name )')
+      .eq('event_id', req.params.eventId)
+      .order('created_at')
+  );
+  res.json({
+    comments: comments.map((row) => ({
+      ...row,
+      author_name: row.author?.full_name,
+    })),
+  });
 }));
 
 router.post('/comments/:eventId', requireAuth, asyncHandler(async (req, res) => {
   if (!req.body.body) throw httpError(400, 'Comment body is required', 'VALIDATION_ERROR');
-  const [id] = await db('event_comments').insert({
+  const comment = await insertOne('event_comments', {
     event_id: req.params.eventId,
     author_id: req.user.id,
     body: req.body.body,
   });
-  const comment = await db('event_comments').where({ id }).first();
   res.status(201).json({ comment });
 }));
 

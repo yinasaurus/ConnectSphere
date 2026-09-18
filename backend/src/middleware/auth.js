@@ -1,14 +1,16 @@
 const jwt = require('jsonwebtoken');
 const { env } = require('../config/env');
-const { db } = require('../config/db');
+const { supabase, fetchOne, fetchMany } = require('../config/db');
 const { httpError } = require('./errorHandler');
 const { asyncHandler } = require('../utils/asyncHandler');
 
 function signToken(user) {
+  // Payload is limited to id + roles. Email is loaded from the DB on each
+  // request so a stale token cannot keep a renamed/disabled identity.
   return jwt.sign(
     {
       sub: user.id,
-      email: user.email,
+      role: user.roles[0] || null,
       roles: user.roles,
     },
     env.jwtSecret,
@@ -16,9 +18,38 @@ function signToken(user) {
   );
 }
 
-const optionalAuth = asyncHandler(async (req, _res, next) => {
+function sessionCookieFlags() {
+  return {
+    // Not readable by document.cookie / XSS payloads in the SPA.
+    httpOnly: true,
+    // Secure cookies are dropped on plain HTTP except on some localhost
+    // browsers. Enable only in production (HTTPS).
+    secure: env.nodeEnv === 'production',
+    // Lax: cookie is sent on same-site fetches (Vite proxy) and top-level
+    // GET navigations, but not on cross-site POSTs from other origins.
+    sameSite: 'lax',
+    path: '/',
+  };
+}
+
+function sessionCookieOptions() {
+  return {
+    ...sessionCookieFlags(),
+    maxAge: env.sessionMaxAgeMs,
+  };
+}
+
+function readAccessToken(req) {
+  const cookieToken = req.cookies?.[env.sessionCookieName];
+  if (cookieToken) return cookieToken;
+
   const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (header.startsWith('Bearer ')) return header.slice(7);
+  return null;
+}
+
+const optionalAuth = asyncHandler(async (req, _res, next) => {
+  const token = readAccessToken(req);
   if (!token) return next();
 
   try {
@@ -31,8 +62,7 @@ const optionalAuth = asyncHandler(async (req, _res, next) => {
 });
 
 const requireAuth = asyncHandler(async (req, _res, next) => {
-  const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  const token = readAccessToken(req);
   if (!token) {
     throw httpError(401, 'Authentication required', 'UNAUTHENTICATED');
   }
@@ -46,7 +76,7 @@ const requireAuth = asyncHandler(async (req, _res, next) => {
 
   const user = await loadUser(payload.sub);
   if (!user || !user.isActive) {
-    throw httpError(401, 'Account is inactive or missing', 'UNAUTHENTICATED');
+    throw httpError(401, 'Authentication required', 'UNAUTHENTICATED');
   }
 
   req.user = user;
@@ -54,10 +84,13 @@ const requireAuth = asyncHandler(async (req, _res, next) => {
 });
 
 async function loadUser(id) {
-  const user = await db('users').where({ id }).first();
+  const user = await fetchOne(supabase.from('users').select('*').eq('id', id));
   if (!user) return null;
 
-  const roleRows = await db('user_roles').where({ user_id: id }).select('role');
+  const roleRows = await fetchMany(
+    supabase.from('user_roles').select('role').eq('user_id', id)
+  );
+  const roles = roleRows.map((row) => row.role);
   return {
     id: user.id,
     email: user.email,
@@ -67,7 +100,8 @@ async function loadUser(id) {
     department: user.department,
     communicationPreference: user.communication_preference,
     isActive: Boolean(user.is_active),
-    roles: roleRows.map((row) => row.role),
+    roles,
+    role: roles[0] || null,
   };
 }
 
@@ -88,6 +122,14 @@ function hasRole(user, role) {
   return Boolean(user?.roles?.includes(role));
 }
 
+function setSessionCookie(res, token) {
+  res.cookie(env.sessionCookieName, token, sessionCookieOptions());
+}
+
+function clearSessionCookie(res) {
+  res.clearCookie(env.sessionCookieName, sessionCookieFlags());
+}
+
 module.exports = {
   signToken,
   requireAuth,
@@ -95,4 +137,7 @@ module.exports = {
   requireRole,
   loadUser,
   hasRole,
+  setSessionCookie,
+  clearSessionCookie,
+  sessionCookieOptions,
 };
