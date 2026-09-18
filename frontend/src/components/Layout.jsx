@@ -17,6 +17,7 @@ export default function Layout() {
           <NavLink to="/app">Home</NavLink>
           <NavLink to="/app/events">Events</NavLink>
           {hasRole(ROLES.EVENT_ORGANISER) && <NavLink to="/app/events/new">New request</NavLink>}
+          {hasRole(ROLES.EVENT_ORGANISER) && <NavLink to="/app/drafts">My drafts</NavLink>}
           <NavLink to="/app/calendar">Calendar</NavLink>
           {hasRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF) && (
             <NavLink to="/app/venues">Venues</NavLink>

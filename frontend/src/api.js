@@ -21,6 +21,7 @@ export async function api(path, { method = 'GET', body } = {}) {
     const error = new Error(data.message || 'Request failed');
     error.status = res.status;
     error.code = data.error;
+    error.details = data.details;
     throw error;
   }
   return data;

@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Events from './pages/Events';
 import NewEvent from './pages/NewEvent';
+import Drafts from './pages/Drafts';
 import EventDetail from './pages/EventDetail';
 import CalendarPage from './pages/CalendarPage';
 import Venues from './pages/Venues';
@@ -30,6 +31,8 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="events" element={<Events />} />
             <Route path="events/new" element={<NewEvent />} />
+            <Route path="events/:id/edit" element={<NewEvent />} />
+            <Route path="drafts" element={<Drafts />} />
             <Route path="events/:id" element={<EventDetail />} />
             <Route path="calendar" element={<CalendarPage />} />
             <Route path="venues" element={<Venues />} />

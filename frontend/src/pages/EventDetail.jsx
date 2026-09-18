@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import StatusBadge from '../components/StatusBadge';
@@ -85,6 +85,7 @@ export default function EventDetail() {
 
           {isOrganiser && event.status === 'DRAFT' && (
             <div className="card actions">
+              <Link className="btn secondary" to={`/app/events/${id}/edit`}>Continue editing</Link>
               <button className="btn" onClick={() => run(() => api(`/api/events/${id}/submit`, { method: 'POST' }))}>
                 Submit for review
               </button>
