@@ -6,6 +6,34 @@ const { hasRole } = require('../middleware/auth');
 const { assertTransition } = require('../domain/statusMachine');
 const { writeAudit, notifyUser } = require('./audit.service');
 
+// SCUM-14: fields the customer briefing marks compulsory for a submitted event request.
+// Drafts (SCUM-15) intentionally skip this — only `name` is required to save a draft.
+const REQUIRED_FOR_SUBMISSION = [
+  { column: 'name', field: 'name', label: 'Event name' },
+  { column: 'purpose', field: 'purpose', label: 'Purpose' },
+  { column: 'description', field: 'description', label: 'Description' },
+  { column: 'start_at', field: 'startAt', label: 'Start date/time' },
+  { column: 'end_at', field: 'endAt', label: 'End date/time' },
+  { column: 'expected_attendance', field: 'expectedAttendance', label: 'Expected attendance' },
+  { column: 'venue_requirements', field: 'venueRequirements', label: 'Venue requirements' },
+  { column: 'accessibility_needs', field: 'accessibilityNeeds', label: 'Accessibility requirements' },
+];
+
+// MySQL DATETIME columns reject ISO 8601 strings with a `T`/`Z` (what the
+// frontend sends via `.toISOString()`) under strict SQL mode. Converting to a
+// real Date object here lets mysql2 format it correctly on insert/update.
+function toSqlDateTime(value) {
+  return value ? new Date(value) : null;
+}
+
+function findMissingSubmissionFields(row) {
+  return REQUIRED_FOR_SUBMISSION.filter(({ column }) => {
+    const value = row[column];
+    if (column === 'expected_attendance') return !value || value <= 0;
+    return value === null || value === undefined || String(value).trim() === '';
+  });
+}
+
 function mapEvent(row) {
   if (!row) return null;
   return {
@@ -118,8 +146,8 @@ async function createEvent(user, payload) {
     purpose: payload.purpose || null,
     category: payload.category || 'OTHER',
     status: EVENT_STATUS.DRAFT,
-    start_at: payload.startAt || null,
-    end_at: payload.endAt || null,
+    start_at: toSqlDateTime(payload.startAt),
+    end_at: toSqlDateTime(payload.endAt),
     expected_attendance: payload.expectedAttendance || null,
     accessibility_needs: payload.accessibilityNeeds || null,
     layout_preference: payload.layoutPreference || null,
@@ -200,12 +228,16 @@ function toEventPatch(payload) {
     equipmentReady: 'equipment_ready',
   };
 
+  const dateFields = new Set(['start_at', 'end_at', 'registration_opens_at', 'registration_closes_at']);
+
   const patch = {};
   for (const [from, to] of Object.entries(map)) {
     if (payload[from] !== undefined) {
       if (from === 'registrationRequired' || from === 'registrationOpen'
         || from === 'venueReady' || from === 'equipmentReady') {
         patch[to] = payload[from] ? 1 : 0;
+      } else if (dateFields.has(to)) {
+        patch[to] = toSqlDateTime(payload[from]);
       } else {
         patch[to] = payload[from];
       }
@@ -219,6 +251,16 @@ async function submitEvent(user, id) {
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
   if (existing.organiser_id !== user.id && !hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only the organiser can submit this request', 'FORBIDDEN');
+  }
+
+  const missing = findMissingSubmissionFields(existing);
+  if (missing.length) {
+    throw httpError(
+      400,
+      `Complete required fields before submitting: ${missing.map((m) => m.label).join(', ')}`,
+      'VALIDATION_ERROR',
+      { fields: missing.map((m) => m.field) }
+    );
   }
 
   const from = existing.status === EVENT_STATUS.REJECTED
@@ -400,4 +442,5 @@ module.exports = {
   requestCoordinatorChange,
   acceptCoordinatorChange,
   listHistory,
+  findMissingSubmissionFields,
 };
