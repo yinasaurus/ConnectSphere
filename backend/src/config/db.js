@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { WebSocket } = require('ws');
 const { env } = require('./env');
 
 function createSupabase() {
@@ -6,6 +7,8 @@ function createSupabase() {
   const key = env.supabaseServiceRoleKey || 'test-service-role-key';
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    // Node 20 has no built-in WebSocket; supabase-js 2.116+ requires one.
+    realtime: { transport: WebSocket },
   });
 }
 
