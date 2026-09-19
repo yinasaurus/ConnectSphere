@@ -8,7 +8,7 @@
  *   npm install @supabase/supabase-js dotenv
  *
  * Run with:
- *   node --test supabase.crud.test.js
+ *   node --test Supabase.crud.test.js
  *
  * IMPORTANT:
  * - These tests hit your REAL Supabase project (as configured in .env),
