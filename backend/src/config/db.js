@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const ws = require('ws');
 const { env } = require('./env');
 
 function createSupabase() {
@@ -6,6 +7,9 @@ function createSupabase() {
   const key = env.supabaseServiceRoleKey || 'test-service-role-key';
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    realtime: {
+      transport: ws
+    }
   });
 }
 
