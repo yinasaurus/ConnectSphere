@@ -58,6 +58,25 @@ const acceptReassign = asyncHandler(async (req, res) => {
   res.json({ event });
 });
 
+const requestClarification = asyncHandler(async (req, res) => {
+  const event = await eventsService.requestClarification(
+    req.user,
+    req.params.id,
+    req.body.remarks
+  );
+  res.json({ event });
+});
+
+const respondClarification = asyncHandler(async (req, res) => {
+  const event = await eventsService.respondClarification(
+    req.user,
+    req.params.id,
+    req.body.response,
+    req.body.amendments
+  );
+  res.json({ event });
+});
+
 module.exports = {
   list,
   get,
@@ -68,4 +87,6 @@ module.exports = {
   history,
   requestReassign,
   acceptReassign,
+  requestClarification,
+  respondClarification,
 };

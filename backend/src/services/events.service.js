@@ -1,9 +1,9 @@
 const { supabase, fetchOne, fetchMany, fetchCount, insertOne, updateById } = require('../config/db');
 const { ROLES } = require('../constants/roles');
-const { EVENT_STATUS, SIGNIFICANT_FIELDS } = require('../constants/statuses');
+const { EVENT_STATUS, EVENT_SUB_STATE, SIGNIFICANT_FIELDS } = require('../constants/statuses');
 const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
-const { assertTransition } = require('../domain/statusMachine');
+const { assertTransition, assertSubStateTransition } = require('../domain/statusMachine');
 const { writeAudit, notifyUser } = require('./audit.service');
 
 const EVENT_SELECT = `
@@ -53,6 +53,9 @@ function mapEvent(row) {
     purpose: row.purpose,
     category: row.category,
     status: row.status,
+    subState: row.sub_state || null,
+    reviewRemarks: row.review_remarks || null,
+    clarificationResponse: row.clarification_response || null,
     startAt: row.start_at,
     endAt: row.end_at,
     expectedAttendance: row.expected_attendance,
@@ -115,6 +118,7 @@ async function listEvents(user, filters = {}) {
   );
 
   if (filters.status) query = query.eq('status', filters.status);
+  if (filters.subState) query = query.eq('sub_state', filters.subState);
   if (filters.q) {
     const term = String(filters.q).replace(/[,()%]/g, '');
     if (term) query = query.or(`name.ilike.%${term}%,purpose.ilike.%${term}%`);
@@ -173,7 +177,10 @@ async function updateEvent(user, id, payload) {
   const isAssignedCoordinator = existing.coordinator_id === user.id
     && hasRole(user, ROLES.EVENT_COORDINATOR);
 
-  if (existing.status !== EVENT_STATUS.DRAFT && isOrganiser && !isAssignedCoordinator) {
+  const canOrganiserEdit = existing.status === EVENT_STATUS.DRAFT
+    || (existing.status === EVENT_STATUS.UNDER_REVIEW && existing.sub_state === EVENT_SUB_STATE.ACTION_REQUIRED);
+
+  if (!canOrganiserEdit && isOrganiser && !isAssignedCoordinator) {
     throw httpError(
       409,
       'After submission, organisers request changes through the assigned coordinator',
@@ -229,6 +236,9 @@ function toEventPatch(payload) {
     operationalNotes: 'operational_notes',
     venueReady: 'venue_ready',
     equipmentReady: 'equipment_ready',
+    subState: 'sub_state',
+    reviewRemarks: 'review_remarks',
+    clarificationResponse: 'clarification_response',
   };
 
   const dateFields = new Set(['start_at', 'end_at', 'registration_opens_at', 'registration_closes_at']);
@@ -274,6 +284,8 @@ async function submitEvent(user, id) {
   const coordinatorId = existing.coordinator_id || await assignCoordinator();
   await updateById('events', id, {
     status: EVENT_STATUS.UNDER_REVIEW,
+    sub_state: EVENT_SUB_STATE.IN_REVIEW,
+    review_remarks: null,
     coordinator_id: coordinatorId,
     rejection_reason: null,
     updated_at: new Date().toISOString(),
@@ -307,6 +319,7 @@ async function changeStatus(user, id, nextStatus, reason) {
 
   const patch = {
     status: nextStatus,
+    sub_state: null,
     updated_at: new Date().toISOString(),
   };
 
@@ -458,6 +471,119 @@ async function listHistory(user, eventId) {
   }));
 }
 
+async function requestClarification(user, id, remarks) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
+    throw httpError(403, 'Only coordinators can request clarification', 'FORBIDDEN');
+  }
+
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+  if (existing.coordinator_id && existing.coordinator_id !== user.id) {
+    throw httpError(403, 'Only the assigned coordinator can update this event', 'FORBIDDEN');
+  }
+
+  if (existing.status !== EVENT_STATUS.UNDER_REVIEW) {
+    throw httpError(409, 'Clarification can only be requested while the event is under review', 'INVALID_STATUS');
+  }
+
+  const trimmedRemarks = (remarks || '').trim();
+  if (!trimmedRemarks) {
+    throw httpError(400, 'Review remarks are required to request clarification', 'VALIDATION_ERROR');
+  }
+
+  assertSubStateTransition(existing.sub_state, EVENT_SUB_STATE.ACTION_REQUIRED);
+
+  await updateById('events', id, {
+    sub_state: EVENT_SUB_STATE.ACTION_REQUIRED,
+    review_remarks: trimmedRemarks,
+    updated_at: new Date().toISOString(),
+  });
+
+  await writeStatusHistory(id, user.id, EVENT_STATUS.UNDER_REVIEW, EVENT_STATUS.UNDER_REVIEW, `Clarification requested: ${trimmedRemarks}`);
+  await writeAudit(user.id, 'EVENT_CLARIFICATION_REQUESTED', 'event', id, { remarks: trimmedRemarks });
+
+  try {
+    await insertOne('event_comments', {
+      event_id: id,
+      author_id: user.id,
+      body: `[Clarification requested] ${trimmedRemarks}`,
+    });
+  } catch (e) {
+    // Non-blocking
+  }
+
+  if (existing.organiser_id) {
+    await notifyUser(
+      existing.organiser_id,
+      'CLARIFICATION_REQUESTED',
+      'Clarification requested on event',
+      `Coordinator requested clarification for "${existing.name}": ${trimmedRemarks}`,
+      id
+    );
+  }
+
+  return getEvent(user, id);
+}
+
+async function respondClarification(user, id, response, amendments = {}) {
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+
+  const isOrganiser = existing.organiser_id === user.id;
+  if (!isOrganiser && !hasRole(user, ROLES.EVENT_COORDINATOR)) {
+    throw httpError(403, 'Only the event organiser can respond to clarification requests', 'FORBIDDEN');
+  }
+
+  if (existing.status !== EVENT_STATUS.UNDER_REVIEW) {
+    throw httpError(409, 'Clarification can only be responded to while the event is under review', 'INVALID_STATUS');
+  }
+
+  if (existing.sub_state !== EVENT_SUB_STATE.ACTION_REQUIRED) {
+    throw httpError(409, 'No clarification is currently requested for this event', 'INVALID_SUB_STATE');
+  }
+
+  assertSubStateTransition(existing.sub_state, EVENT_SUB_STATE.CLARIFICATION_PROVIDED);
+
+  const trimmedResponse = (response || '').trim();
+
+  let patch = {};
+  if (amendments && Object.keys(amendments).length) {
+    patch = toEventPatch(amendments);
+  }
+
+  patch.sub_state = EVENT_SUB_STATE.CLARIFICATION_PROVIDED;
+  patch.clarification_response = trimmedResponse || 'Amended details submitted';
+  patch.updated_at = new Date().toISOString();
+
+  await updateById('events', id, patch);
+
+  const note = trimmedResponse ? `Clarification responded: ${trimmedResponse}` : 'Clarification responded with amended details';
+  await writeStatusHistory(id, user.id, EVENT_STATUS.UNDER_REVIEW, EVENT_STATUS.UNDER_REVIEW, note);
+  await writeAudit(user.id, 'EVENT_CLARIFICATION_RESPONDED', 'event', id, { response: trimmedResponse, amendments });
+
+  try {
+    await insertOne('event_comments', {
+      event_id: id,
+      author_id: user.id,
+      body: `[Clarification response] ${trimmedResponse || 'Amended event details submitted.'}`,
+    });
+  } catch (e) {
+    // Non-blocking
+  }
+
+  if (existing.coordinator_id) {
+    await notifyUser(
+      existing.coordinator_id,
+      'CLARIFICATION_PROVIDED',
+      'Clarification provided for event',
+      `Organiser responded for "${existing.name}": ${trimmedResponse || 'Updated request details.'}`,
+      id
+    );
+  }
+
+  return getEvent(user, id);
+}
+
 module.exports = {
   listEvents,
   getEvent,
@@ -465,6 +591,8 @@ module.exports = {
   updateEvent,
   submitEvent,
   changeStatus,
+  requestClarification,
+  respondClarification,
   requestCoordinatorChange,
   acceptCoordinatorChange,
   listHistory,

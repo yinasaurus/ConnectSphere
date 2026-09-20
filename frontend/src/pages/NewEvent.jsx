@@ -59,6 +59,8 @@ export default function NewEvent() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [busy, setBusy] = useState(false);
 
+  const [eventData, setEventData] = useState(null);
+
   useEffect(() => {
     api('/api/events').then((data) => setPrevious(data.events || []));
   }, []);
@@ -66,9 +68,20 @@ export default function NewEvent() {
   useEffect(() => {
     if (!isEditing) return;
     api(`/api/events/${id}`).then(({ event }) => {
+      setEventData(event);
       setForm({
         ...empty,
         ...event,
+        name: event.name || '',
+        description: event.description || '',
+        purpose: event.purpose || '',
+        category: event.category || 'WORKSHOP',
+        expectedAttendance: event.expectedAttendance ?? 40,
+        accessibilityNeeds: event.accessibilityNeeds || '',
+        layoutPreference: event.layoutPreference || 'THEATRE',
+        venueRequirements: event.venueRequirements || '',
+        equipmentNotes: event.equipmentNotes || '',
+        specialRequests: event.specialRequests || '',
         startAt: toDateTimeLocal(event.startAt),
         endAt: toDateTimeLocal(event.endAt),
         clonedFromEventId: event.clonedFromEventId || '',
@@ -105,8 +118,11 @@ export default function NewEvent() {
 
     setBusy(true);
     try {
+      const isActionRequired = eventData?.status === 'UNDER_REVIEW' && eventData?.subState === 'ACTION_REQUIRED';
+
       const payload = {
         ...form,
+        expectedAttendance: form.expectedAttendance === '' ? null : Number(form.expectedAttendance),
         clonedFromEventId: form.clonedFromEventId || null,
         startAt: form.startAt ? new Date(form.startAt).toISOString() : null,
         endAt: form.endAt ? new Date(form.endAt).toISOString() : null,
@@ -117,10 +133,21 @@ export default function NewEvent() {
         : await api('/api/events', { method: 'POST', body: payload });
 
       if (submitAfter) {
-        await api(`/api/events/${event.id}/submit`, { method: 'POST' });
+        if (isActionRequired) {
+          await api(`/api/events/${id}/clarification/respond`, {
+            method: 'POST',
+            body: { response: 'Amended event details submitted.' },
+          });
+        } else {
+          await api(`/api/events/${event.id}/submit`, { method: 'POST' });
+        }
         navigate(`/app/events/${event.id}`);
       } else {
-        navigate('/app/drafts');
+        if (isActionRequired) {
+          navigate(`/app/events/${event.id}`);
+        } else {
+          navigate('/app/drafts');
+        }
       }
     } catch (err) {
       setError(err.message);
@@ -141,11 +168,23 @@ export default function NewEvent() {
     <>
       <div className="topbar">
         <div>
-          <h1>{isEditing ? 'Edit event request' : 'New event request'}</h1>
-          <p>Save as draft anytime. Submission auto-assigns a coordinator (least current load).</p>
+          <h1>{isEditing ? (eventData?.subState === 'ACTION_REQUIRED' ? 'Amend event request' : 'Edit event request') : 'New event request'}</h1>
+          <p>
+            {eventData?.subState === 'ACTION_REQUIRED'
+              ? 'Update the fields requested for clarification by the coordinator, then submit amendments.'
+              : 'Save as draft anytime. Submission auto-assigns a coordinator (least current load).'}
+          </p>
         </div>
       </div>
       {error && <div className="alert">{error}</div>}
+      {eventData?.subState === 'ACTION_REQUIRED' && (
+        <div className="card attention-card" style={{ marginBottom: 16 }}>
+          <p style={{ margin: '0 0 6px', fontWeight: 600, color: '#92400e' }}>
+            Coordinator review remarks (Amendments requested):
+          </p>
+          <p style={{ margin: 0 }}>{eventData.reviewRemarks}</p>
+        </div>
+      )}
       <div className="grid-2">
         <div className="card stack">
           {!isEditing && (
@@ -180,49 +219,59 @@ export default function NewEvent() {
               </select>
             </>
           )}
-          <label>Event name *</label>
-          <input className={fieldClass('name')} value={form.name} onChange={(e) => set('name', e.target.value)} />
+          <label htmlFor="eventName">Event name *</label>
+          <input id="eventName" className={fieldClass('name')} value={form.name} onChange={(e) => set('name', e.target.value)} />
           {fieldErrors.name && <span className="field-hint">{fieldErrors.name} is required.</span>}
-          <label>Purpose *</label>
-          <input className={fieldClass('purpose')} value={form.purpose} onChange={(e) => set('purpose', e.target.value)} />
+          <label htmlFor="eventPurpose">Purpose *</label>
+          <input id="eventPurpose" className={fieldClass('purpose')} value={form.purpose} onChange={(e) => set('purpose', e.target.value)} />
           {fieldErrors.purpose && <span className="field-hint">{fieldErrors.purpose} is required.</span>}
-          <label>Description *</label>
-          <textarea className={fieldClass('description')} value={form.description} onChange={(e) => set('description', e.target.value)} />
+          <label htmlFor="eventDescription">Description *</label>
+          <textarea id="eventDescription" className={fieldClass('description')} value={form.description} onChange={(e) => set('description', e.target.value)} />
           {fieldErrors.description && <span className="field-hint">{fieldErrors.description} is required.</span>}
-          <label>Category</label>
-          <select value={form.category} onChange={(e) => set('category', e.target.value)}>
+          <label htmlFor="eventCategory">Category</label>
+          <select id="eventCategory" value={form.category} onChange={(e) => set('category', e.target.value)}>
             {CATEGORIES.map((item) => <option key={item}>{item}</option>)}
           </select>
         </div>
         <div className="card stack">
-          <label>Start *</label>
-          <input className={fieldClass('startAt')} type="datetime-local" value={form.startAt} onChange={(e) => set('startAt', e.target.value)} />
+          <label htmlFor="eventStartAt">Start *</label>
+          <input id="eventStartAt" className={fieldClass('startAt')} type="datetime-local" value={form.startAt} onChange={(e) => set('startAt', e.target.value)} />
           {fieldErrors.startAt && <span className="field-hint">{fieldErrors.startAt} is required.</span>}
-          <label>End *</label>
-          <input className={fieldClass('endAt')} type="datetime-local" value={form.endAt} onChange={(e) => set('endAt', e.target.value)} />
+          <label htmlFor="eventEndAt">End *</label>
+          <input id="eventEndAt" className={fieldClass('endAt')} type="datetime-local" value={form.endAt} onChange={(e) => set('endAt', e.target.value)} />
           {fieldErrors.endAt && <span className="field-hint">{fieldErrors.endAt} is required.</span>}
-          <label>Expected attendance *</label>
-          <input className={fieldClass('expectedAttendance')} type="number" value={form.expectedAttendance} onChange={(e) => set('expectedAttendance', Number(e.target.value))} />
+          <label htmlFor="eventExpectedAttendance">Expected attendance *</label>
+          <input
+            id="eventExpectedAttendance"
+            className={fieldClass('expectedAttendance')}
+            type="number"
+            value={form.expectedAttendance}
+            onChange={(e) => set('expectedAttendance', e.target.value === '' ? '' : Number(e.target.value))}
+          />
           {fieldErrors.expectedAttendance && <span className="field-hint">{fieldErrors.expectedAttendance} must be greater than zero.</span>}
-          <label>Layout preference</label>
-          <select value={form.layoutPreference} onChange={(e) => set('layoutPreference', e.target.value)}>
+          <label htmlFor="eventLayoutPreference">Layout preference</label>
+          <select id="eventLayoutPreference" value={form.layoutPreference} onChange={(e) => set('layoutPreference', e.target.value)}>
             {LAYOUTS.map((item) => <option key={item}>{item}</option>)}
           </select>
-          <label>Accessibility needs *</label>
-          <textarea className={fieldClass('accessibilityNeeds')} value={form.accessibilityNeeds} onChange={(e) => set('accessibilityNeeds', e.target.value)} placeholder="Wheelchair access, reserved seating, mobility arrangements… (enter 'None' if not applicable)" />
+          <label htmlFor="eventAccessibilityNeeds">Accessibility needs *</label>
+          <textarea id="eventAccessibilityNeeds" className={fieldClass('accessibilityNeeds')} value={form.accessibilityNeeds} onChange={(e) => set('accessibilityNeeds', e.target.value)} placeholder="Wheelchair access, reserved seating, mobility arrangements… (enter 'None' if not applicable)" />
           {fieldErrors.accessibilityNeeds && <span className="field-hint">{fieldErrors.accessibilityNeeds} is required — enter &quot;None&quot; if not applicable.</span>}
-          <label>Venue requirements *</label>
-          <textarea className={fieldClass('venueRequirements')} value={form.venueRequirements} onChange={(e) => set('venueRequirements', e.target.value)} />
+          <label htmlFor="eventVenueRequirements">Venue requirements *</label>
+          <textarea id="eventVenueRequirements" className={fieldClass('venueRequirements')} value={form.venueRequirements} onChange={(e) => set('venueRequirements', e.target.value)} />
           {fieldErrors.venueRequirements && <span className="field-hint">{fieldErrors.venueRequirements} is required.</span>}
-          <label>Equipment notes</label>
-          <textarea value={form.equipmentNotes} onChange={(e) => set('equipmentNotes', e.target.value)} />
-          <label>
-            <input type="checkbox" checked={form.registrationRequired} onChange={(e) => set('registrationRequired', e.target.checked)} />
+          <label htmlFor="eventEquipmentNotes">Equipment notes</label>
+          <textarea id="eventEquipmentNotes" value={form.equipmentNotes} onChange={(e) => set('equipmentNotes', e.target.value)} />
+          <label htmlFor="eventRegistrationRequired">
+            <input id="eventRegistrationRequired" type="checkbox" checked={form.registrationRequired} onChange={(e) => set('registrationRequired', e.target.checked)} />
             {' '}Attendee registration required
           </label>
           <div className="actions">
-            <button className="btn secondary" disabled={busy} onClick={() => save(false)}>Save as draft</button>
-            <button className="btn" disabled={busy} onClick={() => save(true)}>Submit for review</button>
+            <button className="btn secondary" disabled={busy} onClick={() => save(false)}>
+              {eventData?.subState === 'ACTION_REQUIRED' ? 'Save changes' : 'Save as draft'}
+            </button>
+            <button className="btn" disabled={busy} onClick={() => save(true)}>
+              {eventData?.subState === 'ACTION_REQUIRED' ? 'Submit amended request' : 'Submit for review'}
+            </button>
           </div>
         </div>
       </div>

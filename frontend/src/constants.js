@@ -25,6 +25,18 @@ export const STATUS_LABELS = {
   REJECTED: 'Rejected',
 };
 
+export const SUB_STATES = {
+  IN_REVIEW: 'IN_REVIEW',
+  ACTION_REQUIRED: 'ACTION_REQUIRED',
+  CLARIFICATION_PROVIDED: 'CLARIFICATION_PROVIDED',
+};
+
+export const SUB_STATE_LABELS = {
+  IN_REVIEW: 'In review',
+  ACTION_REQUIRED: 'Clarification requested',
+  CLARIFICATION_PROVIDED: 'Clarification provided',
+};
+
 export const CATEGORIES = [
   'CONFERENCE',
   'WORKSHOP',

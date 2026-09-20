@@ -225,10 +225,17 @@ input.field-error, select.field-error, textarea.field-error {
 }
 .badge.DRAFT { background: #eee8df; }
 .badge.SUBMITTED, .badge.UNDER_REVIEW { background: #d9e6f5; color: var(--info); }
+.badge.ACTION_REQUIRED { background: #fef3c7; color: #92400e; }
+.badge.CLARIFICATION_PROVIDED { background: #e0f2fe; color: #075985; }
 .badge.PLANNING { background: #f7e7c6; color: var(--warn); }
 .badge.CONFIRMED { background: #d8eee3; color: var(--ok); }
 .badge.COMPLETED { background: #e7e4f7; }
 .badge.CANCELLED, .badge.REJECTED { background: #f7dcdc; color: var(--bad); }
+
+.alert.warning { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+.alert.info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+.card.attention-card { border-left: 4px solid #f59e0b; background: #fffdf5; }
+.card.review-panel { border-left: 4px solid var(--teal); background: #fbfdfc; }
 
 .table {
   width: 100%;
