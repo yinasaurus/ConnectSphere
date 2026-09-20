@@ -5,7 +5,11 @@ function validateBody(schema) {
     const result = schema.safeParse(req.body);
     if (!result.success) {
       const message = result.error.issues?.[0]?.message || 'Invalid request';
-      return next(httpError(400, message, 'VALIDATION_ERROR'));
+      const details = result.error.issues.map((issue) => ({
+        field: issue.path.join('.') || 'request',
+        message: issue.message,
+      }));
+      return next(httpError(400, message, 'VALIDATION_ERROR', details));
     }
     req.body = result.data;
     next();

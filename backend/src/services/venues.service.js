@@ -1,4 +1,12 @@
-const { supabase, fetchMany, fetchOne, insertOne, insertMany, updateById } = require('../config/db');
+const {
+  supabase,
+  fetchMany,
+  fetchOne,
+  insertOne,
+  insertMany,
+  updateById,
+  throwIf,
+} = require('../config/db');
 const { ROLES } = require('../constants/roles');
 const { BOOKING_STATUS } = require('../constants/statuses');
 const { httpError } = require('../middleware/errorHandler');
@@ -17,7 +25,37 @@ function mapVenue(row) {
     setupMinutes: row.setup_minutes,
     teardownMinutes: row.teardown_minutes,
     isActive: Boolean(row.is_active),
+    updatedAt: row.updated_at,
   };
+}
+
+function normalizeLayouts(layouts) {
+  return [...new Set((layouts || []).map((layout) => String(layout).trim()).filter(Boolean))];
+}
+
+async function findDuplicateVenue(name, location, ignoredId) {
+  const candidates = await fetchMany(
+    supabase.from('venues').select('id,name,location')
+  );
+  const normalizedName = name.trim().toLowerCase();
+  const normalizedLocation = (location || '').trim().toLowerCase();
+  return candidates.find((candidate) => (
+    Number(candidate.id) !== Number(ignoredId)
+    && candidate.name.trim().toLowerCase() === normalizedName
+    && (candidate.location || '').trim().toLowerCase() === normalizedLocation
+  ));
+}
+
+async function assertVenueIdentityAvailable(name, location, ignoredId) {
+  if (name === undefined && location === undefined) return;
+  const duplicate = await findDuplicateVenue(name, location, ignoredId);
+  if (duplicate) {
+    throw httpError(
+      409,
+      'A venue with this name and location already exists',
+      'DUPLICATE_VENUE'
+    );
+  }
 }
 
 async function listVenues() {
@@ -27,10 +65,14 @@ async function listVenues() {
   const layouts = await fetchMany(supabase.from('venue_layouts').select('*'));
   const byVenue = layouts.reduce((acc, layout) => {
     acc[layout.venue_id] = acc[layout.venue_id] || [];
-    acc[layout.venue_id].push(layout.layout);
+    acc[layout.venue_id].push(layout);
     return acc;
   }, {});
-  return rows.map((row) => ({ ...mapVenue(row), layouts: byVenue[row.id] || [] }));
+  return rows.map((row) => ({
+    ...mapVenue(row),
+    layouts: (byVenue[row.id] || []).map((layout) => layout.layout),
+    layoutDetails: byVenue[row.id] || [],
+  }));
 }
 
 async function createVenue(user, payload) {
@@ -38,6 +80,10 @@ async function createVenue(user, payload) {
     throw httpError(403, 'Only venue staff can manage the catalogue', 'FORBIDDEN');
   }
   if (!payload.name) throw httpError(400, 'Venue name is required', 'VALIDATION_ERROR');
+  if (payload.capacity !== undefined && (!Number.isInteger(payload.capacity) || payload.capacity < 0)) {
+    throw httpError(400, 'Venue capacity must be a non-negative integer', 'VALIDATION_ERROR');
+  }
+  await assertVenueIdentityAvailable(payload.name, payload.location);
 
   const created = await insertOne('venues', {
     name: payload.name,
@@ -50,10 +96,11 @@ async function createVenue(user, payload) {
     teardown_minutes: payload.teardownMinutes || 30,
   });
 
-  if (payload.layouts?.length) {
+  const layouts = normalizeLayouts(payload.layouts);
+  if (layouts.length) {
     await insertMany(
       'venue_layouts',
-      payload.layouts.map((layout) => ({ venue_id: created.id, layout }))
+      layouts.map((layout) => ({ venue_id: created.id, layout }))
     );
   }
 
@@ -65,19 +112,70 @@ async function updateVenue(user, id, payload) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can manage the catalogue', 'FORBIDDEN');
   }
-  const patch = {
-    name: payload.name,
-    location: payload.location,
-    capacity: payload.capacity,
-    facilities: payload.facilities,
-    accessibility: payload.accessibility,
-    operating_hours: payload.operatingHours,
-    setup_minutes: payload.setupMinutes,
-    teardown_minutes: payload.teardownMinutes,
-    updated_at: new Date().toISOString(),
+  const existing = await fetchOne(supabase.from('venues').select('*').eq('id', id));
+  if (!existing) throw httpError(404, 'Venue not found', 'NOT_FOUND');
+  if (payload.capacity !== undefined && (!Number.isInteger(payload.capacity) || payload.capacity < 0)) {
+    throw httpError(400, 'Venue capacity must be a non-negative integer', 'VALIDATION_ERROR');
+  }
+  await assertVenueIdentityAvailable(
+    payload.name === undefined ? existing.name : payload.name,
+    payload.location === undefined ? existing.location : payload.location,
+    id
+  );
+
+  const patch = { updated_at: new Date().toISOString() };
+  const fieldMap = {
+    name: 'name',
+    location: 'location',
+    capacity: 'capacity',
+    facilities: 'facilities',
+    accessibility: 'accessibility',
+    operatingHours: 'operating_hours',
+    setupMinutes: 'setup_minutes',
+    teardownMinutes: 'teardown_minutes',
   };
+  Object.entries(fieldMap).forEach(([from, to]) => {
+    if (payload[from] !== undefined) patch[to] = payload[from];
+  });
+  // Venue staff can deactivate a venue without removing it from the database.
   if (payload.isActive !== undefined) patch.is_active = Boolean(payload.isActive);
   await updateById('venues', id, patch);
+
+  // Update, add, or delete only the layout rows included in the request.
+  if (payload.layouts !== undefined) {
+    const existingLayouts = await fetchMany(
+      supabase.from('venue_layouts').select('*').eq('venue_id', id)
+    );
+    const existingById = new Map(existingLayouts.map((layout) => [Number(layout.id), layout]));
+    const newLayoutNames = new Set();
+
+    for (const requestedLayout of payload.layouts) {
+      if (requestedLayout.id !== undefined) {
+        const currentLayout = existingById.get(requestedLayout.id);
+        if (!currentLayout) {
+          throw httpError(404, 'Venue layout not found', 'NOT_FOUND');
+        }
+        if (requestedLayout.deleted) {
+          const { error } = await supabase
+            .from('venue_layouts')
+            .delete()
+            .eq('id', requestedLayout.id)
+            .eq('venue_id', id);
+          throwIf(error);
+        } else if (requestedLayout.layout !== currentLayout.layout) {
+          await updateById('venue_layouts', requestedLayout.id, { layout: requestedLayout.layout });
+        }
+      } else if (!requestedLayout.deleted) {
+        const layout = requestedLayout.layout;
+        if (newLayoutNames.has(layout) || existingLayouts.some((item) => item.layout === layout)) {
+          throw httpError(409, 'Duplicate venue layout', 'DUPLICATE_LAYOUT');
+        }
+        newLayoutNames.add(layout);
+        await insertOne('venue_layouts', { venue_id: id, layout });
+      }
+    }
+  }
+
   return (await listVenues()).find((venue) => venue.id === Number(id));
 }
 
