@@ -4,6 +4,7 @@ const { asyncHandler } = require('../utils/asyncHandler');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { ROLES } = require('../constants/roles');
 const { httpError } = require('../middleware/errorHandler');
+const { assertPlanningAccess } = require('../services/events.service');
 
 const router = express.Router();
 
@@ -39,6 +40,7 @@ router.get('/users', requireAuth, requireRole(
 }));
 
 router.get('/comments/:eventId', requireAuth, asyncHandler(async (req, res) => {
+  await assertPlanningAccess(req.user, req.params.eventId);
   const comments = await fetchMany(
     supabase
       .from('event_comments')
@@ -55,6 +57,7 @@ router.get('/comments/:eventId', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 router.post('/comments/:eventId', requireAuth, asyncHandler(async (req, res) => {
+  await assertPlanningAccess(req.user, req.params.eventId);
   if (!req.body.body) throw httpError(400, 'Comment body is required', 'VALIDATION_ERROR');
   const comment = await insertOne('event_comments', {
     event_id: req.params.eventId,
