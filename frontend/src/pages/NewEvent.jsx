@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
-import { CATEGORIES, LAYOUTS } from '../constants';
+import { useAuth } from '../auth';
+import { CATEGORIES, LAYOUTS, ROLES } from '../constants';
 
 const empty = {
   name: '',
@@ -52,7 +53,10 @@ function toDateTimeLocal(value) {
 export default function NewEvent() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { user, hasRole } = useAuth();
+  const canCoordinate = hasRole(ROLES.EVENT_COORDINATOR);
   const isEditing = Boolean(id);
+  const [editable, setEditable] = useState(false);
   const [form, setForm] = useState(empty);
   const [previous, setPrevious] = useState([]);
   const [error, setError] = useState('');
@@ -65,7 +69,15 @@ export default function NewEvent() {
 
   useEffect(() => {
     if (!isEditing) return;
+    setEditable(false);
     api(`/api/events/${id}`).then(({ event }) => {
+      const ownsDraft = event.organiserId === user.id && event.status === 'DRAFT';
+      const assigned = canCoordinate && event.coordinatorId === user.id;
+      if (!ownsDraft && !assigned) {
+        setError('You do not have access to edit this event.');
+        return;
+      }
+      setEditable(true);
       setForm({
         ...empty,
         ...event,
@@ -74,7 +86,7 @@ export default function NewEvent() {
         clonedFromEventId: event.clonedFromEventId || '',
       });
     }).catch((err) => setError(err.message));
-  }, [id, isEditing]);
+  }, [id, isEditing, user.id, canCoordinate]);
 
   function set(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -136,6 +148,8 @@ export default function NewEvent() {
       setBusy(false);
     }
   }
+
+  if (isEditing && !editable) return <p className="muted">{error || 'Loading event…'}</p>;
 
   return (
     <>

@@ -93,6 +93,28 @@ function canViewEvent(user, row) {
   return false;
 }
 
+function canViewPlanning(user) {
+  return [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT]
+    .some((role) => hasRole(user, role));
+}
+
+function visibleEvent(user, row) {
+  const event = mapEvent(row);
+  if (canViewPlanning(user)) return event;
+  // Attendees receive registration details, not internal planning fields.
+  const { id, name, description, purpose, category, status, startAt, endAt,
+    registrationRequired, registrationOpensAt, registrationClosesAt,
+    registrationCapacity, registrationOpen } = event;
+  return { id, name, description, purpose, category, status, startAt, endAt,
+    registrationRequired, registrationOpensAt, registrationClosesAt,
+    registrationCapacity, registrationOpen };
+}
+
+async function assertPlanningAccess(user, eventId) {
+  if (!canViewPlanning(user)) throw httpError(403, 'Planning information is restricted', 'FORBIDDEN');
+  return getEvent(user, eventId);
+}
+
 function applyVisibility(query, user) {
   if (hasRole(user, ROLES.EVENT_COORDINATOR)
     || hasRole(user, ROLES.VENUE_STAFF)
@@ -121,7 +143,7 @@ async function listEvents(user, filters = {}) {
   }
 
   const rows = await fetchMany(query);
-  return rows.filter((row) => canViewEvent(user, row)).map(mapEvent);
+  return rows.filter((row) => canViewEvent(user, row)).map((row) => visibleEvent(user, row));
 }
 
 async function getEvent(user, id) {
@@ -129,7 +151,26 @@ async function getEvent(user, id) {
     supabase.from('events').select(EVENT_SELECT).eq('id', id)
   );
   if (!row || !canViewEvent(user, row)) throw httpError(404, 'Event not found', 'NOT_FOUND');
-  return mapEvent(row);
+  return visibleEvent(user, row);
+}
+
+async function listVenueBookings(user, eventId) {
+  // Reuse event visibility before querying bookings, including client isolation.
+  const event = await getEvent(user, eventId);
+  let query = supabase.from('venue_bookings')
+      .select('id, event_id, venue_id, status, venues ( name )')
+      .eq('event_id', event.id)
+      .order('start_at');
+  if (!canViewPlanning(user)) query = query.eq('status', 'APPROVED');
+  const rows = await fetchMany(query);
+  // Event readers need booking status, not internal notes or decision metadata.
+  return rows.map((row) => ({
+    id: row.id,
+    event_id: row.event_id,
+    venue_id: row.venue_id,
+    status: row.status,
+    venue_name: row.venues?.name || null,
+  }));
 }
 
 async function createEvent(user, payload) {
@@ -252,7 +293,11 @@ function toEventPatch(payload) {
 async function submitEvent(user, id) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
-  if (existing.organiser_id !== user.id && !hasRole(user, ROLES.EVENT_COORDINATOR)) {
+  const ownsRequest = existing.organiser_id === user.id
+    && (hasRole(user, ROLES.EVENT_ORGANISER) || hasRole(user, ROLES.EVENT_COORDINATOR));
+  const assignedCoordinator = existing.coordinator_id === user.id
+    && hasRole(user, ROLES.EVENT_COORDINATOR);
+  if (!ownsRequest && !assignedCoordinator) {
     throw httpError(403, 'Only the organiser can submit this request', 'FORBIDDEN');
   }
 
@@ -299,7 +344,7 @@ async function changeStatus(user, id, nextStatus, reason) {
 
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
-  if (existing.coordinator_id && existing.coordinator_id !== user.id) {
+  if (existing.coordinator_id !== user.id) {
     throw httpError(403, 'Only the assigned coordinator can update this event', 'FORBIDDEN');
   }
 
@@ -444,7 +489,7 @@ async function writeStatusHistory(eventId, actorId, fromStatus, toStatus, note) 
 }
 
 async function listHistory(user, eventId) {
-  await getEvent(user, eventId);
+  await assertPlanningAccess(user, eventId);
   const rows = await fetchMany(
     supabase
       .from('event_status_history')
@@ -461,6 +506,8 @@ async function listHistory(user, eventId) {
 module.exports = {
   listEvents,
   getEvent,
+  listVenueBookings,
+  assertPlanningAccess,
   createEvent,
   updateEvent,
   submitEvent,
