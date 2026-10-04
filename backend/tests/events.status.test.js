@@ -5,6 +5,9 @@
  *   AC1  Submitting records Draft -> Submitted -> Under Review.
  *   AC2  Approving moves Under Review -> Approved.
  *   AC3  Starting planning moves Approved -> Planning.
+ *   AC4  Rejecting from Submitted / Under Review requires and records a reason.
+ *   AC6  Awaiting Safety Check needs every booking approved and equipment reserved.
+ *   AC7  Preparation is refused without Safety Officer approval; status unchanged.
  *   Transitions outside the matrix fail with HTTP 400 and change nothing.
  *
  * Labels:
@@ -167,6 +170,17 @@ describe('SCRUM-5 status progression (service rules)', () => {
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
+  // AC7 · Without the Safety Officer's approval, moving to Preparation is rejected and the
+  // status is unchanged: no event update and no history row.
+  it('US5-S13: AWAITING_SAFETY_CHECK -> PREPARATION is refused without safety approval', async () => {
+    event.status = 'AWAITING_SAFETY_CHECK';
+    await expect(service.changeStatus(coordinator, 3, 'PREPARATION')).rejects.toMatchObject({
+      status: 409, code: 'SAFETY_CHECK_NOT_APPROVED',
+    });
+    expect(db.updateById).not.toHaveBeenCalled();
+    expect(historyRows()).toEqual([]);
+  });
+
   // Confirming still requires an APPROVED venue booking; a PENDING one is not enough.
   it('US5-S06: PREPARATION -> CONFIRMED is refused when the only booking is still pending', async () => {
     event.status = 'PREPARATION';
@@ -213,6 +227,15 @@ describe('SCRUM-5 POST /api/events/:id/status (route)', () => {
     expect(res.body).toMatchObject({
       error: 'INVALID_STATUS_TRANSITION', message: 'Cannot move event from DRAFT to CONFIRMED',
     });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
+  // AC7 · The same rule holds through the real route.
+  it('US5-R03: moving to PREPARATION through the route returns 409 and saves nothing', async () => {
+    event.status = 'AWAITING_SAFETY_CHECK';
+    const res = await asCoordinator().send({ status: 'PREPARATION' });
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ error: 'SAFETY_CHECK_NOT_APPROVED' });
     expect(db.updateById).not.toHaveBeenCalled();
   });
 

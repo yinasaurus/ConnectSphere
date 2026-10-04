@@ -352,6 +352,14 @@ async function changeStatus(user, id, nextStatus, reason) {
   }
 
   assertTransition(existing.status, nextStatus);
+  // Only the Safety Officer's approval of the safety check (SCRUM-55/56) may start preparation.
+  if (nextStatus === EVENT_STATUS.PREPARATION) {
+    throw httpError(
+      409,
+      'The Safety Officer must approve the safety check before preparation can start',
+      'SAFETY_CHECK_NOT_APPROVED'
+    );
+  }
 
   const patch = {
     status: nextStatus,
