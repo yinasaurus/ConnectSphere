@@ -28,6 +28,15 @@ const availability = asyncHandler(async (req, res) => {
   res.json(result);
 });
 
+// SCRUM-67: GET /api/venues/:id/bookings?from=<ISO>&to=<ISO>
+const venueBookings = asyncHandler(async (req, res) => {
+  const result = await venuesService.listVenueBookingsForPeriod(req.params.id, {
+    from: req.query.from,
+    to: req.query.to,
+  });
+  res.json(result);
+});
+
 const create = asyncHandler(async (req, res) => {
   const venue = await venuesService.createVenue(req.user, req.body);
   res.status(201).json({ venue });
@@ -70,6 +79,7 @@ module.exports = {
   list,
   search,
   availability,
+  venueBookings,
   create,
   update,
   bookings,

@@ -15,6 +15,12 @@ router.get(
   requireRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT),
   controller.availability
 );
+// SCRUM-67 AC5: coordinators, venue staff and the coordinator lead only.
+router.get(
+  '/:id/bookings',
+  requireRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.EVENT_COORDINATOR_LEAD),
+  controller.venueBookings
+);
 router.post('/', requireRole(ROLES.VENUE_STAFF), controller.create);
 router.patch('/:id', requireRole(ROLES.VENUE_STAFF), controller.update);
 

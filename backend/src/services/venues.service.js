@@ -355,6 +355,84 @@ async function getVenueAvailability(venueId, { from, to } = {}, now = new Date()
   };
 }
 
+/**
+ * SCRUM-67: the bookings already committed at one venue in [from, to).
+ * Confirmed bookings come back with their occupied window (start - setup to
+ * end + turnaround). Active tentative holds come back as type TENTATIVE_HOLD with
+ * their held period as the occupied window. Expired holds and PENDING requests
+ * are left out. A booking is included when its occupied window overlaps the period.
+ *
+ * `now` decides which holds have expired; it is a parameter so tests can fix the time.
+ * Returns { venue, from, to, bookings: [...] } sorted by occupied start.
+ */
+async function listVenueBookingsForPeriod(venueId, { from, to } = {}, now = new Date()) {
+  if (!from || !to) {
+    throw httpError(400, 'from and to are required', 'VALIDATION_ERROR');
+  }
+  const rangeStart = new Date(from);
+  const rangeEnd = new Date(to);
+  if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) {
+    throw httpError(400, 'from and to must be valid dates', 'VALIDATION_ERROR');
+  }
+  if (rangeStart >= rangeEnd) {
+    throw httpError(400, 'from must be before to', 'VALIDATION_ERROR');
+  }
+
+  const venue = await fetchOne(supabase.from('venues').select('id, name').eq('id', venueId));
+  if (!venue) throw httpError(404, 'Venue not found', 'NOT_FOUND');
+
+  // Not filtered by time in the query, for the same reason as getVenueAvailability:
+  // setup/turnaround padding can pull a booking from outside the period into it.
+  const rows = await fetchMany(
+    supabase
+      .from('venue_bookings')
+      .select('*, events ( name )')
+      .eq('venue_id', venueId)
+      .in('status', [BOOKING_STATUS.APPROVED, BOOKING_STATUS.TENTATIVE])
+  );
+
+  const bookings = rows
+    // AC4: only this venue's rows. An event booked at several venues has one row per
+    // venue, so each booking appears under its own venue and nowhere else.
+    .filter((row) => String(row.venue_id) === String(venue.id))
+    .filter((row) => row.status === BOOKING_STATUS.APPROVED || row.status === BOOKING_STATUS.TENTATIVE)
+    .map((row) => {
+      const isHold = row.status === BOOKING_STATUS.TENTATIVE;
+      // AC3: an expired hold doesn't block the venue, so it isn't returned at all.
+      if (isHold && !isActiveHold(row, now)) return null;
+      // AC1: confirmed bookings are padded; AC2: holds keep their held period.
+      const occupied = isHold
+        ? { occupiedStart: new Date(row.start_at), occupiedEnd: new Date(row.end_at) }
+        : computeOccupiedWindow(row.start_at, row.end_at, row.setup_minutes, row.teardown_minutes);
+      return { row, isHold, ...occupied };
+    })
+    .filter((entry) => entry
+      && windowsOverlap(rangeStart, rangeEnd, entry.occupiedStart, entry.occupiedEnd))
+    .sort((a, b) => a.occupiedStart - b.occupiedStart)
+    .map(({ row, isHold, occupiedStart, occupiedEnd }) => ({
+      id: row.id,
+      eventId: row.event_id,
+      eventName: row.events?.name || null,
+      // AC2: the type tells a hold apart from a confirmed booking.
+      type: isHold ? AVAILABILITY_BLOCK.TENTATIVE_HOLD : AVAILABILITY_BLOCK.BOOKING,
+      status: row.status,
+      startAt: new Date(row.start_at).toISOString(),
+      endAt: new Date(row.end_at).toISOString(),
+      setupMinutes: isHold ? null : row.setup_minutes,
+      teardownMinutes: isHold ? null : row.teardown_minutes,
+      occupiedStartAt: occupiedStart.toISOString(),
+      occupiedEndAt: occupiedEnd.toISOString(),
+      holdExpiresAt: isHold ? row.hold_expires_at || null : null,
+    }));
+
+  return {
+    venue: { id: venue.id, name: venue.name },
+    from: rangeStart.toISOString(),
+    to: rangeEnd.toISOString(),
+    bookings,
+  };
+}
+
 async function createVenue(user, payload) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can manage the catalogue', 'FORBIDDEN');
@@ -525,6 +603,7 @@ module.exports = {
   listVenues,
   searchVenues,
   getVenueAvailability,
+  listVenueBookingsForPeriod,
   createVenue,
   updateVenue,
   listBookings,
