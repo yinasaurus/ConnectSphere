@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { useAuth } from '../auth';
+import { ROLES } from '../constants';
 
 // SCRUM-66: venue availability view. The backend decides what is available
 // (GET /api/venues/:id/availability); this page only picks the range and shows it.
 // Route and nav link are limited to internal roles in App.jsx / Layout.jsx (AC6).
+// SCRUM-67: the same search also lists the venue's existing bookings
+// (GET /api/venues/:id/bookings) for the roles that endpoint allows.
 
 // Readable names for the block types the backend sends in `reasons[].type`.
 const REASON_LABELS = {
@@ -17,6 +21,9 @@ function formatTime(value) {
 }
 
 export default function VenueAvailability() {
+  const { hasRole } = useAuth();
+  // SCRUM-67 AC5: Technical Support can see availability (SCRUM-66) but not the bookings list.
+  const canSeeBookings = hasRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.EVENT_COORDINATOR_LEAD);
   const [venues, setVenues] = useState([]);
   const [venueId, setVenueId] = useState('');
   const [from, setFrom] = useState('');
@@ -24,6 +31,8 @@ export default function VenueAvailability() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [bookings, setBookings] = useState(null);
+  const [bookingsError, setBookingsError] = useState('');
 
   // Load the venue list once for the dropdown.
   useEffect(() => {
@@ -40,13 +49,21 @@ export default function VenueAvailability() {
     }
     setLoading(true);
     setError('');
+    setBookings(null);
+    setBookingsError('');
+    // datetime-local inputs are in the user's local time; send UTC ISO strings,
+    // the same way the venue search does.
+    const params = new URLSearchParams({
+      from: new Date(from).toISOString(),
+      to: new Date(to).toISOString(),
+    });
+    // Fetched separately so a bookings failure doesn't hide the availability result.
+    if (canSeeBookings) {
+      api(`/api/venues/${venueId}/bookings?${params.toString()}`)
+        .then((res) => setBookings(res.bookings || []))
+        .catch((err) => setBookingsError(err.message));
+    }
     try {
-      // datetime-local inputs are in the user's local time; send UTC ISO strings,
-      // the same way the venue search does.
-      const params = new URLSearchParams({
-        from: new Date(from).toISOString(),
-        to: new Date(to).toISOString(),
-      });
       setResult(await api(`/api/venues/${venueId}/availability?${params.toString()}`));
     } catch (err) {
       setResult(null);
@@ -125,6 +142,46 @@ export default function VenueAvailability() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {canSeeBookings && (bookings || bookingsError) && (
+        <div className="card" style={{ marginTop: 18 }}>
+          <h3>Existing bookings</h3>
+          {bookingsError && <div className="alert">{bookingsError}</div>}
+          {bookings && bookings.length === 0 && <p className="muted">No confirmed bookings or active holds in this period.</p>}
+          {bookings && bookings.length > 0 && (
+            <table className="table" aria-label="Existing bookings">
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Type</th>
+                  <th>Booked</th>
+                  <th>Venue occupied</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bookings.map((booking) => (
+                  <tr key={booking.id}>
+                    <td>{booking.eventName || `Event #${booking.eventId}`}</td>
+                    <td>
+                      <span className={`badge ${booking.type === 'TENTATIVE_HOLD' ? 'PLANNING' : 'CONFIRMED'}`}>
+                        {booking.type === 'TENTATIVE_HOLD' ? 'Tentative hold' : 'Confirmed'}
+                      </span>
+                      {booking.holdExpiresAt && <div className="muted">expires {formatTime(booking.holdExpiresAt)}</div>}
+                    </td>
+                    <td>{formatTime(booking.startAt)} – {formatTime(booking.endAt)}</td>
+                    <td>
+                      {formatTime(booking.occupiedStartAt)} – {formatTime(booking.occupiedEndAt)}
+                      {booking.type === 'BOOKING' && (
+                        <div className="muted">{booking.setupMinutes} min setup, {booking.teardownMinutes} min turnaround</div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </>

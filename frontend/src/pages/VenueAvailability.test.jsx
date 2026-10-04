@@ -54,6 +54,9 @@ async function fillForm() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // The page reads the user's roles since SCRUM-67. Technical Support is a SCRUM-66 role
+  // that doesn't get the bookings list, so these tests still see only the availability calls.
+  useAuth.mockReturnValue({ hasRole: (...allowed) => allowed.includes('TECHNICAL_SUPPORT') });
 });
 
 describe('SCRUM-66 VenueAvailability page', () => {
