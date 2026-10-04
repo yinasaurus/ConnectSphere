@@ -206,6 +206,20 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
     expect(audit.writeAudit).not.toHaveBeenCalled();
     expect(audit.notifyUser).not.toHaveBeenCalled();
   });
+
+  // AC3 + AC4 · Edge case: if the organiser account is gone (organiser_id set null on delete),
+  // the decision and reason are still recorded; there is just nobody to notify.
+  it('US17-B16: a decision on an event with no organiser is recorded without a notification', async () => {
+    event.organiser_id = null;
+    await service.decideEvent(coordinator, 3, 'REJECT', 'Attendance numbers are missing');
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
+      status: 'REJECTED', rejection_reason: 'Attendance numbers are missing',
+    }));
+    expect(db.insertOne).toHaveBeenCalledWith('event_status_history', expect.objectContaining({
+      to_status: 'REJECTED', note: 'Attendance numbers are missing',
+    }));
+    expect(audit.notifyUser).not.toHaveBeenCalled();
+  });
 });
 
 describe('SCRUM-17 POST /api/events/:id/decision (route)', () => {
