@@ -224,9 +224,9 @@ input.field-error, select.field-error, textarea.field-error {
   text-transform: uppercase;
 }
 .badge.DRAFT { background: #eee8df; }
-.badge.UNDER_REVIEW { background: #d9e6f5; color: var(--info); }
-.badge.PLANNING { background: #f7e7c6; color: var(--warn); }
-.badge.VENUE_SECURED { background: #e2eedc; color: var(--ok); }
+.badge.SUBMITTED, .badge.UNDER_REVIEW { background: #d9e6f5; color: var(--info); }
+.badge.APPROVED, .badge.PLANNING { background: #f7e7c6; color: var(--warn); }
+.badge.AWAITING_SAFETY_CHECK, .badge.PREPARATION { background: #e2eedc; color: var(--ok); }
 .badge.CONFIRMED { background: #d8eee3; color: var(--ok); }
 .badge.COMPLETED { background: #e7e4f7; }
 .badge.CANCELLED, .badge.REJECTED { background: #f7dcdc; color: var(--bad); }
