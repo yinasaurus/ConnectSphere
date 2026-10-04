@@ -369,6 +369,13 @@ async function changeStatus(user, id, nextStatus, reason) {
   if (bookingRequiredMessage && !(await hasApprovedVenueBooking(existing.id))) {
     throw httpError(409, bookingRequiredMessage, 'VENUE_NOT_APPROVED');
   }
+  if (nextStatus === EVENT_STATUS.AWAITING_SAFETY_CHECK && !(await isReadyForSafetyCheck(existing.id))) {
+    throw httpError(
+      409,
+      'Every venue booking must be approved and all requested equipment reserved before the safety check',
+      'NOT_READY_FOR_SAFETY_CHECK'
+    );
+  }
 
   await updateById('events', id, patch);
   await writeStatusHistory(id, user.id, existing.status, nextStatus, note);
@@ -400,6 +407,22 @@ async function hasApprovedVenueBooking(eventId) {
       .eq('status', BOOKING_STATUS.APPROVED)
   );
   return Boolean(booking);
+}
+
+// Rejected and cancelled bookings are no longer part of the event's arrangements.
+const INACTIVE_BOOKING_STATUSES = [BOOKING_STATUS.REJECTED, BOOKING_STATUS.CANCELLED];
+
+async function isReadyForSafetyCheck(eventId) {
+  const bookings = await fetchMany(
+    supabase.from('venue_bookings').select('status').eq('event_id', eventId)
+  );
+  const equipmentRequests = await fetchMany(
+    supabase.from('equipment_requests').select('status').eq('event_id', eventId)
+  );
+  const activeBookings = bookings.filter((booking) => !INACTIVE_BOOKING_STATUSES.includes(booking.status));
+  return activeBookings.length > 0
+    && activeBookings.every((booking) => booking.status === BOOKING_STATUS.APPROVED)
+    && equipmentRequests.every((item) => item.status === 'RESERVED');
 }
 
 async function assignCoordinator() {

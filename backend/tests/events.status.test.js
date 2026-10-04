@@ -140,6 +140,33 @@ describe('SCRUM-5 status progression (service rules)', () => {
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
+  // AC6 · Once every venue booking is approved and every requested piece of equipment is
+  // reserved, the event can move to Awaiting Safety Check. A rejected booking that was
+  // replaced doesn't count.
+  it('US5-S11: PLANNING -> AWAITING_SAFETY_CHECK succeeds when all bookings are approved and equipment reserved', async () => {
+    event.status = 'PLANNING';
+    tables.venue_bookings.push({ id: 8, event_id: 3, status: 'APPROVED' }, { id: 9, event_id: 3, status: 'REJECTED' });
+    tables.equipment_requests.push({ id: 1, event_id: 3, status: 'RESERVED' });
+    await service.changeStatus(coordinator, 3, 'AWAITING_SAFETY_CHECK');
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'AWAITING_SAFETY_CHECK' }));
+  });
+
+  // AC6 · "every venue booking ... and any requested equipment": one missing piece blocks
+  // the move, and the status stays Planning.
+  it.each([
+    ['one of two bookings is still pending', () => tables.venue_bookings.push({ id: 8, event_id: 3, status: 'PENDING' })],
+    ['an equipment request is not reserved yet', () => tables.equipment_requests.push({ id: 1, event_id: 3, status: 'PENDING' })],
+    ['there is no active venue booking', () => { tables.venue_bookings[0].status = 'REJECTED'; }],
+    ['another event\'s booking is approved but this one has none', () => { tables.venue_bookings[0].event_id = 99; }],
+  ])('US5-S12: PLANNING -> AWAITING_SAFETY_CHECK is refused when %s', async (_case, arrange) => {
+    event.status = 'PLANNING';
+    arrange();
+    await expect(service.changeStatus(coordinator, 3, 'AWAITING_SAFETY_CHECK')).rejects.toMatchObject({
+      status: 409, code: 'NOT_READY_FOR_SAFETY_CHECK',
+    });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
   // Confirming still requires an APPROVED venue booking; a PENDING one is not enough.
   it('US5-S06: PREPARATION -> CONFIRMED is refused when the only booking is still pending', async () => {
     event.status = 'PREPARATION';
