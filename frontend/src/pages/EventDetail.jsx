@@ -98,20 +98,25 @@ export default function EventDetail() {
               <h3>Coordinator actions</h3>
               {event.status === 'UNDER_REVIEW' && (
                 <div className="actions">
-                  <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'PLANNING' } }))}>
-                    Approve for planning
+                  <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'APPROVED' } }))}>
+                    Approve
                   </button>
-                  <button className="btn danger" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'REJECTED', reason: reason || 'Returned for rework' } }))}>
+                  <button className="btn danger" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'REJECTED', reason } }))}>
                     Reject / return
                   </button>
                 </div>
               )}
-              {event.status === 'PLANNING' && (
-                <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'VENUE_SECURED' } }))}>
-                  Mark venue secured
+              {event.status === 'APPROVED' && (
+                <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'PLANNING' } }))}>
+                  Start planning
                 </button>
               )}
-              {event.status === 'VENUE_SECURED' && (
+              {event.status === 'PLANNING' && (
+                <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'AWAITING_SAFETY_CHECK' } }))}>
+                  Send to safety check
+                </button>
+              )}
+              {event.status === 'PREPARATION' && (
                 <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'CONFIRMED' } }))}>
                   Confirm event
                 </button>
