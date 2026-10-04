@@ -2,43 +2,56 @@
  * SCRUM-5: Progressing Event Statuses (status machine unit tests)
  *
  * Acceptance criteria covered:
- *   AC1  Statuses move strictly along Draft -> Pending Review -> Approved - Pending Venue
- *        -> Venue Secured -> Confirmed -> Completed (or Rejected / Cancelled).
- *   AC2  Any transition outside this matrix fails with HTTP 400.
- *
- * Stored values used in code (label shown to users):
- *   DRAFT (Draft), UNDER_REVIEW (Pending review), PLANNING (Approved - pending venue),
- *   VENUE_SECURED (Venue secured), CONFIRMED, COMPLETED, REJECTED, CANCELLED
+ *   AC1  The 11 statuses: Draft, Submitted, Under Review, Approved, Planning,
+ *        Awaiting Safety Check, Preparation, Confirmed, Completed, Cancelled, Rejected.
+ *   AC2  Under Review -> Approved.
+ *   AC3  Approved -> Planning.
+ *   AC4  Submitted / Under Review -> Rejected.
+ *   AC6  Planning -> Awaiting Safety Check.
+ *   AC7  Preparation is only reachable from Awaiting Safety Check.
+ *   Any transition outside the matrix fails with HTTP 400.
  *
  * Labels: US5-M.. (this file), US5-S.. / US5-R.. (events.status.test.js),
- *         US5-F.. (frontend StatusBadge.test.jsx, EventDetail.status.test.jsx)
+ *         US5-F.. (frontend StatusBadge.test.jsx, EventDetail.status.test.jsx, Dashboard.test.jsx)
  */
 const { assertTransition, ALLOWED_TRANSITIONS } = require('../src/domain/statusMachine');
 const { EVENT_STATUS } = require('../src/constants/statuses');
 
-// The agreed matrix, written out by hand from AC1 plus the customer's backward steps.
+// AC1 · the statuses, written out by hand from the story.
+const AC1_STATUSES = [
+  'DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'PLANNING', 'AWAITING_SAFETY_CHECK',
+  'PREPARATION', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'REJECTED',
+];
+
+// The agreed matrix, written out by hand from the ACs plus the customer's earlier rules.
 // Deliberately NOT imported from statusMachine.js, so the test checks the code against the
 // requirement rather than against itself.
 const EXPECTED_ALLOWED = [
-  // main path (AC1)
-  ['DRAFT', 'UNDER_REVIEW'],
-  ['UNDER_REVIEW', 'PLANNING'],
-  ['PLANNING', 'VENUE_SECURED'],
-  ['VENUE_SECURED', 'CONFIRMED'],
+  // main path
+  ['DRAFT', 'SUBMITTED'],
+  ['SUBMITTED', 'UNDER_REVIEW'],
+  ['UNDER_REVIEW', 'APPROVED'], // AC2
+  ['APPROVED', 'PLANNING'], // AC3
+  ['PLANNING', 'AWAITING_SAFETY_CHECK'], // AC6
+  ['AWAITING_SAFETY_CHECK', 'PREPARATION'], // AC7
+  ['PREPARATION', 'CONFIRMED'], // SCRUM-73
   ['CONFIRMED', 'COMPLETED'],
-  // rejection (AC1 "or Rejected") and resubmission (Week 4 Q&A)
+  // rejection (AC4), essential requirements can't be met (Week 2 Q&A), resubmission (Week 4 Q&A)
+  ['SUBMITTED', 'REJECTED'],
   ['UNDER_REVIEW', 'REJECTED'],
   ['PLANNING', 'REJECTED'],
-  ['REJECTED', 'UNDER_REVIEW'],
-  // cancellation (AC1 "or Cancelled") from any non-final status
+  ['REJECTED', 'SUBMITTED'],
+  // cancellation from any non-final status
   ['DRAFT', 'CANCELLED'],
+  ['SUBMITTED', 'CANCELLED'],
   ['UNDER_REVIEW', 'CANCELLED'],
   ['REJECTED', 'CANCELLED'],
+  ['APPROVED', 'CANCELLED'],
   ['PLANNING', 'CANCELLED'],
-  ['VENUE_SECURED', 'CANCELLED'],
+  ['AWAITING_SAFETY_CHECK', 'CANCELLED'],
+  ['PREPARATION', 'CANCELLED'],
   ['CONFIRMED', 'CANCELLED'],
-  // re-planning: venue falls through (Week 7 change 2) / major change (Week 4 Q&A)
-  ['VENUE_SECURED', 'PLANNING'],
+  // re-planning after a major change (Week 4 Q&A)
   ['CONFIRMED', 'PLANNING'],
 ];
 
@@ -58,29 +71,35 @@ function errorFrom(fn) {
 }
 
 describe('SCRUM-5 event status machine', () => {
-  // AC1 · Every allowed step in the matrix succeeds.
+  // AC1 · The system supports exactly the 11 statuses in the story.
+  it('US5-M00: defines exactly the AC1 statuses', () => {
+    expect(Object.values(EVENT_STATUS).sort()).toEqual([...AC1_STATUSES].sort());
+  });
+
+  // Every allowed step in the matrix succeeds.
   it.each(EXPECTED_ALLOWED)('US5-M01: allows %s -> %s', (from, to) => {
     expect(() => assertTransition(from, to)).not.toThrow();
   });
 
-  // AC2 · Every other pair of statuses (skipping steps, going backwards, staying on the
-  // same status, leaving COMPLETED/CANCELLED) fails with 400 INVALID_STATUS_TRANSITION.
-  // This includes the key "no bypass" cases, e.g. DRAFT -> PLANNING (skips review) and
-  // PLANNING -> CONFIRMED (skips the venue booking).
+  // Every other pair of statuses (skipping steps, going backwards, staying on the same
+  // status, leaving COMPLETED/CANCELLED) fails with 400 INVALID_STATUS_TRANSITION.
+  // This includes the key "no bypass" cases, e.g. PLANNING -> PREPARATION (skips the
+  // safety check, AC7), APPROVED -> REJECTED (AC4 only from Submitted / Under Review)
+  // and REJECTED -> APPROVED (must be resubmitted and reviewed again).
   it.each(EXPECTED_BLOCKED)('US5-M02: blocks %s -> %s with 400', (from, to) => {
     expect(errorFrom(() => assertTransition(from, to)))
       .toMatchObject({ status: 400, code: 'INVALID_STATUS_TRANSITION' });
   });
 
-  // AC2 · A status that doesn't exist (typo, old SUBMITTED value, missing) is refused with 400.
-  it.each(['ARCHIVED', 'SUBMITTED', undefined])('US5-M03: refuses unknown target status %s', (to) => {
+  // A status that doesn't exist (typo, the removed VENUE_SECURED value, missing) is refused.
+  it.each(['ARCHIVED', 'VENUE_SECURED', undefined])('US5-M03: refuses unknown target status %s', (to) => {
     expect(errorFrom(() => assertTransition('DRAFT', to)))
       .toMatchObject({ status: 400, message: `Unknown event status: ${to}` });
   });
 
-  // AC2 · An event stuck on an unknown current status (bad data) can't move anywhere.
+  // An event stuck on an unknown current status (bad data) can't move anywhere.
   it('US5-M04: an event with an unknown current status cannot move', () => {
-    expect(errorFrom(() => assertTransition('SUBMITTED', 'UNDER_REVIEW')))
+    expect(errorFrom(() => assertTransition('VENUE_SECURED', 'PLANNING')))
       .toMatchObject({ status: 400 });
   });
 
@@ -90,6 +109,7 @@ describe('SCRUM-5 event status machine', () => {
     expect(Object.keys(ALLOWED_TRANSITIONS).sort()).toEqual([...ALL_STATUSES].sort());
     const actualPairs = Object.entries(ALLOWED_TRANSITIONS)
       .flatMap(([from, targets]) => targets.map((to) => [from, to]));
-    expect(actualPairs).toHaveLength(EXPECTED_ALLOWED.length);
+    const asKeys = (pairs) => pairs.map(([from, to]) => `${from}->${to}`).sort();
+    expect(asKeys(actualPairs)).toEqual(asKeys(EXPECTED_ALLOWED));
   });
 });

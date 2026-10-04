@@ -311,8 +311,9 @@ async function submitEvent(user, id) {
     );
   }
 
-  assertTransition(existing.status, EVENT_STATUS.UNDER_REVIEW);
+  assertTransition(existing.status, EVENT_STATUS.SUBMITTED);
 
+  // A coordinator is assigned on submission, so the request goes straight on to review.
   const coordinatorId = existing.coordinator_id || await assignCoordinator();
   await updateById('events', id, {
     status: EVENT_STATUS.UNDER_REVIEW,
@@ -321,7 +322,8 @@ async function submitEvent(user, id) {
     updated_at: new Date().toISOString(),
   });
 
-  await writeStatusHistory(id, user.id, existing.status, EVENT_STATUS.UNDER_REVIEW, 'Submitted for review');
+  await writeStatusHistory(id, user.id, existing.status, EVENT_STATUS.SUBMITTED, 'Submitted for review');
+  await writeStatusHistory(id, user.id, EVENT_STATUS.SUBMITTED, EVENT_STATUS.UNDER_REVIEW, 'Coordinator assigned');
   await writeAudit(user.id, 'EVENT_SUBMITTED', 'event', id, { coordinatorId });
   await notifyUser(
     coordinatorId,
@@ -335,7 +337,6 @@ async function submitEvent(user, id) {
 }
 
 const APPROVED_BOOKING_REQUIRED = {
-  [EVENT_STATUS.VENUE_SECURED]: 'A venue booking must be approved before the venue can be marked secured',
   [EVENT_STATUS.CONFIRMED]: 'A venue booking must be approved before confirmation',
 };
 

@@ -2,15 +2,18 @@
  * SCRUM-5: Progressing Event Statuses (service and route tests)
  *
  * Acceptance criteria covered:
- *   AC1  Events follow the lifecycle and can't bypass the review or venue booking steps.
- *   AC2  Transitions outside the matrix fail with HTTP 400.
+ *   AC1  Submitting records Draft -> Submitted -> Under Review.
+ *   AC2  Approving moves Under Review -> Approved.
+ *   AC3  Starting planning moves Approved -> Planning.
+ *   Transitions outside the matrix fail with HTTP 400 and change nothing.
  *
  * Labels:
  *   US5-S..  service rules (events.service submitEvent / changeStatus)
  *   US5-R..  real HTTP route POST /api/events/:id/status
  *
- * The database is mocked. Each fake query remembers which table it was for, so the
- * tests can return the event for `events` and a booking (or nothing) for `venue_bookings`.
+ * The database is replaced by small in-memory tables. Each fake query keeps its table and
+ * its .eq() filters, so a query only finds rows that really match (e.g. a PENDING booking
+ * is not returned when the code asks for APPROVED ones).
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
@@ -30,7 +33,18 @@ const organiser = { id: 1, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] };
 const coordinator = { id: 2, roles: [ROLES.EVENT_COORDINATOR] };
 
 let event;
-let approvedBooking;
+let tables;
+
+function rowsFor(query) {
+  return (tables[query.table] || [])
+    .filter((row) => query.filters.every(([column, value]) => String(row[column]) === String(value)));
+}
+
+function historyRows() {
+  return db.insertOne.mock.calls
+    .filter(([table]) => table === 'event_status_history')
+    .map(([, row]) => [row.from_status, row.to_status]);
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -40,77 +54,87 @@ beforeEach(() => {
     start_at: '2026-10-01T10:00:00Z', end_at: '2026-10-01T11:00:00Z',
     expected_attendance: 10, venue_requirements: 'Room', accessibility_needs: 'None',
   };
-  approvedBooking = { id: 7 };
+  tables = {
+    events: [event],
+    venue_bookings: [{ id: 7, event_id: 3, status: 'APPROVED' }],
+    equipment_requests: [],
+    users: [{ id: 2, is_active: true }],
+    user_roles: [{ user_id: 2, role: ROLES.EVENT_COORDINATOR }],
+  };
   db.supabase.from.mockImplementation((table) => {
-    const query = { table };
+    const query = { table, filters: [] };
     query.select = jest.fn(() => query);
-    query.eq = jest.fn(() => query);
+    query.eq = jest.fn((column, value) => {
+      query.filters.push([column, value]);
+      return query;
+    });
     query.order = jest.fn(() => query);
     return query;
   });
-  db.fetchOne.mockImplementation(async (query) => (query?.table === 'venue_bookings' ? approvedBooking : event));
-  db.fetchMany.mockResolvedValue([]);
+  db.fetchOne.mockImplementation(async (query) => rowsFor(query)[0] || null);
+  db.fetchMany.mockImplementation(async (query) => rowsFor(query));
   db.updateById.mockResolvedValue(event);
 });
 
 describe('SCRUM-5 status progression (service rules)', () => {
-  // AC1 · Submitting moves Draft straight to Pending review (UNDER_REVIEW), and the
-  // history row records exactly that step. There's no hidden SUBMITTED status any more.
-  it('US5-S01: submitting a draft moves it to UNDER_REVIEW and records DRAFT -> UNDER_REVIEW', async () => {
+  // AC1 · Submitting records Submitted, then Under Review once the coordinator is assigned.
+  it('US5-S01: submitting a draft records DRAFT -> SUBMITTED -> UNDER_REVIEW', async () => {
     await service.submitEvent(organiser, 3);
     expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'UNDER_REVIEW' }));
-    expect(db.insertOne).toHaveBeenCalledWith('event_status_history', expect.objectContaining({
-      from_status: 'DRAFT', to_status: 'UNDER_REVIEW',
-    }));
+    expect(historyRows()).toEqual([['DRAFT', 'SUBMITTED'], ['SUBMITTED', 'UNDER_REVIEW']]);
   });
 
-  // AC2 · Submitting again while already under review is outside the matrix: 400, no write.
+  // Submitting again while already under review is outside the matrix: 400, no write.
   it('US5-S02: submitting an event that is already under review fails with 400', async () => {
     event.status = 'UNDER_REVIEW';
     await expect(service.submitEvent(organiser, 3)).rejects.toMatchObject({ status: 400 });
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
-  // AC1 · Approved - pending venue -> Venue secured works once a venue booking is approved.
-  it('US5-S03: PLANNING -> VENUE_SECURED succeeds when a venue booking is approved', async () => {
-    event.status = 'PLANNING';
-    await service.changeStatus(coordinator, 3, 'VENUE_SECURED');
-    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'VENUE_SECURED' }));
+  // AC1 · A rejected request can be resubmitted (Week 4 Q&A); it goes back through Submitted
+  // and the old rejection reason is cleared.
+  it('US5-S03: resubmitting a rejected request records REJECTED -> SUBMITTED -> UNDER_REVIEW', async () => {
+    event.status = 'REJECTED';
+    event.rejection_reason = 'Missing budget';
+    await service.submitEvent(organiser, 3);
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
+      status: 'UNDER_REVIEW', rejection_reason: null,
+    }));
+    expect(historyRows()).toEqual([['REJECTED', 'SUBMITTED'], ['SUBMITTED', 'UNDER_REVIEW']]);
   });
 
-  // AC1 · "Cannot bypass booking steps": without an approved booking, the venue can't be
-  // marked secured. This is a missing precondition, not a bad transition, so it's 409.
-  it('US5-S04: PLANNING -> VENUE_SECURED is refused without an approved venue booking', async () => {
-    event.status = 'PLANNING';
-    approvedBooking = null;
-    await expect(service.changeStatus(coordinator, 3, 'VENUE_SECURED')).rejects.toMatchObject({
-      status: 409, code: 'VENUE_NOT_APPROVED',
-      message: 'A venue booking must be approved before the venue can be marked secured',
-    });
-    expect(db.updateById).not.toHaveBeenCalled();
+  // AC2 · The coordinator approving the initial request sets Approved.
+  it('US5-S04: approving an event under review sets APPROVED', async () => {
+    event.status = 'UNDER_REVIEW';
+    await service.changeStatus(coordinator, 3, 'APPROVED');
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'APPROVED' }));
+    expect(historyRows()).toEqual([['UNDER_REVIEW', 'APPROVED']]);
   });
 
-  // AC1 · Confirming also re-checks the booking, in case it was withdrawn after the venue
-  // was marked secured.
-  it('US5-S05: VENUE_SECURED -> CONFIRMED is refused if the booking is no longer approved', async () => {
-    event.status = 'VENUE_SECURED';
-    approvedBooking = null;
+  // AC3 · Starting planning work moves Approved to Planning.
+  it('US5-S05: starting planning moves APPROVED -> PLANNING', async () => {
+    event.status = 'APPROVED';
+    await service.changeStatus(coordinator, 3, 'PLANNING');
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'PLANNING' }));
+  });
+
+  // Confirming still requires an APPROVED venue booking; a PENDING one is not enough.
+  it('US5-S06: PREPARATION -> CONFIRMED is refused when the only booking is still pending', async () => {
+    event.status = 'PREPARATION';
+    tables.venue_bookings[0].status = 'PENDING';
     await expect(service.changeStatus(coordinator, 3, 'CONFIRMED')).rejects.toMatchObject({
-      status: 409, message: 'A venue booking must be approved before confirmation',
+      status: 409, code: 'VENUE_NOT_APPROVED', message: 'A venue booking must be approved before confirmation',
     });
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
-  // AC2 · Skipping Venue secured is blocked with 400, even when a booking IS approved.
-  // The order of steps matters, not just the booking existing.
-  it('US5-S06: PLANNING -> CONFIRMED is refused with 400 even with an approved booking', async () => {
-    event.status = 'PLANNING';
-    await expect(service.changeStatus(coordinator, 3, 'CONFIRMED'))
-      .rejects.toMatchObject({ status: 400, code: 'INVALID_STATUS_TRANSITION' });
-    expect(db.updateById).not.toHaveBeenCalled();
+  it('US5-S08: PREPARATION -> CONFIRMED succeeds with an approved venue booking', async () => {
+    event.status = 'PREPARATION';
+    await service.changeStatus(coordinator, 3, 'CONFIRMED');
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'CONFIRMED' }));
   });
 
-  // AC2 · Cancelled is final: nothing can bring a cancelled event back.
+  // Cancelled is final: nothing can bring a cancelled event back.
   it('US5-S07: a cancelled event cannot be moved back into planning', async () => {
     event.status = 'CANCELLED';
     await expect(service.changeStatus(coordinator, 3, 'PLANNING')).rejects.toMatchObject({ status: 400 });
@@ -123,17 +147,15 @@ describe('SCRUM-5 POST /api/events/:id/status (route)', () => {
   const app = createApp();
   const token = jwt.sign({ sub: 2 }, env.jwtSecret);
 
-  // Sends the request as user 2 with a real signed session cookie. The first lookup is the
-  // auth middleware loading the user; the role comes from the (mocked) database.
+  // Sends the request as user 2 (an active coordinator in the fake tables) with a real
+  // signed session cookie, so the real auth middleware and role check run.
   function asCoordinator() {
-    db.fetchOne.mockImplementationOnce(async () => ({ id: 2, is_active: true }));
-    db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }]);
     return request(app)
       .post('/api/events/3/status')
       .set('Cookie', `${env.sessionCookieName}=${token}`);
   }
 
-  // AC2 · End to end through Express: an invalid jump comes back as HTTP 400 with the
+  // End to end through Express: an invalid jump comes back as HTTP 400 with the
   // INVALID_STATUS_TRANSITION code and a readable message.
   it('US5-R01: an invalid transition returns HTTP 400', async () => {
     event.status = 'DRAFT';
@@ -145,11 +167,11 @@ describe('SCRUM-5 POST /api/events/:id/status (route)', () => {
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
-  // AC1 · A valid step through the same route succeeds.
-  it('US5-R02: a valid transition returns HTTP 200', async () => {
-    event.status = 'PLANNING';
-    const res = await asCoordinator().send({ status: 'VENUE_SECURED' });
+  // AC2 · Approving through the same route succeeds.
+  it('US5-R02: approving through the route returns HTTP 200 and saves APPROVED', async () => {
+    event.status = 'UNDER_REVIEW';
+    const res = await asCoordinator().send({ status: 'APPROVED' });
     expect(res.status).toBe(200);
-    expect(db.updateById).toHaveBeenCalledWith('events', '3', expect.objectContaining({ status: 'VENUE_SECURED' }));
+    expect(db.updateById).toHaveBeenCalledWith('events', '3', expect.objectContaining({ status: 'APPROVED' }));
   });
 });

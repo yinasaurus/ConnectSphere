@@ -2,22 +2,27 @@ const { EVENT_STATUS } = require('../constants/statuses');
 const { httpError } = require('../middleware/errorHandler');
 
 const {
-  DRAFT, UNDER_REVIEW, PLANNING, VENUE_SECURED, CONFIRMED, COMPLETED, CANCELLED, REJECTED,
+  DRAFT, SUBMITTED, UNDER_REVIEW, APPROVED, PLANNING, AWAITING_SAFETY_CHECK, PREPARATION,
+  CONFIRMED, COMPLETED, CANCELLED, REJECTED,
 } = EVENT_STATUS;
 
-// Main path: DRAFT -> UNDER_REVIEW -> PLANNING -> VENUE_SECURED -> CONFIRMED -> COMPLETED.
-// The backward steps are customer rules:
-//   REJECTED -> UNDER_REVIEW       rejected requests can be resubmitted (Week 4 Q&A)
-//   PLANNING -> REJECTED           essential requirements can't be met (Week 2 Q&A)
-//   VENUE_SECURED -> PLANNING      the secured venue falls through (Week 7 change 2)
-//   CONFIRMED -> PLANNING          a major change needs re-planning (Week 4 Q&A)
+// Main path: DRAFT -> SUBMITTED -> UNDER_REVIEW -> APPROVED -> PLANNING
+//   -> AWAITING_SAFETY_CHECK -> PREPARATION -> CONFIRMED -> COMPLETED.
+// Other customer rules:
+//   SUBMITTED / UNDER_REVIEW -> REJECTED   coordinator rejects with a reason
+//   PLANNING -> REJECTED                   essential requirements can't be met (Week 2 Q&A)
+//   REJECTED -> SUBMITTED                  rejected requests can be resubmitted (Week 4 Q&A)
+//   CONFIRMED -> PLANNING                  a major change needs re-planning (Week 4 Q&A)
 // COMPLETED and CANCELLED are final (Week 4 Q&A: "When an event is cancelled, it is cancelled").
 const ALLOWED = {
-  [DRAFT]: [UNDER_REVIEW, CANCELLED],
-  [UNDER_REVIEW]: [PLANNING, REJECTED, CANCELLED],
-  [REJECTED]: [UNDER_REVIEW, CANCELLED],
-  [PLANNING]: [VENUE_SECURED, REJECTED, CANCELLED],
-  [VENUE_SECURED]: [CONFIRMED, PLANNING, CANCELLED],
+  [DRAFT]: [SUBMITTED, CANCELLED],
+  [SUBMITTED]: [UNDER_REVIEW, REJECTED, CANCELLED],
+  [UNDER_REVIEW]: [APPROVED, REJECTED, CANCELLED],
+  [REJECTED]: [SUBMITTED, CANCELLED],
+  [APPROVED]: [PLANNING, CANCELLED],
+  [PLANNING]: [AWAITING_SAFETY_CHECK, REJECTED, CANCELLED],
+  [AWAITING_SAFETY_CHECK]: [PREPARATION, CANCELLED],
+  [PREPARATION]: [CONFIRMED, CANCELLED],
   [CONFIRMED]: [COMPLETED, PLANNING, CANCELLED],
   [COMPLETED]: [],
   [CANCELLED]: [],

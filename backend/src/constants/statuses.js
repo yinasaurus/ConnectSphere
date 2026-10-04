@@ -1,20 +1,26 @@
 /**
- * Event lifecycle statuses (SCRUM-5). Stored value – label shown to users:
+ * Event lifecycle statuses (SCRUM-5):
  *
- * DRAFT          – Draft: saved before submission
- * UNDER_REVIEW   – Pending review: submitted; coordinator assigned and reviewing
- * PLANNING       – Approved - pending venue: approved; venue being arranged
- * VENUE_SECURED  – Venue secured: a venue booking has been approved
- * CONFIRMED      – Confirmed: essential arrangements completed
- * COMPLETED      – Completed: event finished
- * CANCELLED      – Cancelled: will not proceed
- * REJECTED       – Rejected: not accepted; organiser may resubmit after changes
+ * DRAFT                  – saved before submission
+ * SUBMITTED              – sent for review
+ * UNDER_REVIEW           – coordinator assigned and reviewing
+ * APPROVED               – enough information to plan (W4)
+ * PLANNING               – venue/equipment sourcing underway
+ * AWAITING_SAFETY_CHECK  – every venue booking approved and requested equipment reserved
+ * PREPARATION            – Safety Officer approved the safety check (W7 #6)
+ * CONFIRMED              – essential arrangements completed (W4)
+ * COMPLETED              – event finished
+ * CANCELLED              – will not proceed
+ * REJECTED               – not accepted; organiser may resubmit after changes
  */
 const EVENT_STATUS = {
   DRAFT: 'DRAFT',
+  SUBMITTED: 'SUBMITTED',
   UNDER_REVIEW: 'UNDER_REVIEW',
+  APPROVED: 'APPROVED',
   PLANNING: 'PLANNING',
-  VENUE_SECURED: 'VENUE_SECURED',
+  AWAITING_SAFETY_CHECK: 'AWAITING_SAFETY_CHECK',
+  PREPARATION: 'PREPARATION',
   CONFIRMED: 'CONFIRMED',
   COMPLETED: 'COMPLETED',
   CANCELLED: 'CANCELLED',
