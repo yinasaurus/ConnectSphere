@@ -51,7 +51,7 @@ Login looks up the `users` table in Supabase and issues an httpOnly JWT cookie. 
 3. Coordinator approves into **Planning**, requests a venue, or rejects with a reason (rejection is not final — resubmit is allowed).
 4. Venue staff approve/reject the booking. Confirmed bookings block overlapping windows, including setup/teardown.
 5. Coordinator can confirm only after an approved venue booking.
-   Coordinators, venue staff and technical support can check a venue's availability for any date/time range under **Venue availability** (confirmed bookings incl. setup/turnaround, active tentative holds and maintenance blocks are shown as unavailable).
+   Coordinators, venue staff and technical support can check a venue's availability for any date/time range under **Venue availability** (confirmed bookings incl. setup/turnaround, active tentative holds and maintenance blocks are shown as unavailable). Coordinators and venue staff also get an **Existing bookings** list for the same period, showing each confirmed booking's occupied window and each active tentative hold.
 6. Attendees can register / withdraw once the event is confirmed.
 7. In-app notifications and status history are written along the way.
 

@@ -75,6 +75,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Confirmed bookings block overlapping windows, including setup/teardown | `findConflict` |
 | Maintenance blocks live in `venue_unavailability` | seed has a Studio 3 outage |
 | Venue availability view (SCRUM-66): confirmed bookings block start − setup to end + turnaround, active tentative holds block their held period (expired holds don't; no expiry = active), recorded unavailability blocks its times; coordinators, venue and tech staff only | `GET /api/venues/:id/availability` → `getVenueAvailability`, page `/app/venues/availability` |
+| Existing venue bookings for a period (SCRUM-67): confirmed bookings with their occupied window (start − setup to end + turnaround), active tentative holds marked `TENTATIVE_HOLD` with their held period only, expired holds and pending requests left out, each booking only under its own venue; coordinators, venue staff and the coordinator lead only | `GET /api/venues/:id/bookings` → `listVenueBookingsForPeriod`, "Existing bookings" on `/app/venues/availability` |
 | Confirm requires an approved venue booking | `isReadyToConfirm` |
 | Registration after confirmed; FCFS + waitlist notify on withdraw | `registrations.service` |
 | Audit log + in-app notifications | `audit.service` |
