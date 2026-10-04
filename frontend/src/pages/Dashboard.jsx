@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import StatusBadge from '../components/StatusBadge';
-import { ROLES } from '../constants';
+import { LIVE_REFRESH_MS, ROLES } from '../constants';
 
 export default function Dashboard() {
   const { user, hasRole } = useAuth();
@@ -11,8 +11,13 @@ export default function Dashboard() {
   const [unread, setUnread] = useState(0);
 
   useEffect(() => {
-    api('/api/events').then((data) => setEvents(data.events || []));
-    api('/api/notifications').then((data) => setUnread(data.unread || 0));
+    const load = () => {
+      api('/api/events').then((data) => setEvents(data.events || []));
+      api('/api/notifications').then((data) => setUnread(data.unread || 0));
+    };
+    load();
+    const timer = setInterval(load, LIVE_REFRESH_MS);
+    return () => clearInterval(timer);
   }, []);
 
   const mine = hasRole(ROLES.EVENT_COORDINATOR)

@@ -64,6 +64,8 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Rejecting (from Submitted / Under Review) needs a reason | `changeStatus` |
 | Awaiting Safety Check needs every active venue booking approved and all equipment requests reserved | `isReadyForSafetyCheck` |
 | Preparation only after the Safety Officer approves the safety check (W7 #6) | `changeStatus` refuses it until SCRUM-55/56 |
+| Status changes show on the dashboard and event page within 10 s, no reload (team decision for "real time") | `LIVE_REFRESH_MS` polling |
+| Moving to Awaiting Safety Check is a coordinator action, not automatic (team decision) | "Send to safety check" button |
 | Clarification is **not** its own status (sub-state of under review) | we stay on `UNDER_REVIEW` |
 | Rejected requests can be resubmitted | `REJECTED → SUBMITTED` |
 | Confirmed can revert to Planning after a major change | `CONFIRMED → PLANNING` |

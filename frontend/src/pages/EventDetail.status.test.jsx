@@ -6,7 +6,7 @@
  *   Awaiting Safety Check  -> no coordinator button; only the Safety Officer can start preparation (AC7)
  *   Preparation            -> "Confirm event" (CONFIRMED)
  */
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import EventDetail from './EventDetail';
@@ -72,6 +72,21 @@ it('US5-F03: "Reject / return" sends the typed reason', async () => {
   expect(api).toHaveBeenCalledWith('/api/events/3/status', {
     method: 'POST', body: { status: 'REJECTED', reason: 'Budget not approved' },
   });
+});
+
+// AC5 · If someone else changes the status, the open event page shows it within 10 seconds,
+// along with the buttons for the new status.
+it('US5-F08: the event page picks up a status change on the next 10-second refresh', async () => {
+  jest.useFakeTimers();
+  mockEvent('UNDER_REVIEW');
+  await renderAsCoordinator();
+  expect(screen.getByText('Under Review')).toBeInTheDocument();
+
+  mockEvent('APPROVED');
+  await act(async () => { jest.advanceTimersByTime(10000); });
+  expect(await screen.findByText('Approved')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Start planning' })).toBeInTheDocument();
+  jest.useRealTimers();
 });
 
 // AC7 · While awaiting the safety check the coordinator has no button to move the event on.

@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import StatusBadge from '../components/StatusBadge';
-import { ROLES } from '../constants';
+import { LIVE_REFRESH_MS, ROLES } from '../constants';
 
 export default function EventDetail() {
   const { id } = useParams();
@@ -36,7 +36,10 @@ export default function EventDetail() {
   }, [id, canViewPlanning]);
 
   useEffect(() => {
-    reload().catch((err) => setError(err.message));
+    const refresh = () => reload().catch((err) => setError(err.message));
+    refresh();
+    const timer = setInterval(refresh, LIVE_REFRESH_MS);
+    return () => clearInterval(timer);
   }, [reload]);
 
   async function run(action) {

@@ -28,6 +28,9 @@ export const STATUS_LABELS = {
   REJECTED: 'Rejected',
 };
 
+// SCRUM-5 AC5: how often dashboards and the event page re-fetch so status changes appear without a reload.
+export const LIVE_REFRESH_MS = 10000;
+
 export const CATEGORIES = [
   'CONFERENCE',
   'WORKSHOP',
