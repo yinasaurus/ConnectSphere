@@ -192,6 +192,20 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
       1, 'EVENT_STATUS_CHANGED', 'Event completed', 'Workshop is now COMPLETED.', 3
     );
   });
+
+  // AC6 · Security: while the event has no assigned coordinator, no coordinator can decide,
+  // and nothing is written (status unchanged, no history, no audit, no notification).
+  it.each([
+    ['APPROVE', undefined],
+    ['REJECT', 'Not enough detail provided'],
+  ])('US17-B15: %s on an unassigned event is refused for any coordinator', async (decision, reason) => {
+    event.coordinator_id = null;
+    await expect(service.decideEvent(coordinator, 3, decision, reason)).rejects.toMatchObject({ status: 403 });
+    expect(db.updateById).not.toHaveBeenCalled();
+    expect(db.insertOne).not.toHaveBeenCalled();
+    expect(audit.writeAudit).not.toHaveBeenCalled();
+    expect(audit.notifyUser).not.toHaveBeenCalled();
+  });
 });
 
 describe('SCRUM-17 POST /api/events/:id/decision (route)', () => {
