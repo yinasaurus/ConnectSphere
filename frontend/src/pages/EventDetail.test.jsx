@@ -103,6 +103,18 @@ it('US17-F14: a coordinator who is not assigned does not see approve or reject b
   expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
 });
 
+// AC5 · Negative (UI): a Draft request cannot be decided, so even the assigned coordinator
+// gets no decision buttons; the general coordinator note box is shown instead.
+it('US17-F17: the assigned coordinator does not see approve or reject buttons on a draft', async () => {
+  useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
+  mockEvent({ coordinatorId: 2, status: 'DRAFT' });
+  renderEvent();
+  expect(await screen.findByText('Coordinator actions')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
+  expect(screen.getByText('Reason / note')).toBeInTheDocument();
+});
+
 // Error handling: if the server refuses the decision (e.g. someone already decided, so the
 // event is no longer under review), the coordinator sees the server's message on the page.
 it('US17-F15: a decision refused by the server shows the error to the coordinator', async () => {
