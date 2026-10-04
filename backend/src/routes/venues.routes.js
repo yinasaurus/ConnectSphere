@@ -8,6 +8,7 @@ const router = express.Router();
 router.use(requireAuth);
 
 router.get('/', controller.list);
+router.get('/search', controller.search);
 router.post('/', requireRole(ROLES.VENUE_STAFF), controller.create);
 router.patch('/:id', requireRole(ROLES.VENUE_STAFF), controller.update);
 
