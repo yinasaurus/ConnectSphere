@@ -60,7 +60,10 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 
 | Rule | Where |
 | --- | --- |
-| Statuses: Draft → Submitted → Under review → Planning → Confirmed → Completed, plus Cancelled / Rejected | `constants/statuses.js`, `statusMachine.js` |
+| Statuses (SCRUM-5): Draft → Submitted → Under Review → Approved → Planning → Awaiting Safety Check → Preparation → Confirmed → Completed, plus Cancelled / Rejected. Anything else is 400 | `constants/statuses.js`, `statusMachine.js` |
+| Rejecting (from Submitted / Under Review) needs a reason | `changeStatus` |
+| Awaiting Safety Check needs every active venue booking approved and all equipment requests reserved | `isReadyForSafetyCheck` |
+| Preparation only after the Safety Officer approves the safety check (W7 #6) | `changeStatus` refuses it until SCRUM-55/56 |
 | Clarification is **not** its own status (sub-state of under review) | we stay on `UNDER_REVIEW` |
 | Rejected requests can be resubmitted | `REJECTED → SUBMITTED` |
 | Confirmed can revert to Planning after a major change | `CONFIRMED → PLANNING` |
@@ -74,7 +77,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Venue staff CRUD venues; tech staff maintain equipment | venue/equipment routes |
 | Confirmed bookings block overlapping windows, including setup/teardown | `findConflict` |
 | Maintenance blocks live in `venue_unavailability` | seed has a Studio 3 outage |
-| Confirm requires an approved venue booking | `isReadyToConfirm` |
+| Confirm requires an approved venue booking | `hasApprovedVenueBooking` |
 | Registration after confirmed; FCFS + waitlist notify on withdraw | `registrations.service` |
 | Audit log + in-app notifications | `audit.service` |
 | Accounts are **not** self-serve signup | login only; seed users stand in for the future identity integration |
@@ -119,9 +122,9 @@ Once the customer names Release 1, likely extensions:
 
 1. Sign in as **Aisha** (`organiser@acme.example`)
 2. Create an event, submit it — Chloe should be assigned
-3. Sign in as **Chloe** — approve for planning, send a venue booking
+3. Sign in as **Chloe** — approve, start planning, send a venue booking
 4. Sign in as **Elena** — approve the venue
-5. Back to Chloe — confirm
+5. Back to Chloe — send to safety check (preparation and confirmation wait for the Safety Officer, SCRUM-55/56)
 6. Sign in as **Hari** — register
 
 Acme vs Apex organisers are seeded so you can show that client data is isolated.
