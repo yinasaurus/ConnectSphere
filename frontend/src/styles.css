@@ -229,6 +229,8 @@ input.field-error, select.field-error, textarea.field-error {
 .badge.CONFIRMED { background: #d8eee3; color: var(--ok); }
 .badge.COMPLETED { background: #e7e4f7; }
 .badge.CANCELLED, .badge.REJECTED { background: #f7dcdc; color: var(--bad); }
+.badge.AVAILABLE { background: #d8eee3; color: var(--ok); }
+.badge.UNAVAILABLE { background: #f7dcdc; color: var(--bad); }
 
 .table {
   width: 100%;
