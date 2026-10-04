@@ -118,6 +118,28 @@ describe('SCRUM-5 status progression (service rules)', () => {
     expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'PLANNING' }));
   });
 
+  // AC4 · Rejecting from Submitted or Under Review sets Rejected and records the reason,
+  // both on the event and in the status history.
+  it.each(['SUBMITTED', 'UNDER_REVIEW'])('US5-S09: rejecting from %s records the reason', async (from) => {
+    event.status = from;
+    await service.changeStatus(coordinator, 3, 'REJECTED', '  Budget not approved ');
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
+      status: 'REJECTED', rejection_reason: 'Budget not approved',
+    }));
+    expect(db.insertOne).toHaveBeenCalledWith('event_status_history', expect.objectContaining({
+      from_status: from, to_status: 'REJECTED', note: 'Budget not approved',
+    }));
+  });
+
+  // AC4 · "recording the reason": a rejection with no reason (missing or blank) is refused.
+  it.each([undefined, '   '])('US5-S10: rejecting without a reason (%p) fails with 400 and changes nothing', async (reason) => {
+    event.status = 'UNDER_REVIEW';
+    await expect(service.changeStatus(coordinator, 3, 'REJECTED', reason)).rejects.toMatchObject({
+      status: 400, code: 'VALIDATION_ERROR', message: 'A reason is required to reject an event',
+    });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
   // Confirming still requires an APPROVED venue booking; a PENDING one is not enough.
   it('US5-S06: PREPARATION -> CONFIRMED is refused when the only booking is still pending', async () => {
     event.status = 'PREPARATION';

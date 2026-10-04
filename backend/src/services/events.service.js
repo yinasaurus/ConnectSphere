@@ -358,8 +358,12 @@ async function changeStatus(user, id, nextStatus, reason) {
     updated_at: new Date().toISOString(),
   };
 
+  const note = String(reason || '').trim() || null;
   if (nextStatus === EVENT_STATUS.REJECTED) {
-    patch.rejection_reason = reason || 'Rejected';
+    if (!note) {
+      throw httpError(400, 'A reason is required to reject an event', 'VALIDATION_ERROR');
+    }
+    patch.rejection_reason = note;
   }
   const bookingRequiredMessage = APPROVED_BOOKING_REQUIRED[nextStatus];
   if (bookingRequiredMessage && !(await hasApprovedVenueBooking(existing.id))) {
@@ -367,7 +371,7 @@ async function changeStatus(user, id, nextStatus, reason) {
   }
 
   await updateById('events', id, patch);
-  await writeStatusHistory(id, user.id, existing.status, nextStatus, reason || null);
+  await writeStatusHistory(id, user.id, existing.status, nextStatus, note);
   await writeAudit(user.id, 'EVENT_STATUS_CHANGED', 'event', id, {
     from: existing.status,
     to: nextStatus,
