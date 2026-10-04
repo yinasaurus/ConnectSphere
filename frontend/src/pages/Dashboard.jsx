@@ -18,7 +18,7 @@ export default function Dashboard() {
   const mine = hasRole(ROLES.EVENT_COORDINATOR)
     ? events.filter((event) => event.coordinatorId === user.id)
     : events;
-  const needsAttention = mine.filter((event) => ['UNDER_REVIEW', 'PLANNING', 'VENUE_SECURED'].includes(event.status));
+  const needsAttention = mine.filter((event) => ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'PLANNING'].includes(event.status));
 
   return (
     <>
