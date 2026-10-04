@@ -63,7 +63,8 @@ export default function VenueAvailability() {
           <h1>Venue availability</h1>
           <p>
             Confirmed bookings (including setup and turnaround time), active tentative holds and
-            recorded unavailability are marked unavailable. Everything else is available to request.
+            recorded unavailability are marked unavailable. Everything else is marked available.
+            Pending booking requests are not shown.
           </p>
         </div>
       </div>
