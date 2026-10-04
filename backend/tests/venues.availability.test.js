@@ -207,6 +207,28 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
     expect(fetchOne).not.toHaveBeenCalled();
   });
 
+  it('US66-B14: blocks without a linked event name fall back to a generic label', async () => {
+    mockData({
+      bookings: [
+        booking({ events: null }),
+        booking({ id: 2, status: 'TENTATIVE', start_at: '2026-10-20T13:00:00Z', end_at: '2026-10-20T13:30:00Z', events: null }),
+      ],
+    });
+    const result = await venuesService.getVenueAvailability(7, RANGE, NOW);
+    const labels = result.periods.flatMap((p) => p.reasons.map((r) => r.label));
+    expect(labels).toEqual(['Confirmed booking', 'Tentative hold']);
+  });
+
+  it('US66-B15 (AC3): by default a hold is judged expired against the current time', async () => {
+    mockData({ bookings: [booking({ status: 'TENTATIVE', hold_expires_at: '2000-01-01T00:00:00Z' })] });
+    const result = await venuesService.getVenueAvailability(7, RANGE);
+    expect(summary(result)).toEqual([['08:00', '14:00', true, []]]);
+  });
+
+  it('US66-B16: calling without a range is a 400, not a crash', async () => {
+    await expect(venuesService.getVenueAvailability(7)).rejects.toMatchObject({ status: 400 });
+  });
+
   it('US66-B13: returns 404 for an unknown venue', async () => {
     fetchOne.mockResolvedValue(null);
     await expect(venuesService.getVenueAvailability(99, RANGE, NOW)).rejects.toMatchObject({ status: 404 });
