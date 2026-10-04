@@ -19,6 +19,7 @@ const search = asyncHandler(async (req, res) => {
   res.json({ venues });
 });
 
+// SCRUM-66: GET /api/venues/:id/availability?from=<ISO>&to=<ISO>
 const availability = asyncHandler(async (req, res) => {
   const result = await venuesService.getVenueAvailability(req.params.id, {
     from: req.query.from,

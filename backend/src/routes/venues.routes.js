@@ -9,6 +9,7 @@ router.use(requireAuth);
 
 router.get('/', controller.list);
 router.get('/search', controller.search);
+// SCRUM-66 AC6: internal users only; Event Organisers and Attendees get 403.
 router.get(
   '/:id/availability',
   requireRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT),
