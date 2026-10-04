@@ -174,6 +174,157 @@ async function searchVenues(filters = {}) {
   });
 }
 
+const AVAILABILITY_BLOCK = {
+  BOOKING: 'BOOKING',
+  TENTATIVE_HOLD: 'TENTATIVE_HOLD',
+  UNAVAILABILITY: 'UNAVAILABILITY',
+};
+
+// A hold with no expiry recorded is treated as active: hold creation with an
+// expiry (SCRUM-75) isn't built yet, and an undated hold shouldn't free the venue.
+function isActiveHold(booking, now) {
+  if (!booking.hold_expires_at) return true;
+  return new Date(booking.hold_expires_at) > now;
+}
+
+function toAvailabilityBlocks(bookingRows, unavailabilityRows, now) {
+  const blocks = [];
+  bookingRows.forEach((booking) => {
+    if (booking.status === BOOKING_STATUS.APPROVED) {
+      const { occupiedStart, occupiedEnd } = computeOccupiedWindow(
+        booking.start_at,
+        booking.end_at,
+        booking.setup_minutes,
+        booking.teardown_minutes
+      );
+      blocks.push({
+        type: AVAILABILITY_BLOCK.BOOKING,
+        id: booking.id,
+        label: booking.events?.name || 'Confirmed booking',
+        start: occupiedStart,
+        end: occupiedEnd,
+      });
+    } else if (booking.status === BOOKING_STATUS.TENTATIVE && isActiveHold(booking, now)) {
+      blocks.push({
+        type: AVAILABILITY_BLOCK.TENTATIVE_HOLD,
+        id: booking.id,
+        label: booking.events?.name || 'Tentative hold',
+        start: new Date(booking.start_at),
+        end: new Date(booking.end_at),
+        expiresAt: booking.hold_expires_at || null,
+      });
+    }
+  });
+  unavailabilityRows.forEach((period) => {
+    blocks.push({
+      type: AVAILABILITY_BLOCK.UNAVAILABILITY,
+      id: period.id,
+      label: period.reason,
+      start: new Date(period.start_at),
+      end: new Date(period.end_at),
+    });
+  });
+  return blocks;
+}
+
+function toReason(block) {
+  const reason = {
+    type: block.type,
+    id: block.id,
+    label: block.label,
+    startAt: block.start.toISOString(),
+    endAt: block.end.toISOString(),
+  };
+  if (block.type === AVAILABILITY_BLOCK.TENTATIVE_HOLD) reason.expiresAt = block.expiresAt;
+  return reason;
+}
+
+// Splits [from, to) into consecutive periods. A period is unavailable while any
+// block covers it; adjacent periods with the same status are merged.
+function buildAvailabilityTimeline(from, to, blocks) {
+  const inRange = blocks.filter((block) => windowsOverlap(from, to, block.start, block.end));
+  const points = new Set([from.getTime(), to.getTime()]);
+  inRange.forEach((block) => {
+    points.add(Math.max(block.start.getTime(), from.getTime()));
+    points.add(Math.min(block.end.getTime(), to.getTime()));
+  });
+  const sorted = [...points].sort((a, b) => a - b);
+
+  const periods = [];
+  for (let i = 0; i < sorted.length - 1; i += 1) {
+    const start = new Date(sorted[i]);
+    const end = new Date(sorted[i + 1]);
+    const covering = inRange.filter((block) => windowsOverlap(start, end, block.start, block.end));
+    const available = covering.length === 0;
+    const previous = periods[periods.length - 1];
+
+    if (previous && previous.available === available) {
+      previous.endAt = end.toISOString();
+      covering.forEach((block) => {
+        const seen = previous.reasons.some((r) => r.type === block.type && r.id === block.id);
+        if (!seen) previous.reasons.push(toReason(block));
+      });
+    } else {
+      periods.push({
+        startAt: start.toISOString(),
+        endAt: end.toISOString(),
+        available,
+        reasons: covering.map(toReason),
+      });
+    }
+  }
+  return periods;
+}
+
+/**
+ * SCRUM-66: a venue's availability across [from, to). Confirmed bookings block
+ * their occupied window (setup + turnaround), active tentative holds block their
+ * held period, and recorded unavailability blocks its dates/times. Everything
+ * else is available. PENDING requests are not shown as blocking.
+ */
+async function getVenueAvailability(venueId, { from, to } = {}, now = new Date()) {
+  if (!from || !to) {
+    throw httpError(400, 'from and to are required', 'VALIDATION_ERROR');
+  }
+  const rangeStart = new Date(from);
+  const rangeEnd = new Date(to);
+  if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) {
+    throw httpError(400, 'from and to must be valid dates', 'VALIDATION_ERROR');
+  }
+  if (rangeStart >= rangeEnd) {
+    throw httpError(400, 'from must be before to', 'VALIDATION_ERROR');
+  }
+
+  const venue = await fetchOne(supabase.from('venues').select('id, name').eq('id', venueId));
+  if (!venue) throw httpError(404, 'Venue not found', 'NOT_FOUND');
+
+  const [bookingRows, unavailabilityRows] = await Promise.all([
+    fetchMany(
+      supabase
+        .from('venue_bookings')
+        .select('*, events ( name )')
+        .eq('venue_id', venueId)
+        .in('status', [BOOKING_STATUS.APPROVED, BOOKING_STATUS.TENTATIVE])
+    ),
+    fetchMany(
+      supabase
+        .from('venue_unavailability')
+        .select('id, reason, start_at, end_at')
+        .eq('venue_id', venueId)
+        .lt('start_at', rangeEnd.toISOString())
+        .gt('end_at', rangeStart.toISOString())
+    ),
+  ]);
+
+  const blocks = toAvailabilityBlocks(bookingRows, unavailabilityRows, now);
+  return {
+    venue: { id: venue.id, name: venue.name },
+    from: rangeStart.toISOString(),
+    to: rangeEnd.toISOString(),
+    periods: buildAvailabilityTimeline(rangeStart, rangeEnd, blocks),
+  };
+}
+
 async function createVenue(user, payload) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can manage the catalogue', 'FORBIDDEN');
@@ -343,6 +494,7 @@ async function blockVenue(user, payload) {
 module.exports = {
   listVenues,
   searchVenues,
+  getVenueAvailability,
   createVenue,
   updateVenue,
   listBookings,

@@ -9,6 +9,11 @@ router.use(requireAuth);
 
 router.get('/', controller.list);
 router.get('/search', controller.search);
+router.get(
+  '/:id/availability',
+  requireRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT),
+  controller.availability
+);
 router.post('/', requireRole(ROLES.VENUE_STAFF), controller.create);
 router.patch('/:id', requireRole(ROLES.VENUE_STAFF), controller.update);
 

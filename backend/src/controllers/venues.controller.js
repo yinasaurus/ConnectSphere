@@ -19,6 +19,14 @@ const search = asyncHandler(async (req, res) => {
   res.json({ venues });
 });
 
+const availability = asyncHandler(async (req, res) => {
+  const result = await venuesService.getVenueAvailability(req.params.id, {
+    from: req.query.from,
+    to: req.query.to,
+  });
+  res.json(result);
+});
+
 const create = asyncHandler(async (req, res) => {
   const venue = await venuesService.createVenue(req.user, req.body);
   res.status(201).json({ venue });
@@ -60,6 +68,7 @@ const block = asyncHandler(async (req, res) => {
 module.exports = {
   list,
   search,
+  availability,
   create,
   update,
   bookings,
