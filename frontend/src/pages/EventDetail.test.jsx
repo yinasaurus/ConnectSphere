@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import EventDetail from './EventDetail';
 import { api } from '../api';
@@ -31,6 +32,58 @@ it('loads an organiser event and its booking without requesting the restricted g
   expect(await screen.findByText('My event')).toBeInTheDocument();
   expect(screen.getByText('Hall: APPROVED')).toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith('/api/venues/bookings');
+});
+
+function mockEventUnderReview({ coordinatorId }) {
+  api.mockImplementation(async (path) => {
+    if (path === '/api/events/3') {
+      return { event: { id: 3, organiserId: 1, coordinatorId, name: 'Review me', status: 'UNDER_REVIEW' } };
+    }
+    if (path === '/api/events/3/decision') return { event: {} };
+    if (path === '/api/events/3/history') return { history: [] };
+    if (path === '/api/comments/3') return { comments: [] };
+    if (path === '/api/venues') return { venues: [] };
+    if (path === '/api/events/3/venue-bookings') return { bookings: [] };
+    throw new Error(`Unexpected ${path}`);
+  });
+}
+
+function renderEvent() {
+  render(
+    <MemoryRouter initialEntries={['/app/events/3']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <Routes><Route path="/app/events/:id" element={<EventDetail />} /></Routes>
+    </MemoryRouter>
+  );
+}
+
+it('US17-F12: the assigned coordinator rejects through the decision endpoint', async () => {
+  useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
+  mockEventUnderReview({ coordinatorId: 2 });
+  renderEvent();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Reject' }));
+  await user.type(screen.getByLabelText('Rejection reason'), 'Attendance numbers are missing');
+  await user.click(screen.getByRole('button', { name: 'Confirm rejection' }));
+  expect(api).toHaveBeenCalledWith('/api/events/3/decision', {
+    method: 'POST',
+    body: { decision: 'REJECT', reason: 'Attendance numbers are missing' },
+  });
+});
+
+it('US17-F13: the organiser does not see approve or reject buttons', async () => {
+  mockEventUnderReview({ coordinatorId: 2 });
+  renderEvent();
+  expect(await screen.findByText('Review me')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
+});
+
+it('US17-F14: a coordinator who is not assigned does not see approve or reject buttons', async () => {
+  useAuth.mockReturnValue({ user: { id: 9 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
+  mockEventUnderReview({ coordinatorId: 2 });
+  renderEvent();
+  expect(await screen.findByText('Review me')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
 });
 
 it('loads an attendee event without requesting restricted planning data', async () => {
