@@ -33,6 +33,147 @@ async function listVenues() {
   return rows.map((row) => ({ ...mapVenue(row), layouts: byVenue[row.id] || [] }));
 }
 
+function parseListParam(value) {
+  if (value === undefined || value === null || value === '') return [];
+  const raw = Array.isArray(value) ? value : String(value).split(',');
+  return raw.map((entry) => String(entry).trim()).filter(Boolean);
+}
+
+function textIncludesAll(haystack, needles) {
+  if (!needles.length) return true;
+  if (!haystack) return false;
+  const hay = haystack.toLowerCase();
+  return needles.every((needle) => hay.includes(needle.toLowerCase()));
+}
+
+// AC2's example (10:00-12:00, 30m setup, 45m turnaround -> 9:30-12:45) applied
+// to any start/end + setup/teardown combination, venue or booking alike.
+function computeOccupiedWindow(startAt, endAt, setupMinutes = 0, teardownMinutes = 0) {
+  const occupiedStart = new Date(startAt);
+  const occupiedEnd = new Date(endAt);
+  occupiedStart.setMinutes(occupiedStart.getMinutes() - Number(setupMinutes || 0));
+  occupiedEnd.setMinutes(occupiedEnd.getMinutes() + Number(teardownMinutes || 0));
+  return { occupiedStart, occupiedEnd };
+}
+
+function windowsOverlap(aStart, aEnd, bStart, bEnd) {
+  return aStart < bEnd && bStart < aEnd;
+}
+
+function groupByVenueId(rows) {
+  return rows.reduce((acc, row) => {
+    (acc[row.venue_id] = acc[row.venue_id] || []).push(row);
+    return acc;
+  }, {});
+}
+
+/**
+ * SCRUM-23: search the venue catalogue by capacity/location/accessibility/
+ * layout/facilities, and (when a date+time window is given) by availability.
+ */
+async function searchVenues(filters = {}) {
+  const { startAt, endAt } = filters;
+  if (Boolean(startAt) !== Boolean(endAt)) {
+    throw httpError(400, 'startAt and endAt must be provided together', 'VALIDATION_ERROR');
+  }
+  if (startAt && endAt && new Date(startAt) >= new Date(endAt)) {
+    throw httpError(400, 'startAt must be before endAt', 'VALIDATION_ERROR');
+  }
+
+  let capacityMin = null;
+  if (filters.capacityMin !== undefined && filters.capacityMin !== '') {
+    capacityMin = Number(filters.capacityMin);
+    if (!Number.isFinite(capacityMin)) {
+      throw httpError(400, 'capacityMin must be a number', 'VALIDATION_ERROR');
+    }
+  }
+
+  const locationTerm = filters.location ? String(filters.location).trim() : '';
+  const accessibilityTerms = parseListParam(filters.accessibility);
+  const facilityTerms = parseListParam(filters.facilities);
+  const layoutTerm = filters.layout ? String(filters.layout).trim().toUpperCase() : '';
+
+  const venues = await listVenues();
+
+  // AC4-AC7: capacity/location/accessibility/layout/facilities, strict AND
+  // matching (W4 gave no close-match rule, so the team decided on strict).
+  const candidates = venues.filter((venue) => {
+    if (capacityMin !== null && venue.capacity < capacityMin) return false;
+    if (locationTerm && !textIncludesAll(venue.location, [locationTerm])) return false;
+    if (!textIncludesAll(venue.accessibility, accessibilityTerms)) return false;
+    if (!textIncludesAll(venue.facilities, facilityTerms)) return false;
+    if (layoutTerm && !venue.layouts.includes(layoutTerm)) return false;
+    return true;
+  });
+
+  // AC1: date/time is optional on top of the other filters; skip the
+  // availability check entirely when no window was given.
+  if (!startAt || !endAt || !candidates.length) {
+    return candidates;
+  }
+
+  const candidateIds = candidates.map((venue) => venue.id);
+
+  const [bookingRows, unavailabilityRows] = await Promise.all([
+    fetchMany(
+      supabase
+        .from('venue_bookings')
+        .select('venue_id, start_at, end_at, setup_minutes, teardown_minutes')
+        .in('venue_id', candidateIds)
+        // "confirmed booking" -> APPROVED, "active tentative hold" -> TENTATIVE.
+        // PENDING is deliberately excluded: AC2 only names these two, and an
+        // undecided request shouldn't hide a venue from search. Hold expiry
+        // (SCRUM-75) isn't implemented yet, so every TENTATIVE row counts as
+        // active for now.
+        .in('status', [BOOKING_STATUS.APPROVED, BOOKING_STATUS.TENTATIVE])
+    ),
+    fetchMany(
+      supabase
+        .from('venue_unavailability')
+        .select('venue_id, start_at, end_at')
+        .in('venue_id', candidateIds)
+    ),
+  ]);
+
+  const bookingsByVenue = groupByVenueId(bookingRows);
+  const unavailabilityByVenue = groupByVenueId(unavailabilityRows);
+
+  // AC2 + AC3 + AC9: a venue is available only if its occupied window clears
+  // every existing confirmed booking/tentative hold AND every unavailability
+  // period. Each existing booking is padded by its OWN recorded setup/
+  // teardown (captured per-booking in venue_bookings), not the venue's
+  // current defaults, since those may have changed since it was made.
+  return candidates.filter((venue) => {
+    const { occupiedStart, occupiedEnd } = computeOccupiedWindow(
+      startAt,
+      endAt,
+      venue.setupMinutes,
+      venue.teardownMinutes
+    );
+
+    const blockedByBooking = (bookingsByVenue[venue.id] || []).some((booking) => {
+      const bookingWindow = computeOccupiedWindow(
+        booking.start_at,
+        booking.end_at,
+        booking.setup_minutes,
+        booking.teardown_minutes
+      );
+      return windowsOverlap(
+        occupiedStart,
+        occupiedEnd,
+        bookingWindow.occupiedStart,
+        bookingWindow.occupiedEnd
+      );
+    });
+    if (blockedByBooking) return false;
+
+    const blockedByUnavailability = (unavailabilityByVenue[venue.id] || []).some((period) =>
+      windowsOverlap(occupiedStart, occupiedEnd, new Date(period.start_at), new Date(period.end_at))
+    );
+    return !blockedByUnavailability;
+  });
+}
+
 async function createVenue(user, payload) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can manage the catalogue', 'FORBIDDEN');
@@ -201,6 +342,7 @@ async function blockVenue(user, payload) {
 
 module.exports = {
   listVenues,
+  searchVenues,
   createVenue,
   updateVenue,
   listBookings,
@@ -208,4 +350,6 @@ module.exports = {
   decideBooking,
   listUnavailability,
   blockVenue,
+  computeOccupiedWindow,
+  windowsOverlap,
 };

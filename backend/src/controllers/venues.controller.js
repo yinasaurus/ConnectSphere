@@ -6,6 +6,19 @@ const list = asyncHandler(async (req, res) => {
   res.json({ venues });
 });
 
+const search = asyncHandler(async (req, res) => {
+  const venues = await venuesService.searchVenues({
+    startAt: req.query.startAt,
+    endAt: req.query.endAt,
+    capacityMin: req.query.capacityMin,
+    location: req.query.location,
+    accessibility: req.query.accessibility,
+    layout: req.query.layout,
+    facilities: req.query.facilities,
+  });
+  res.json({ venues });
+});
+
 const create = asyncHandler(async (req, res) => {
   const venue = await venuesService.createVenue(req.user, req.body);
   res.status(201).json({ venue });
@@ -46,6 +59,7 @@ const block = asyncHandler(async (req, res) => {
 
 module.exports = {
   list,
+  search,
   create,
   update,
   bookings,
