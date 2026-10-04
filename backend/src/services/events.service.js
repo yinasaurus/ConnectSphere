@@ -1,6 +1,6 @@
 const { supabase, fetchOne, fetchMany, fetchCount, insertOne, updateById } = require('../config/db');
 const { ROLES } = require('../constants/roles');
-const { EVENT_STATUS, SIGNIFICANT_FIELDS } = require('../constants/statuses');
+const { EVENT_STATUS, BOOKING_STATUS, SIGNIFICANT_FIELDS } = require('../constants/statuses');
 const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
 const { assertTransition } = require('../domain/statusMachine');
@@ -311,10 +311,7 @@ async function submitEvent(user, id) {
     );
   }
 
-  const from = existing.status === EVENT_STATUS.REJECTED
-    ? EVENT_STATUS.REJECTED
-    : existing.status;
-  assertTransition(from, EVENT_STATUS.SUBMITTED);
+  assertTransition(existing.status, EVENT_STATUS.UNDER_REVIEW);
 
   const coordinatorId = existing.coordinator_id || await assignCoordinator();
   await updateById('events', id, {
@@ -337,6 +334,11 @@ async function submitEvent(user, id) {
   return getEvent(user, id);
 }
 
+const APPROVED_BOOKING_REQUIRED = {
+  [EVENT_STATUS.VENUE_SECURED]: 'A venue booking must be approved before the venue can be marked secured',
+  [EVENT_STATUS.CONFIRMED]: 'A venue booking must be approved before confirmation',
+};
+
 async function changeStatus(user, id, nextStatus, reason) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only coordinators can change event status', 'FORBIDDEN');
@@ -358,11 +360,9 @@ async function changeStatus(user, id, nextStatus, reason) {
   if (nextStatus === EVENT_STATUS.REJECTED) {
     patch.rejection_reason = reason || 'Rejected';
   }
-  if (nextStatus === EVENT_STATUS.CONFIRMED) {
-    const ready = await isReadyToConfirm(existing);
-    if (!ready.ok) {
-      throw httpError(409, ready.message, 'NOT_READY_TO_CONFIRM');
-    }
+  const bookingRequiredMessage = APPROVED_BOOKING_REQUIRED[nextStatus];
+  if (bookingRequiredMessage && !(await hasApprovedVenueBooking(existing.id))) {
+    throw httpError(409, bookingRequiredMessage, 'VENUE_NOT_APPROVED');
   }
 
   await updateById('events', id, patch);
@@ -386,18 +386,15 @@ async function changeStatus(user, id, nextStatus, reason) {
   return getEvent(user, id);
 }
 
-async function isReadyToConfirm(event) {
+async function hasApprovedVenueBooking(eventId) {
   const booking = await fetchOne(
     supabase
       .from('venue_bookings')
       .select('id')
-      .eq('event_id', event.id)
-      .eq('status', 'APPROVED')
+      .eq('event_id', eventId)
+      .eq('status', BOOKING_STATUS.APPROVED)
   );
-  if (!booking) {
-    return { ok: false, message: 'A venue booking must be approved before confirmation' };
-  }
-  return { ok: true };
+  return Boolean(booking);
 }
 
 async function assignCoordinator() {

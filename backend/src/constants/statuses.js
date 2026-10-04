@@ -1,20 +1,20 @@
 /**
- * Event lifecycle statuses from the customer briefing + G3/G4 Q&A.
+ * Event lifecycle statuses (SCRUM-5). Stored value – label shown to users:
  *
- * Draft            – saved before submission
- * Submitted        – sent for review
- * Under Review     – coordinator assigned; clarification is a sub-state of this
- * Planning         – approved; venue/equipment arrangements underway
- * Confirmed        – essential arrangements completed
- * Completed        – event finished
- * Cancelled        – event will not proceed
- * Rejected         – not accepted; organiser may resubmit after changes
+ * DRAFT          – Draft: saved before submission
+ * UNDER_REVIEW   – Pending review: submitted; coordinator assigned and reviewing
+ * PLANNING       – Approved - pending venue: approved; venue being arranged
+ * VENUE_SECURED  – Venue secured: a venue booking has been approved
+ * CONFIRMED      – Confirmed: essential arrangements completed
+ * COMPLETED      – Completed: event finished
+ * CANCELLED      – Cancelled: will not proceed
+ * REJECTED       – Rejected: not accepted; organiser may resubmit after changes
  */
 const EVENT_STATUS = {
   DRAFT: 'DRAFT',
-  SUBMITTED: 'SUBMITTED',
   UNDER_REVIEW: 'UNDER_REVIEW',
   PLANNING: 'PLANNING',
+  VENUE_SECURED: 'VENUE_SECURED',
   CONFIRMED: 'CONFIRMED',
   COMPLETED: 'COMPLETED',
   CANCELLED: 'CANCELLED',

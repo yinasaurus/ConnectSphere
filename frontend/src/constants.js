@@ -16,9 +16,9 @@ export const ROLE_LABELS = {
 
 export const STATUS_LABELS = {
   DRAFT: 'Draft',
-  SUBMITTED: 'Submitted',
-  UNDER_REVIEW: 'Under review',
-  PLANNING: 'Planning',
+  UNDER_REVIEW: 'Pending review',
+  PLANNING: 'Approved - pending venue',
+  VENUE_SECURED: 'Venue secured',
   CONFIRMED: 'Confirmed',
   COMPLETED: 'Completed',
   CANCELLED: 'Cancelled',

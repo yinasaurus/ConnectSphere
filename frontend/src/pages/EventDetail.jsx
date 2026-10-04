@@ -107,6 +107,11 @@ export default function EventDetail() {
                 </div>
               )}
               {event.status === 'PLANNING' && (
+                <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'VENUE_SECURED' } }))}>
+                  Mark venue secured
+                </button>
+              )}
+              {event.status === 'VENUE_SECURED' && (
                 <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'CONFIRMED' } }))}>
                   Confirm event
                 </button>
