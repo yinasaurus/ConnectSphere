@@ -33,6 +33,7 @@ export default function VenueAvailability() {
   const [error, setError] = useState('');
   const [bookings, setBookings] = useState(null);
   const [bookingsError, setBookingsError] = useState('');
+  const [bookingsVenue, setBookingsVenue] = useState('');
   const latestSearch = useRef(0);
 
   // Load the venue list once for the dropdown.
@@ -52,6 +53,7 @@ export default function VenueAvailability() {
     setError('');
     setBookings(null);
     setBookingsError('');
+    setBookingsVenue('');
     // datetime-local inputs are in the user's local time; send UTC ISO strings,
     // the same way the venue search does.
     const params = new URLSearchParams({
@@ -65,7 +67,9 @@ export default function VenueAvailability() {
     if (canSeeBookings) {
       api(`/api/venues/${venueId}/bookings?${params.toString()}`)
         .then((res) => {
-          if (searchId === latestSearch.current) setBookings(res.bookings || []);
+          if (searchId !== latestSearch.current) return;
+          setBookings(res.bookings || []);
+          setBookingsVenue(res.venue.name);
         })
         .catch((err) => {
           if (searchId === latestSearch.current) setBookingsError(err.message);
@@ -155,7 +159,7 @@ export default function VenueAvailability() {
 
       {canSeeBookings && (bookings || bookingsError) && (
         <div className="card" style={{ marginTop: 18 }}>
-          <h3>Existing bookings</h3>
+          <h3>{bookingsVenue ? `Existing bookings at ${bookingsVenue}` : 'Existing bookings'}</h3>
           {bookingsError && <div className="alert">{bookingsError}</div>}
           {bookings && bookings.length === 0 && <p className="muted">No confirmed bookings or active holds in this period.</p>}
           {bookings && bookings.length > 0 && (

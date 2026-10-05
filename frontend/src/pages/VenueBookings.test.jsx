@@ -106,6 +106,8 @@ describe('SCRUM-67 Existing bookings list', () => {
     });
     expect(api).toHaveBeenCalledWith(`/api/venues/7/bookings?${params.toString()}`);
 
+    // The heading names the venue the bookings came back for.
+    expect(await screen.findByRole('heading', { name: 'Existing bookings at Helix Hall' })).toBeInTheDocument();
     const table = await screen.findByRole('table', { name: 'Existing bookings' });
     // One body row per booking, so neither was dropped or duplicated.
     expect(table.querySelectorAll('tbody tr')).toHaveLength(2);
@@ -152,7 +154,8 @@ describe('SCRUM-67 Existing bookings list', () => {
     await search();
     expect(await screen.findByRole('heading', { name: 'Helix Hall' })).toBeInTheDocument();
     expect(api.mock.calls.map(([path]) => path).some((path) => path.includes('/bookings'))).toBe(false);
-    expect(screen.queryByText('Existing bookings')).not.toBeInTheDocument();
+    // Regex so it also catches the "Existing bookings at <venue>" heading.
+    expect(screen.queryByText(/Existing bookings/)).not.toBeInTheDocument();
   });
 
   /*
@@ -215,15 +218,16 @@ describe('SCRUM-67 Existing bookings list', () => {
    * Scenario: The user checks Helix Hall, then a breakout room, and Helix Hall's bookings
    *           reply arrives only after the breakout room search.
    * Setup:    Venue 7's bookings call is held open; venue 8's answers straight away with
-   *           its own booking. Venue 7's late reply is (a) a success with
+   *           its own booking. Venue 7's late reply is (a) a success with Helix Hall's
    *           "Leadership Forum" or (b) an error.
-   * Expected: Only the breakout room's booking is shown, with no error. A late reply
+   * Expected: Only the breakout room's booking is shown, with no error, under the heading
+   *           "Existing bookings at Breakout Room". A late reply
    *           from the earlier search must not put another venue's bookings (or its
    *           error) under the venue being viewed.
    * Type:     conflict
    */
   it.each([
-    ['succeeds', (late) => late.resolve({ bookings: [CONFIRMED] })],
+    ['succeeds', (late) => late.resolve({ venue: { id: 7, name: 'Helix Hall' }, bookings: [CONFIRMED] })],
     ['fails', (late) => late.reject(new Error('Venue 7 bookings failed'))],
   ])('US67-F06 (AC4): a late reply from an earlier search that %s is ignored', async (_label, settleLate) => {
     signInAs('EVENT_COORDINATOR');
@@ -234,7 +238,7 @@ describe('SCRUM-67 Existing bookings list', () => {
       if (path.startsWith('/api/venues/7/availability')) return AVAILABILITY;
       if (path.startsWith('/api/venues/8/availability')) return { ...AVAILABILITY, venue: { id: 8, name: 'Breakout Room' } };
       if (path.startsWith('/api/venues/7/bookings')) return lateReply;
-      if (path.startsWith('/api/venues/8/bookings')) return { bookings: [HOLD] };
+      if (path.startsWith('/api/venues/8/bookings')) return { venue: { id: 8, name: 'Breakout Room' }, bookings: [HOLD] };
       throw new Error(`Unexpected ${path}`);
     });
     await search();
@@ -243,6 +247,7 @@ describe('SCRUM-67 Existing bookings list', () => {
     fireEvent.change(screen.getByLabelText('Venue'), { target: { value: '8' } });
     await userEvent.setup().click(screen.getByRole('button', { name: 'Check availability' }));
     expect(await screen.findByText('Board offsite')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Existing bookings at Breakout Room' })).toBeInTheDocument();
 
     await act(async () => {
       settleLate(late);
@@ -252,5 +257,6 @@ describe('SCRUM-67 Existing bookings list', () => {
     expect(screen.queryByText('Leadership Forum')).not.toBeInTheDocument();
     expect(screen.queryByText('Venue 7 bookings failed')).not.toBeInTheDocument();
     expect(screen.getByText('Board offsite')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Existing bookings at Breakout Room' })).toBeInTheDocument();
   });
 });
