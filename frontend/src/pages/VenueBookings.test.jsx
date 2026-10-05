@@ -91,8 +91,9 @@ describe('SCRUM-67 Existing bookings list', () => {
    * Setup:    The bookings API returns a confirmed booking (10:00-12:00, occupied
    *           09:30-12:45 with 30/45 min) and an active hold (13:00-13:30, expiring 16 Oct).
    * Expected: The page asks for the same venue and period (in UTC) as the availability
-   *           check, and lists both: the booking as "Confirmed" with its occupied window and
-   *           setup/turnaround, the hold as "Tentative hold" with its expiry.
+   *           check and, under "Existing bookings at Helix Hall", lists both: the booking
+   *           as "Confirmed" with its booked times, its occupied window and setup/turnaround,
+   *           and the hold as "Tentative hold" with its expiry.
    * Type:     normal
    */
   it('US67-F01 (AC1+AC2): lists confirmed bookings with occupied windows and holds marked as holds', async () => {
