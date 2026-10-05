@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { ROLES } from '../constants';
@@ -33,6 +33,7 @@ export default function VenueAvailability() {
   const [error, setError] = useState('');
   const [bookings, setBookings] = useState(null);
   const [bookingsError, setBookingsError] = useState('');
+  const latestSearch = useRef(0);
 
   // Load the venue list once for the dropdown.
   useEffect(() => {
@@ -58,10 +59,17 @@ export default function VenueAvailability() {
       to: new Date(to).toISOString(),
     });
     // Fetched separately so a bookings failure doesn't hide the availability result.
+    // The button doesn't wait for this call, so a reply from an earlier search can
+    // arrive late; it is dropped so another venue's bookings are never shown here.
+    const searchId = ++latestSearch.current;
     if (canSeeBookings) {
       api(`/api/venues/${venueId}/bookings?${params.toString()}`)
-        .then((res) => setBookings(res.bookings || []))
-        .catch((err) => setBookingsError(err.message));
+        .then((res) => {
+          if (searchId === latestSearch.current) setBookings(res.bookings || []);
+        })
+        .catch((err) => {
+          if (searchId === latestSearch.current) setBookingsError(err.message);
+        });
     }
     try {
       setResult(await api(`/api/venues/${venueId}/availability?${params.toString()}`));

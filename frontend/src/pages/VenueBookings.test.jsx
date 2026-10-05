@@ -5,7 +5,7 @@
  * asks for the right venue and period, shows what comes back, and only asks for the
  * roles AC5 allows.
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import VenueAvailability from './VenueAvailability';
 import { api } from '../api';
@@ -183,5 +183,49 @@ describe('SCRUM-67 Existing bookings list', () => {
     expect(await screen.findByText('You do not have access to this action')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Helix Hall' })).toBeInTheDocument();
     expect(screen.queryByRole('table', { name: 'Existing bookings' })).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCRUM-67 AC4 (display side)
+   * Scenario: The user checks Helix Hall, then a breakout room, and Helix Hall's bookings
+   *           reply arrives only after the breakout room search.
+   * Setup:    Venue 7's bookings call is held open; venue 8's answers straight away with
+   *           its own booking. Venue 7's late reply is (a) a success with
+   *           "Leadership Forum" or (b) an error.
+   * Expected: Only the breakout room's booking is shown, with no error. A late reply
+   *           from the earlier search must not put another venue's bookings (or its
+   *           error) under the venue being viewed.
+   * Type:     conflict
+   */
+  it.each([
+    ['succeeds', (late) => late.resolve({ bookings: [CONFIRMED] })],
+    ['fails', (late) => late.reject(new Error('Venue 7 bookings failed'))],
+  ])('US67-F06 (AC4): a late reply from an earlier search that %s is ignored', async (_label, settleLate) => {
+    signInAs('EVENT_COORDINATOR');
+    const late = {};
+    const lateReply = new Promise((resolve, reject) => Object.assign(late, { resolve, reject }));
+    api.mockImplementation(async (path) => {
+      if (path === '/api/venues') return { venues: [{ id: 7, name: 'Helix Hall' }, { id: 8, name: 'Breakout Room' }] };
+      if (path.startsWith('/api/venues/7/availability')) return AVAILABILITY;
+      if (path.startsWith('/api/venues/8/availability')) return { ...AVAILABILITY, venue: { id: 8, name: 'Breakout Room' } };
+      if (path.startsWith('/api/venues/7/bookings')) return lateReply;
+      if (path.startsWith('/api/venues/8/bookings')) return { bookings: [HOLD] };
+      throw new Error(`Unexpected ${path}`);
+    });
+    await search();
+    await screen.findByRole('heading', { name: 'Helix Hall' });
+
+    fireEvent.change(screen.getByLabelText('Venue'), { target: { value: '8' } });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Check availability' }));
+    expect(await screen.findByText('Board offsite')).toBeInTheDocument();
+
+    await act(async () => {
+      settleLate(late);
+      await lateReply.catch(() => {});
+    });
+    // Venue 7's booking and error never appear under the breakout room.
+    expect(screen.queryByText('Leadership Forum')).not.toBeInTheDocument();
+    expect(screen.queryByText('Venue 7 bookings failed')).not.toBeInTheDocument();
+    expect(screen.getByText('Board offsite')).toBeInTheDocument();
   });
 });
