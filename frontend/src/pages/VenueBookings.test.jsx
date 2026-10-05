@@ -111,8 +111,11 @@ describe('SCRUM-67 Existing bookings list', () => {
     expect(table.querySelectorAll('tbody tr')).toHaveLength(2);
     expect(screen.getByText('Leadership Forum')).toBeInTheDocument();
     expect(screen.getByText('Confirmed')).toBeInTheDocument();
-    // Occupied window is the padded one from the API, not the booked 10:00-12:00.
-    expect(screen.getByText(`${range(CONFIRMED.occupiedStartAt)} – ${range(CONFIRMED.occupiedEndAt)}`, { exact: false })).toBeInTheDocument();
+    // The booked 10:00-12:00 and the padded occupied 09:30-12:45 are both shown, in
+    // their own columns, so the user can see how much the setup/turnaround adds.
+    const [, , bookedCell, occupiedCell] = table.querySelectorAll('tbody tr')[0].querySelectorAll('td');
+    expect(bookedCell).toHaveTextContent(`${range(CONFIRMED.startAt)} – ${range(CONFIRMED.endAt)}`);
+    expect(occupiedCell).toHaveTextContent(`${range(CONFIRMED.occupiedStartAt)} – ${range(CONFIRMED.occupiedEndAt)}`);
     expect(screen.getByText('30 min setup, 45 min turnaround')).toBeInTheDocument();
     expect(screen.getByText('Board offsite')).toBeInTheDocument();
     // The visible "Tentative hold" label is what makes a hold identifiable (AC2).
