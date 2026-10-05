@@ -156,14 +156,14 @@ describe('SCRUM-67 Existing bookings list', () => {
   });
 
   /*
-   * AC:       SCRUM-67 AC1 + AC3 (display side)
-   * Scenario: Nothing is committed in the period, for example only an expired hold
-   *           existed, which the API leaves out.
-   * Setup:    The bookings API returns an empty list.
+   * AC:       SCRUM-67 AC1 (display side, empty period)
+   * Scenario: Nothing is committed at the venue in the period.
+   * Setup:    The bookings API returns an empty list. Leaving out expired holds (AC3) is
+   *           done by the API and checked in US67-B07/B08, not here.
    * Expected: A clear "nothing in this period" message instead of an empty table.
    * Type:     boundary
    */
-  it('US67-F04 (AC1+AC3): says so when the venue has no bookings in the period', async () => {
+  it('US67-F04 (AC1): says so when the venue has no bookings in the period', async () => {
     signInAs('EVENT_COORDINATOR');
     mockApi({ bookings: [] });
     await search();
