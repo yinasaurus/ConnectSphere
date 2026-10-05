@@ -186,6 +186,28 @@ describe('SCRUM-67 Existing bookings list', () => {
   });
 
   /*
+   * AC:       SCRUM-67 AC1 (display side)
+   * Scenario: The API sends a booking with no event name (B14), or a reply with no
+   *           bookings list.
+   * Setup:    (a) one confirmed booking for event 60 with eventName null; (b) a reply
+   *           whose bookings field is null.
+   * Expected: (a) The row is still listed, labelled "Event #60", so a committed booking
+   *           is never hidden. (b) The empty-period message is shown instead of a crash.
+   * Type:     error
+   */
+  it('US67-F07 (AC1): falls back to the event id, and copes with a reply without bookings', async () => {
+    signInAs('EVENT_COORDINATOR');
+    mockApi({ bookings: [{ ...CONFIRMED, eventId: 60, eventName: null }] });
+    await search();
+    expect(await screen.findByText('Event #60')).toBeInTheDocument();
+
+    // null, not undefined: undefined would fall back to mockApi's default bookings.
+    mockApi({ bookings: null });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Check availability' }));
+    expect(await screen.findByText('No confirmed bookings or active holds in this period.')).toBeInTheDocument();
+  });
+
+  /*
    * AC:       SCRUM-67 AC4 (display side)
    * Scenario: The user checks Helix Hall, then a breakout room, and Helix Hall's bookings
    *           reply arrives only after the breakout room search.
