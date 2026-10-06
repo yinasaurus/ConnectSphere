@@ -164,6 +164,22 @@ describe('SCRUM-39 GET /api/events/:id (event details)', () => {
   });
 
   /*
+   * AC:       SCRUM-39 AC1 (agreed decision: Attendees keep the public view)
+   * Scenario: An Attendee opens a Confirmed event that doesn't take registrations.
+   * Setup:    Attendee; event 3 Confirmed with registration_required false.
+   * Expected: 404 "Event not found". Only Confirmed events that are open for registration
+   *           are public to Attendees.
+   * Type:     error
+   */
+  it('US39-D07 (AC1): an Attendee cannot see a confirmed event without registration', async () => {
+    const get = as([ROLES.ATTENDEE]);
+    fetchOne.mockResolvedValueOnce(eventRow({ status: 'CONFIRMED', registration_required: false }));
+    const res = await get('/api/events/3');
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe('Event not found');
+  });
+
+  /*
    * AC:       SCRUM-39 AC2
    * Scenario: A Planning event whose details haven't all been filled in yet.
    * Setup:    Coordinator; attendance, times, venue needs and equipment notes all null.
