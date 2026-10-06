@@ -29,6 +29,11 @@ function mapVenue(row) {
   };
 }
 
+// SCUM-7 AC4: same rule as the route validator, repeated so the service is safe on its own.
+function isValidCapacity(value) {
+  return Number.isInteger(value) && value >= 1;
+}
+
 function normalizeLayouts(layouts) {
   return [...new Set((layouts || []).map((layout) => String(layout).trim()).filter(Boolean))];
 }
@@ -80,15 +85,16 @@ async function createVenue(user, payload) {
     throw httpError(403, 'Only venue staff can manage the catalogue', 'FORBIDDEN');
   }
   if (!payload.name) throw httpError(400, 'Venue name is required', 'VALIDATION_ERROR');
-  if (payload.capacity !== undefined && (!Number.isInteger(payload.capacity) || payload.capacity < 0)) {
-    throw httpError(400, 'Venue capacity must be a non-negative integer', 'VALIDATION_ERROR');
+  // SCUM-7 AC4: a venue without a capacity is incomplete, so it is never saved.
+  if (!isValidCapacity(payload.capacity)) {
+    throw httpError(400, 'Venue capacity must be a whole number of at least 1', 'VALIDATION_ERROR');
   }
   await assertVenueIdentityAvailable(payload.name, payload.location);
 
   const created = await insertOne('venues', {
     name: payload.name,
     location: payload.location || null,
-    capacity: payload.capacity || 0,
+    capacity: payload.capacity,
     facilities: payload.facilities || null,
     accessibility: payload.accessibility || null,
     operating_hours: payload.operatingHours || null,
@@ -114,8 +120,8 @@ async function updateVenue(user, id, payload) {
   }
   const existing = await fetchOne(supabase.from('venues').select('*').eq('id', id));
   if (!existing) throw httpError(404, 'Venue not found', 'NOT_FOUND');
-  if (payload.capacity !== undefined && (!Number.isInteger(payload.capacity) || payload.capacity < 0)) {
-    throw httpError(400, 'Venue capacity must be a non-negative integer', 'VALIDATION_ERROR');
+  if (payload.capacity !== undefined && !isValidCapacity(payload.capacity)) {
+    throw httpError(400, 'Venue capacity must be a whole number of at least 1', 'VALIDATION_ERROR');
   }
   await assertVenueIdentityAvailable(
     payload.name === undefined ? existing.name : payload.name,

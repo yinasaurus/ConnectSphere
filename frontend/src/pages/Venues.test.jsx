@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { api } from '../api';
 import { useAuth } from '../auth';
@@ -111,6 +111,11 @@ function renderVenues() {
   return render(<Venues />);
 }
 
+// The page has an Add venue and an Update venue form with some of the same labels.
+function formCard(heading) {
+  return screen.getByRole('heading', { name: heading }).closest('.card');
+}
+
 describe('Venues page inputs', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = jest.fn();
@@ -155,8 +160,9 @@ describe('Venues page inputs', () => {
     const locationInput = screen.getByPlaceholderText('Location');
     await user.type(nameInput, 'Orchid Boardroom');
     await user.type(locationInput, 'ConnectSphere Campus, Level 8');
-    await user.clear(screen.getAllByRole('spinbutton')[0]);
-    await user.type(screen.getAllByRole('spinbutton')[0], '16');
+    const capacityInput = within(formCard('Add venue')).getByLabelText('Capacity');
+    await user.clear(capacityInput);
+    await user.type(capacityInput, '16');
     await user.click(screen.getByRole('button', { name: 'Save venue' }));
 
     await waitFor(() => {
@@ -209,7 +215,7 @@ describe('Venues page inputs', () => {
     renderVenues();
     await user.click(await screen.findByRole('button', { name: /Helix Hall/i }));
 
-    const input = screen.getByLabelText(label);
+    const input = within(formCard('Update venue')).getByLabelText(label);
     await user.clear(input);
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
@@ -230,5 +236,188 @@ describe('Venues page inputs', () => {
 
     expect(await screen.findByText('operatingHours: Use HH:MM - HH:MM format')).toBeInTheDocument();
     expect(database.venues[0].operatingHours).toBe('08:00 - 22:00');
+  });
+
+  /*
+   * AC:       SCUM-7 AC1
+   * Scenario: Venue Staff fill in every detail of a new venue in the Add venue form.
+   * Setup:    Logged in as Venue Staff. The form starts with THEATRE ticked; the user ticks
+   *           CLASSROOM and BOARDROOM and unticks THEATRE.
+   * Expected: The POST body contains location, capacity, facilities, accessibility,
+   *           operating hours and all chosen layouts, so a venue can be added complete in
+   *           one step.
+   * Type:     normal
+   */
+  it('sends every AC1 detail, including several layouts, when adding a venue', async () => {
+    const user = userEvent.setup();
+    renderVenues();
+    await screen.findByRole('heading', { name: 'Helix Hall' });
+    const add = within(formCard('Add venue'));
+
+    await user.type(add.getByLabelText('Venue name'), 'Orchid Boardroom');
+    await user.type(add.getByLabelText('Location'), 'Level 8');
+    await user.clear(add.getByLabelText('Capacity'));
+    await user.type(add.getByLabelText('Capacity'), '16');
+    await user.type(add.getByLabelText('Operating hours'), '08:00 - 20:00');
+    await user.type(add.getByLabelText('Facilities'), 'Video conferencing');
+    await user.clear(add.getByLabelText('Accessibility'));
+    await user.type(add.getByLabelText('Accessibility'), 'Lift access');
+    await user.click(add.getByLabelText('THEATRE'));
+    await user.click(add.getByLabelText('CLASSROOM'));
+    await user.click(add.getByLabelText('BOARDROOM'));
+    await user.click(add.getByRole('button', { name: 'Save venue' }));
+
+    await waitFor(() => expect(database.venues).toHaveLength(2));
+    expect(api).toHaveBeenCalledWith('/api/venues', {
+      method: 'POST',
+      body: {
+        name: 'Orchid Boardroom',
+        location: 'Level 8',
+        capacity: 16,
+        facilities: 'Video conferencing',
+        accessibility: 'Lift access',
+        operatingHours: '08:00 - 20:00',
+        layouts: ['CLASSROOM', 'BOARDROOM'],
+      },
+    });
+  });
+
+  /*
+   * AC:       SCUM-7 AC4
+   * Scenario: Venue Staff clear the capacity box and try to save a new venue.
+   * Setup:    The API rejects the POST with the field error the real validator returns
+   *           ("Capacity is required"), as it does for an empty capacity.
+   * Expected: The page shows which field is wrong, and the catalogue isn't changed.
+   * Type:     error
+   */
+  it('shows the field error when a new venue is rejected for missing capacity', async () => {
+    const user = userEvent.setup();
+    const normal = api.getMockImplementation();
+    api.mockImplementation(async (path, options = {}) => {
+      if (path === '/api/venues' && options.method === 'POST') {
+        const error = new Error('Capacity is required');
+        error.details = [{ field: 'capacity', message: 'Capacity is required' }];
+        throw error;
+      }
+      return normal(path, options);
+    });
+    renderVenues();
+    await screen.findByRole('heading', { name: 'Helix Hall' });
+    const add = within(formCard('Add venue'));
+
+    await user.type(add.getByLabelText('Venue name'), 'Orchid Boardroom');
+    await user.clear(add.getByLabelText('Capacity'));
+    await user.click(add.getByRole('button', { name: 'Save venue' }));
+
+    expect(await screen.findByText('capacity: Capacity is required')).toBeInTheDocument();
+    // The empty box is sent as '' so the server, not the browser, decides it's invalid.
+    expect(api).toHaveBeenCalledWith('/api/venues', expect.objectContaining({
+      body: expect.objectContaining({ capacity: '' }),
+    }));
+    expect(database.venues).toHaveLength(1);
+  });
+
+  /*
+   * AC:       SCUM-7 AC2 (editing layouts)
+   * Scenario: Venue Staff rename one layout, remove another and add a new one.
+   * Setup:    Helix Hall has THEATRE (id 10) and CLASSROOM (id 11).
+   * Expected: The PATCH sends the rename and the delete with their ids and the new layout
+   *           without one, which is how the API tells the three changes apart.
+   * Type:     normal
+   */
+  it('sends layout renames, removals and additions when updating a venue', async () => {
+    const user = userEvent.setup();
+    renderVenues();
+    await user.click(await screen.findByRole('button', { name: /Helix Hall/i }));
+    const update = within(formCard('Update venue'));
+
+    const theatre = update.getByDisplayValue('THEATRE');
+    await user.clear(theatre);
+    await user.type(theatre, 'THEATRE STYLE');
+    await user.click(update.getByRole('button', { name: 'Delete CLASSROOM' }));
+    await user.type(update.getByPlaceholderText('Add layout'), 'BANQUET');
+    await user.click(update.getByRole('button', { name: 'Add layout' }));
+    await user.click(update.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(database.venues[0].layouts).toEqual(['THEATRE STYLE', 'BANQUET']));
+    expect(api).toHaveBeenCalledWith('/api/venues/1', expect.objectContaining({
+      method: 'PATCH',
+      body: expect.objectContaining({
+        layouts: [
+          { id: 10, layout: 'THEATRE STYLE' },
+          { id: 11, layout: 'CLASSROOM', deleted: true },
+          { layout: 'BANQUET' },
+        ],
+      }),
+    }));
+  });
+
+  /*
+   * AC:       SCUM-7 AC2
+   * Scenario: Venue Staff deactivate a venue from the Update venue form.
+   * Setup:    Helix Hall is active.
+   * Expected: Unticking "Venue is active" and saving sends isActive: false, which keeps the
+   *           record but takes it out of the active catalogue.
+   * Type:     normal
+   */
+  it('sends isActive false when the venue is deactivated', async () => {
+    const user = userEvent.setup();
+    renderVenues();
+    await user.click(await screen.findByRole('button', { name: /Helix Hall/i }));
+    const update = within(formCard('Update venue'));
+
+    await user.click(update.getByLabelText('Venue is active'));
+    expect(update.getByText('Inactive')).toBeInTheDocument();
+    await user.click(update.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(database.venues[0].isActive).toBe(false));
+    expect(api).toHaveBeenCalledWith('/api/venues/1', expect.objectContaining({
+      method: 'PATCH',
+      body: expect.objectContaining({ isActive: false }),
+    }));
+  });
+
+  /*
+   * AC:       SCUM-7 AC2
+   * Scenario: Venue Staff open a venue whose optional details were never filled in.
+   * Setup:    A venue with only id, name and layouts as plain names (no ids, no capacity,
+   *           times or text fields), as an older record might be.
+   * Expected: The Update form opens with empty boxes, default setup/teardown of 30, and the
+   *           layouts listed, instead of showing "undefined" or crashing.
+   * Type:     boundary
+   */
+  it('opens a venue with missing details using empty values and defaults', async () => {
+    const user = userEvent.setup();
+    database.venues = [{ id: 3, name: 'Bare Room', layouts: ['BANQUET'] }];
+    renderVenues();
+    await user.click(await screen.findByRole('button', { name: /Bare Room/i }));
+    const update = within(formCard('Update venue'));
+
+    expect(update.getByLabelText('Location')).toHaveValue('');
+    expect(update.getByLabelText('Facilities')).toHaveValue('');
+    expect(update.getByLabelText('Setup (mins)')).toHaveValue(30);
+    expect(update.getByLabelText('Teardown (mins)')).toHaveValue(30);
+    expect(update.getByText('BANQUET')).toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCUM-7 AC2
+   * Scenario: Venue Staff open a venue for editing, then cancel.
+   * Setup:    Helix Hall selected and its name changed in the form.
+   * Expected: The form closes without sending anything, and the saved venue is unchanged.
+   * Type:     boundary
+   */
+  it('closes the update form without saving when Cancel is clicked', async () => {
+    const user = userEvent.setup();
+    renderVenues();
+    await user.click(await screen.findByRole('button', { name: /Helix Hall/i }));
+    await user.type(screen.getByDisplayValue('Helix Hall'), ' draft');
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.getByText('Select a venue card from the catalogue above to edit its details.')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Update venue' })).not.toBeInTheDocument();
+    expect(api).not.toHaveBeenCalledWith('/api/venues/1', expect.anything());
+    expect(database.venues[0].name).toBe('Helix Hall');
   });
 });

@@ -5,9 +5,11 @@ const optionalNullableText = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? null : value,
   z.string().trim().min(1).nullable().optional()
 );
-const optionalNonNegativeInteger = z.number({
-  message: 'Capacity must be a number',
-}).int('Capacity must be a whole number').min(0, 'Capacity must be at least 0').optional();
+// SCUM-7 AC4: capacity is part of a complete venue record, and a venue must hold at least one
+// person (team decision: 0 counts as incomplete).
+const capacity = z.number({
+  error: (issue) => (issue.input === undefined ? 'Capacity is required' : 'Capacity must be a number'),
+}).int('Capacity must be a whole number').min(1, 'Capacity must be at least 1');
 const layoutName = z.string().trim().min(1);
 
 const layoutUpdate = z.object({
@@ -19,11 +21,11 @@ const layoutUpdate = z.object({
   'A layout name is required unless the layout is being deleted'
 );
 
-// Venue catalogue validation keeps capacity optional while rejecting incomplete numeric values.
+// Shared field rules; every field is optional here so PATCH can send only what changed.
 const venueFields = {
   name: optionalText,
   location: optionalNullableText,
-  capacity: optionalNonNegativeInteger,
+  capacity: capacity.optional(),
   facilities: optionalNullableText,
   accessibility: optionalNullableText,
   operatingHours: optionalNullableText,
@@ -40,6 +42,7 @@ const venueFields = {
 const createVenueSchema = z.object({
   ...venueFields,
   name: z.string().trim().min(1, 'Venue name is required'),
+  capacity,
 }).strict();
 
 const updateVenueSchema = z.object({

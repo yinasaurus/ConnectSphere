@@ -42,7 +42,9 @@ export default function Venues() {
     name: '',
     location: '',
     capacity: 50,
+    facilities: '',
     accessibility: 'Wheelchair access',
+    operatingHours: '',
     layouts: ['THEATRE'],
   });
   const [selectedId, setSelectedId] = useState(null);
@@ -82,6 +84,16 @@ export default function Venues() {
 
   function numberValue(value) {
     return value === '' ? '' : Number(value);
+  }
+
+  // SCUM-7 AC1: a new venue can support several room layouts, so each one is a toggle.
+  function toggleNewVenueLayout(layout) {
+    setForm((current) => ({
+      ...current,
+      layouts: current.layouts.includes(layout)
+        ? current.layouts.filter((item) => item !== layout)
+        : [...current.layouts, layout],
+    }));
   }
 
   function updateLayout(index, value) {
@@ -176,22 +188,30 @@ export default function Venues() {
           <h3>Add venue</h3>
           <div className="grid-2">
             <div className="stack">
-              <input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-              <input type="number" min="0" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: numberValue(e.target.value) })} />
+              <label>Venue name<input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+              <label>Location<input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></label>
+              <label>Capacity<input type="number" min="1" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: numberValue(e.target.value) })} /></label>
+              <label>Operating hours<input placeholder="08:00 - 22:00" value={form.operatingHours} onChange={(e) => setForm({ ...form, operatingHours: e.target.value })} /></label>
             </div>
             <div className="stack">
-              <textarea value={form.accessibility} onChange={(e) => setForm({ ...form, accessibility: e.target.value })} />
-              <select value={form.layouts[0]} onChange={(e) => setForm({ ...form, layouts: [e.target.value] })}>
-                {LAYOUTS.map((layout) => <option key={layout}>{layout}</option>)}
-              </select>
+              <label>Facilities<textarea value={form.facilities} onChange={(e) => setForm({ ...form, facilities: e.target.value })} /></label>
+              <label>Accessibility<textarea value={form.accessibility} onChange={(e) => setForm({ ...form, accessibility: e.target.value })} /></label>
+              <fieldset className="stack">
+                <legend>Supported layouts</legend>
+                {LAYOUTS.map((layout) => (
+                  <label className="checkbox-field" key={layout}>
+                    <input type="checkbox" checked={form.layouts.includes(layout)} onChange={() => toggleNewVenueLayout(layout)} />
+                    {layout}
+                  </label>
+                ))}
+              </fieldset>
               <button className="btn" onClick={async () => {
                 try {
                   await api('/api/venues', { method: 'POST', body: form });
                   setForm({ ...form, name: '' });
                   await reload();
                 } catch (err) {
-                  setError(err.message);
+                  setError(err.details?.map((detail) => `${detail.field}: ${detail.message}`).join(' ') || err.message);
                 }
               }}
               >
@@ -248,7 +268,7 @@ export default function Venues() {
                 <div className="stack">
                   <label>Venue name<input value={updateForm.name} onChange={(e) => setUpdateField('name', e.target.value)} /></label>
                   <label>Location<input value={updateForm.location} onChange={(e) => setUpdateField('location', e.target.value)} /></label>
-                  <label>Capacity<input type="number" min="0" value={updateForm.capacity} onChange={(e) => setUpdateField('capacity', numberValue(e.target.value))} /></label>
+                  <label>Capacity<input type="number" min="1" value={updateForm.capacity} onChange={(e) => setUpdateField('capacity', numberValue(e.target.value))} /></label>
                   <label>Operating hours<input value={updateForm.operatingHours} onChange={(e) => setUpdateField('operatingHours', e.target.value)} placeholder="08:00 - 22:00" /></label>
                   <div className="grid-2">
                     <label>Setup (mins)<input type="number" min="0" value={updateForm.setupMinutes} onChange={(e) => setUpdateField('setupMinutes', numberValue(e.target.value))} /></label>
