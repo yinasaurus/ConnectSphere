@@ -286,6 +286,41 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
   });
 });
 
+describe('SCRUM-78 notifyUser (the write path every decision notice goes through)', () => {
+  const { notifyUser } = require('../src/services/audit.service');
+
+  /*
+   * AC:       SCRUM-78 AC5 (agreed decision: no Coordinator, no notice)
+   * Scenario: notifyUser is asked to notify nobody, as when an event has no Coordinator.
+   * Setup:    userId null, then undefined.
+   * Expected: Nothing is written, so a notice can never be stored without a recipient.
+   * Type:     boundary
+   */
+  it.each([['null', null], ['undefined', undefined]])(
+    'US78-U01 (AC5): a %s user id writes no notification',
+    async (_label, userId) => {
+      await notifyUser(userId, 'BOOKING_DECISION', 'Venue booking approved', 'body', 50);
+      expect(insertOne).not.toHaveBeenCalled();
+    }
+  );
+
+  /*
+   * AC:       SCRUM-78 AC4
+   * Scenario: A notice is written without an event id.
+   * Setup:    userId 21, eventId omitted.
+   * Expected: The row is still written, with event_id null rather than undefined, so the
+   *           insert can't fail on a missing column value; the venue and event names are
+   *           still in the body (see N07).
+   * Type:     boundary
+   */
+  it('US78-U02 (AC4): a notice without an event id is saved with event_id null', async () => {
+    await notifyUser(21, 'BOOKING_DECISION', 'Venue booking approved', 'body');
+    expect(insertOne).toHaveBeenCalledWith('notifications', {
+      user_id: 21, event_id: null, type: 'BOOKING_DECISION', title: 'Venue booking approved', body: 'body',
+    });
+  });
+});
+
 describe('SCRUM-78 POST /api/venues/bookings/:id/decision (route, real session cookie)', () => {
   const app = createApp();
 
