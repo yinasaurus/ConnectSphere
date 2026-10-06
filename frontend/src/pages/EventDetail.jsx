@@ -17,6 +17,8 @@ export default function EventDetail() {
   const [comment, setComment] = useState('');
   const [venueId, setVenueId] = useState('');
   const [reason, setReason] = useState('');
+  const [venueReason, setVenueReason] = useState('');
+  const [venueAlternative, setVenueAlternative] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -149,14 +151,32 @@ export default function EventDetail() {
             </div>
           )}
 
+          {/* SCRUM-78 AC2/AC3: what staff type here goes into the Coordinator's notice. A
+              blank box sends nothing, so the notice shows no reason rather than a made-up one. */}
           {hasRole(ROLES.VENUE_STAFF) && assignedBooking && assignedBooking.status === 'PENDING' && (
-            <div className="card actions">
-              <button className="btn" onClick={() => run(() => api(`/api/venues/bookings/${assignedBooking.id}/decision`, { method: 'POST', body: { approve: true } }))}>
-                Approve venue
-              </button>
-              <button className="btn danger" onClick={() => run(() => api(`/api/venues/bookings/${assignedBooking.id}/decision`, { method: 'POST', body: { approve: false, reason: reason || 'Venue not suitable' } }))}>
-                Reject venue
-              </button>
+            <div className="card stack">
+              <label htmlFor="venue-decision-reason">Reason for rejecting (optional)</label>
+              <textarea id="venue-decision-reason" value={venueReason} onChange={(e) => setVenueReason(e.target.value)} />
+              <label htmlFor="venue-decision-alternative">Suggested alternative (optional)</label>
+              <input id="venue-decision-alternative" value={venueAlternative} onChange={(e) => setVenueAlternative(e.target.value)} />
+              <div className="actions">
+                <button className="btn" onClick={() => run(() => api(`/api/venues/bookings/${assignedBooking.id}/decision`, { method: 'POST', body: { approve: true } }))}>
+                  Approve venue
+                </button>
+                <button
+                  className="btn danger"
+                  onClick={() => run(() => api(`/api/venues/bookings/${assignedBooking.id}/decision`, {
+                    method: 'POST',
+                    body: {
+                      approve: false,
+                      reason: venueReason.trim() || undefined,
+                      alternativeSuggestion: venueAlternative.trim() || undefined,
+                    },
+                  }))}
+                >
+                  Reject venue
+                </button>
+              </div>
             </div>
           )}
 
