@@ -14,6 +14,7 @@ export default function EventDetail() {
   const [comments, setComments] = useState([]);
   const [venues, setVenues] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [equipmentRequests, setEquipmentRequests] = useState([]);
   const [comment, setComment] = useState('');
   const [venueId, setVenueId] = useState('');
   const [reason, setReason] = useState('');
@@ -21,18 +22,21 @@ export default function EventDetail() {
   const [message, setMessage] = useState('');
 
   const reload = useCallback(async () => {
-    const [eventRes, historyRes, commentRes, venueRes, bookingRes] = await Promise.all([
+    const [eventRes, historyRes, commentRes, venueRes, bookingRes, equipmentRes] = await Promise.all([
       api(`/api/events/${id}`),
       canViewPlanning ? api(`/api/events/${id}/history`) : Promise.resolve({ history: [] }),
       canViewPlanning ? api(`/api/comments/${id}`) : Promise.resolve({ comments: [] }),
       canViewPlanning ? api('/api/venues') : Promise.resolve({ venues: [] }),
       api(`/api/events/${id}/venue-bookings`),
+      // SCRUM-39 AC2: Attendees aren't allowed planning details, so they never ask for this.
+      canViewPlanning ? api(`/api/events/${id}/equipment-requests`) : Promise.resolve({ requests: [] }),
     ]);
     setEvent(eventRes.event);
     setHistory(historyRes.history || []);
     setComments(commentRes.comments || []);
     setVenues(venueRes.venues || []);
     setBookings(bookingRes.bookings || []);
+    setEquipmentRequests(equipmentRes.requests || []);
   }, [id, canViewPlanning]);
 
   useEffect(() => {
@@ -198,6 +202,14 @@ export default function EventDetail() {
               <p key={booking.id}>{booking.venue_name}: {booking.status}</p>
             )) : <p className="muted">No booking yet. Essential arrangements must be approved before confirmation.</p>}
           </div>
+          {canViewPlanning && <div className="card">
+            <h3>Equipment requests</h3>
+            {equipmentRequests.length ? equipmentRequests.map((item) => (
+              <p key={item.id}>
+                {item.equipment_name || 'Item no longer in catalogue'} × {item.quantity}: {item.status}
+              </p>
+            )) : <p className="muted">No equipment requested yet.</p>}
+          </div>}
           {canViewPlanning && <div className="card">
             <h3>Status history</h3>
             {history.map((item) => (

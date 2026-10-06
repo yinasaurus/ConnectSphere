@@ -21,6 +21,8 @@ it('loads an organiser event and its booking without requesting the restricted g
     if (path === '/api/comments/3') return { comments: [] };
     if (path === '/api/venues') return { venues: [] };
     if (path === '/api/events/3/venue-bookings') return { bookings: [{ id: 7, venue_name: 'Hall', status: 'APPROVED' }] };
+    // SCRUM-39: the page now also loads the event's equipment requests for planning roles.
+    if (path === '/api/events/3/equipment-requests') return { requests: [] };
     throw new Error('You do not have access to this action');
   });
   render(
@@ -51,4 +53,6 @@ it('loads an attendee event without requesting restricted planning data', async 
   expect(screen.queryByText('Status history')).not.toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith('/api/comments/3');
   expect(api).not.toHaveBeenCalledWith('/api/events/3/history');
+  // SCRUM-39: attendees don't get planning details, so equipment is never requested.
+  expect(api).not.toHaveBeenCalledWith('/api/events/3/equipment-requests');
 });
