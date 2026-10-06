@@ -12,6 +12,8 @@ router.get('/', controller.list);
 router.post('/', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.create);
 router.get('/:id', controller.get);
 router.get('/:id/venue-bookings', controller.venueBookings);
+// SCRUM-39 AC2: access is decided per event in the service (same rules as GET /:id).
+router.get('/:id/equipment-requests', controller.equipmentRequests);
 router.patch('/:id', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.update);
 router.post('/:id/submit', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.submit);
 router.post('/:id/status', requireRole(ROLES.EVENT_COORDINATOR), controller.changeStatus);

@@ -19,6 +19,15 @@ const venueBookings = asyncHandler(async (req, res) => {
   res.json({ bookings });
 });
 
+/**
+ * Purpose: GET /api/events/:id/equipment-requests, the event's equipment requests.
+ * AC: SCRUM-39 AC2. Output: 200 { requests }. 403/404 from the service go to the error handler.
+ */
+const equipmentRequests = asyncHandler(async (req, res) => {
+  const requests = await eventsService.listEquipmentRequests(req.user, req.params.id);
+  res.json({ requests });
+});
+
 const create = asyncHandler(async (req, res) => {
   const event = await eventsService.createEvent(req.user, req.body);
   res.status(201).json({ event });
@@ -67,6 +76,7 @@ module.exports = {
   list,
   get,
   venueBookings,
+  equipmentRequests,
   create,
   update,
   submit,

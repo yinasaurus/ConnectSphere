@@ -173,6 +173,36 @@ async function listVenueBookings(user, eventId) {
   }));
 }
 
+/**
+ * Purpose: the equipment requested for one event (item, quantity, status), shown with the
+ * event details so authorised users can see its equipment requirement in one place.
+ * AC: SCRUM-39 AC2 (equipment requirement), AC1 (only users allowed to see the event).
+ * Inputs: the signed-in user and the event id.
+ * Output: [{ id, event_id, equipment_id, equipment_name, quantity, status }], newest first.
+ * Failure: 403 for roles without planning access (Attendees get the public view only);
+ * 404 if the event doesn't exist or the user can't see it (e.g. another organisation),
+ * checked before any equipment is read.
+ */
+async function listEquipmentRequests(user, eventId) {
+  if (!canViewPlanning(user)) throw httpError(403, 'Planning information is restricted', 'FORBIDDEN');
+  const event = await getEvent(user, eventId);
+  const rows = await fetchMany(
+    supabase.from('equipment_requests')
+      .select('id, event_id, equipment_id, quantity, status, equipment ( name )')
+      .eq('event_id', event.id)
+      .order('id', { ascending: false })
+  );
+  // Decision reasons and who asked/decided are left out; readers need the requirement itself.
+  return rows.map((row) => ({
+    id: row.id,
+    event_id: row.event_id,
+    equipment_id: row.equipment_id,
+    equipment_name: row.equipment?.name || null,
+    quantity: row.quantity,
+    status: row.status,
+  }));
+}
+
 async function createEvent(user, payload) {
   if (!hasRole(user, ROLES.EVENT_ORGANISER) && !hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only organisers can create event requests', 'FORBIDDEN');
@@ -507,6 +537,7 @@ module.exports = {
   listEvents,
   getEvent,
   listVenueBookings,
+  listEquipmentRequests,
   assertPlanningAccess,
   createEvent,
   updateEvent,
