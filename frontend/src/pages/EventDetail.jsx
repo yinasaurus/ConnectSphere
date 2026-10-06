@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import EventDecisionPanel from '../components/EventDecisionPanel';
 import StatusBadge from '../components/StatusBadge';
 import { ROLES } from '../constants';
 
@@ -111,14 +112,12 @@ export default function EventDetail() {
             <div className="card stack">
               <h3>Coordinator actions</h3>
               {event.status === 'UNDER_REVIEW' && (
-                <div className="actions">
-                  <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'PLANNING' } }))}>
-                    Approve for planning
-                  </button>
-                  <button className="btn danger" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'REJECTED', reason: reason || 'Returned for rework' } }))}>
-                    Reject / return
-                  </button>
-                </div>
+                <EventDecisionPanel
+                  onDecide={(decision, text) => run(() => api(`/api/events/${id}/decision`, {
+                    method: 'POST',
+                    body: { decision, reason: text },
+                  }))}
+                />
               )}
               {event.status === 'PLANNING' && (
                 <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'CONFIRMED' } }))}>
@@ -130,8 +129,12 @@ export default function EventDetail() {
                   Mark completed
                 </button>
               )}
-              <label>Reason / note</label>
-              <textarea value={reason} onChange={(e) => setReason(e.target.value)} />
+              {event.status !== 'UNDER_REVIEW' && (
+                <>
+                  <label>Reason / note</label>
+                  <textarea value={reason} onChange={(e) => setReason(e.target.value)} />
+                </>
+              )}
               {event.status === 'PLANNING' && (
                 <>
                   <label>Request a venue</label>

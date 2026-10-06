@@ -69,6 +69,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Coordinators are **auto-assigned**, one per event, fair load | least active events on submit |
 | Coordinators can **view** other events but only **edit** assigned ones | list vs update |
 | Reassignment: current coordinator requests, new coordinator accepts | `/reassign` endpoints |
+| Approve / reject (SCRUM-17): only the **assigned** coordinator decides, nobody while unassigned; reject needs a reason of 10–1000 characters; organiser is notified with the reason; reason kept on the event, in status history and in the audit log | `POST /api/events/:id/decision` → `decideEvent` |
 | Organisers only see their **organisation** | list visibility |
 | Multiple roles on one account | `user_roles` + demo user `hybrid@...` |
 | Venue staff CRUD venues; tech staff maintain equipment | venue/equipment routes |

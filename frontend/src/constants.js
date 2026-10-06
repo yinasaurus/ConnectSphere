@@ -25,6 +25,8 @@ export const STATUS_LABELS = {
   REJECTED: 'Rejected',
 };
 
+export const MIN_REJECTION_REASON_LENGTH = 10;
+
 export const CATEGORIES = [
   'CONFERENCE',
   'WORKSHOP',

@@ -1,6 +1,12 @@
 const { supabase, fetchOne, fetchMany, fetchCount, insertOne, updateById } = require('../config/db');
 const { ROLES } = require('../constants/roles');
-const { EVENT_STATUS, SIGNIFICANT_FIELDS } = require('../constants/statuses');
+const {
+  EVENT_STATUS,
+  EVENT_DECISION,
+  MIN_REJECTION_REASON_LENGTH,
+  SIGNIFICANT_FIELDS,
+} = require('../constants/statuses');
+const { REJECTION_REASON_MESSAGE } = require('../validators/events.validators');
 const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
 const { assertTransition } = require('../domain/statusMachine');
@@ -337,7 +343,32 @@ async function submitEvent(user, id) {
   return getEvent(user, id);
 }
 
-async function changeStatus(user, id, nextStatus, reason) {
+const DECISION_TARGET_STATUS = {
+  [EVENT_DECISION.APPROVE]: EVENT_STATUS.PLANNING,
+  [EVENT_DECISION.REJECT]: EVENT_STATUS.REJECTED,
+};
+
+async function decideEvent(user, id, decision, reason) {
+  const nextStatus = DECISION_TARGET_STATUS[decision];
+  if (!nextStatus) throw httpError(400, 'Decision must be APPROVE or REJECT', 'VALIDATION_ERROR');
+  return changeStatus(user, id, nextStatus, reason, { expectedStatus: EVENT_STATUS.UNDER_REVIEW });
+}
+
+function statusNotification(name, fromStatus, nextStatus, note) {
+  if (nextStatus === EVENT_STATUS.REJECTED) {
+    return { title: 'Event request rejected', body: `${name} was rejected. Reason: ${note}` };
+  }
+  if (fromStatus === EVENT_STATUS.UNDER_REVIEW && nextStatus === EVENT_STATUS.PLANNING) {
+    const comment = note ? ` Coordinator comment: ${note}` : '';
+    return { title: 'Event request approved', body: `${name} was approved for planning.${comment}` };
+  }
+  return {
+    title: `Event ${nextStatus.toLowerCase().replace('_', ' ')}`,
+    body: `${name} is now ${nextStatus}.`,
+  };
+}
+
+async function changeStatus(user, id, nextStatus, reason, { expectedStatus } = {}) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only coordinators can change event status', 'FORBIDDEN');
   }
@@ -348,7 +379,20 @@ async function changeStatus(user, id, nextStatus, reason) {
     throw httpError(403, 'Only the assigned coordinator can update this event', 'FORBIDDEN');
   }
 
+  if (expectedStatus && existing.status !== expectedStatus) {
+    throw httpError(
+      409,
+      'Only event requests under review can be approved or rejected',
+      'INVALID_STATUS_TRANSITION'
+    );
+  }
+
   assertTransition(existing.status, nextStatus);
+
+  const note = typeof reason === 'string' ? reason.trim() : '';
+  if (nextStatus === EVENT_STATUS.REJECTED && note.length < MIN_REJECTION_REASON_LENGTH) {
+    throw httpError(400, REJECTION_REASON_MESSAGE, 'VALIDATION_ERROR', { fields: ['reason'] });
+  }
 
   const patch = {
     status: nextStatus,
@@ -356,7 +400,7 @@ async function changeStatus(user, id, nextStatus, reason) {
   };
 
   if (nextStatus === EVENT_STATUS.REJECTED) {
-    patch.rejection_reason = reason || 'Rejected';
+    patch.rejection_reason = note;
   }
   if (nextStatus === EVENT_STATUS.CONFIRMED) {
     const ready = await isReadyToConfirm(existing);
@@ -366,21 +410,16 @@ async function changeStatus(user, id, nextStatus, reason) {
   }
 
   await updateById('events', id, patch);
-  await writeStatusHistory(id, user.id, existing.status, nextStatus, reason || null);
+  await writeStatusHistory(id, user.id, existing.status, nextStatus, note || null);
   await writeAudit(user.id, 'EVENT_STATUS_CHANGED', 'event', id, {
     from: existing.status,
     to: nextStatus,
-    reason,
+    reason: note || null,
   });
 
   if (existing.organiser_id) {
-    await notifyUser(
-      existing.organiser_id,
-      'EVENT_STATUS_CHANGED',
-      `Event ${nextStatus.toLowerCase().replace('_', ' ')}`,
-      `${existing.name} is now ${nextStatus}.`,
-      id
-    );
+    const { title, body } = statusNotification(existing.name, existing.status, nextStatus, note);
+    await notifyUser(existing.organiser_id, 'EVENT_STATUS_CHANGED', title, body, id);
   }
 
   return getEvent(user, id);
@@ -511,6 +550,7 @@ module.exports = {
   createEvent,
   updateEvent,
   submitEvent,
+  decideEvent,
   changeStatus,
   requestCoordinatorChange,
   acceptCoordinatorChange,
