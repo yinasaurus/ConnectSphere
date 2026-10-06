@@ -46,6 +46,24 @@ function findMissingSubmissionFields(row) {
   });
 }
 
+// Guards against events like "starts 6 Oct, ends 5 Oct" that are never valid,
+// whichever of create/update set the dates. Skipped when either side is
+// absent (e.g. a draft saved before its dates are filled in, SCUM-15).
+function validateDateRange(startAt, endAt) {
+  if (startAt === null || startAt === undefined || endAt === null || endAt === undefined) return;
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+  if (start >= end) {
+    throw httpError(
+      400,
+      'Event start date/time must be before the end date/time',
+      'VALIDATION_ERROR',
+      { fields: ['startAt', 'endAt'] }
+    );
+  }
+}
+
 function mapEvent(row) {
   if (!row) return null;
   return {
@@ -187,6 +205,8 @@ async function createEvent(user, payload) {
   const name = (payload.name || '').trim();
   if (!name) throw httpError(400, 'Event name is required', 'VALIDATION_ERROR');
 
+  validateDateRange(payload.startAt, payload.endAt);
+
   const created = await insertOne('events', {
     organisation_id: user.organisationId || payload.organisationId || null,
     organiser_id: hasRole(user, ROLES.EVENT_ORGANISER) ? user.id : payload.organiserId || user.id,
@@ -248,6 +268,10 @@ async function updateEvent(user, id, payload) {
   }
 
   const patch = toEventPatch(payload);
+  const nextStart = 'start_at' in patch ? patch.start_at : existing.start_at;
+  const nextEnd = 'end_at' in patch ? patch.end_at : existing.end_at;
+  validateDateRange(nextStart, nextEnd);
+
   patch.updated_at = new Date().toISOString();
   await updateById('events', id, patch);
   await writeAudit(user.id, 'EVENT_UPDATED', 'event', id, payload);
