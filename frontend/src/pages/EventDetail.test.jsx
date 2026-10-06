@@ -14,6 +14,15 @@ beforeEach(() => {
   useAuth.mockReturnValue({ user: { id: 1 }, hasRole: (...roles) => roles.includes('EVENT_ORGANISER') });
 });
 
+/*
+ * AC:       SCRUM-39 AC1 + AC2 (test first added with role access in 5dce993, which has no story key)
+ * Scenario: The event's own Organiser opens a Planning event.
+ * Setup:    Organiser user 1; event 3 owned by user 1; one APPROVED booking at "Hall"; no
+ *           equipment requests. Any other path fails, as the API would refuse it.
+ * Expected: The event and its booking ("Hall: APPROVED") are shown, and the page never asks
+ *           for the global bookings queue, which Organisers aren't allowed to see.
+ * Type:     normal
+ */
 it('loads an organiser event and its booking without requesting the restricted global queue', async () => {
   api.mockImplementation(async (path) => {
     if (path === '/api/events/3') return { event: { id: 3, organiserId: 1, name: 'My event', status: 'PLANNING' } };
@@ -35,6 +44,17 @@ it('loads an organiser event and its booking without requesting the restricted g
   expect(api).not.toHaveBeenCalledWith('/api/venues/bookings');
 });
 
+/*
+ * AC:       SCRUM-39 AC1 (agreed decision: Attendees keep the public view; test first added
+ *           with role access in 5dce993, which has no story key)
+ * Scenario: An Attendee opens a Confirmed event.
+ * Setup:    Attendee user 8; event 3 Confirmed with no bookings. Any planning path fails
+ *           with "Forbidden planning information".
+ * Expected: The event and the Register button are shown; no Discussion or Status history;
+ *           comments, history and equipment requests are never requested, so a forbidden
+ *           call can't break the page or leak planning data.
+ * Type:     boundary
+ */
 it('loads an attendee event without requesting restricted planning data', async () => {
   useAuth.mockReturnValue({ user: { id: 8 }, hasRole: (...roles) => roles.includes('ATTENDEE') });
   api.mockImplementation(async (path) => {
