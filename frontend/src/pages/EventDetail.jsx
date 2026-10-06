@@ -18,6 +18,7 @@ export default function EventDetail() {
   const [venueId, setVenueId] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
+  const [coordinatorError, setCoordinatorError] = useState('');
   const [message, setMessage] = useState('');
 
   const reload = useCallback(async () => {
@@ -42,16 +43,23 @@ export default function EventDetail() {
     return () => clearInterval(timer);
   }, [reload]);
 
-  async function run(action) {
+  async function run(action, showError = setError) {
     setError('');
+    setCoordinatorError('');
     setMessage('');
     try {
       await action();
       setMessage('Updated.');
       await reload();
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
     }
+  }
+
+  // The coordinator card sits below the fold, so its errors are shown inside the card
+  // rather than in the page-level alert the coordinator would have to scroll up to see.
+  function runCoordinatorAction(action) {
+    return run(action, setCoordinatorError);
   }
 
   if (!event) return <p className="muted">{error || 'Loading event…'}</p>;
@@ -59,6 +67,18 @@ export default function EventDetail() {
   const isOrganiser = event.organiserId === user.id;
   const isCoordinator = event.coordinatorId === user.id;
   const assignedBooking = bookings[0];
+  // SCRUM-5 AC6: mirrors the venue half of the backend's isReadyForSafetyCheck (rejected and
+  // cancelled bookings don't count). Equipment isn't loaded on this page, so the backend still
+  // has the final say and its refusal is shown in the coordinator card.
+  const activeBookings = bookings.filter((booking) => !['REJECTED', 'CANCELLED'].includes(booking.status));
+  const pendingBookings = activeBookings.filter((booking) => booking.status !== 'APPROVED');
+  const venuesReadyForSafetyCheck = activeBookings.length > 0 && pendingBookings.length === 0;
+  let safetyCheckHint = '';
+  if (!activeBookings.length) {
+    safetyCheckHint = 'Request a venue first. Every venue booking must be approved before the safety check.';
+  } else if (pendingBookings.length) {
+    safetyCheckHint = `Waiting for venue approval: ${pendingBookings.length} booking${pendingBookings.length === 1 ? '' : 's'} pending.`;
+  }
 
   return (
     <>
@@ -99,33 +119,42 @@ export default function EventDetail() {
           {isCoordinator && (
             <div className="card stack">
               <h3>Coordinator actions</h3>
+              {coordinatorError && <div className="alert" role="alert">{coordinatorError}</div>}
               {event.status === 'UNDER_REVIEW' && (
                 <div className="actions">
-                  <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'APPROVED' } }))}>
+                  <button className="btn" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'APPROVED' } }))}>
                     Approve
                   </button>
-                  <button className="btn danger" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'REJECTED', reason } }))}>
+                  <button className="btn danger" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'REJECTED', reason } }))}>
                     Reject / return
                   </button>
                 </div>
               )}
               {event.status === 'APPROVED' && (
-                <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'PLANNING' } }))}>
+                <button className="btn" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'PLANNING' } }))}>
                   Start planning
                 </button>
               )}
               {event.status === 'PLANNING' && (
-                <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'AWAITING_SAFETY_CHECK' } }))}>
-                  Send to safety check
-                </button>
+                <>
+                  <button
+                    className="btn"
+                    disabled={!venuesReadyForSafetyCheck}
+                    aria-describedby={safetyCheckHint ? 'safety-check-hint' : undefined}
+                    onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'AWAITING_SAFETY_CHECK' } }))}
+                  >
+                    Send to safety check
+                  </button>
+                  {safetyCheckHint && <p className="muted" id="safety-check-hint">{safetyCheckHint}</p>}
+                </>
               )}
               {event.status === 'PREPARATION' && (
-                <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'CONFIRMED' } }))}>
+                <button className="btn" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'CONFIRMED' } }))}>
                   Confirm event
                 </button>
               )}
               {event.status === 'CONFIRMED' && (
-                <button className="btn secondary" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'COMPLETED' } }))}>
+                <button className="btn secondary" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'COMPLETED' } }))}>
                   Mark completed
                 </button>
               )}
@@ -145,7 +174,7 @@ export default function EventDetail() {
                   <button
                     className="btn secondary"
                     disabled={!venueId || !event.startAt}
-                    onClick={() => run(() => api('/api/venues/bookings', {
+                    onClick={() => runCoordinatorAction(() => api('/api/venues/bookings', {
                       method: 'POST',
                       body: {
                         eventId: Number(id),
