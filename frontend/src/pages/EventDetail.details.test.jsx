@@ -31,7 +31,7 @@ const EVENT = {
 
 function mockApi({ event = EVENT, bookings = [{ id: 7, venue_name: 'Helix Hall', status: 'APPROVED' }],
   requests = [{ id: 12, equipment_id: 4, equipment_name: 'Projector', quantity: 2, status: 'PENDING' }],
-  eventError = null } = {}) {
+  eventError = null, equipmentError = null } = {}) {
   api.mockImplementation(async (path) => {
     if (path === '/api/events/3') {
       if (eventError) throw new Error(eventError);
@@ -41,7 +41,10 @@ function mockApi({ event = EVENT, bookings = [{ id: 7, venue_name: 'Helix Hall',
     if (path === '/api/comments/3') return { comments: [] };
     if (path === '/api/venues') return { venues: [] };
     if (path === '/api/events/3/venue-bookings') return { bookings };
-    if (path === '/api/events/3/equipment-requests') return { requests };
+    if (path === '/api/events/3/equipment-requests') {
+      if (equipmentError) throw new Error(equipmentError);
+      return { requests };
+    }
     throw new Error(`Unexpected ${path}`);
   });
 }
@@ -144,5 +147,26 @@ describe('SCRUM-39 event details on the event page', () => {
     renderAs('EVENT_ORGANISER', 1);
     expect(await screen.findByText('Event not found')).toBeInTheDocument();
     expect(screen.queryByText('Attendance:')).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCRUM-39 AC1 + AC2 (error side)
+   * Scenario: The event loads but its equipment requests can't be loaded.
+   * Setup:    Coordinator on a Planning event; GET /api/events/3/equipment-requests fails
+   *           with "Server unavailable"; everything else succeeds.
+   * Expected: The other details (attendance, venue booking) are still shown, and the
+   *           equipment card says the requests couldn't be loaded, instead of the whole page
+   *           failing or wrongly claiming nothing was requested.
+   * Type:     error
+   */
+  it('US39-F05 (AC1+AC2): an equipment loading failure does not hide the event details', async () => {
+    mockApi({ equipmentError: 'Server unavailable' });
+    renderAs('EVENT_COORDINATOR');
+    expect(await screen.findByText('Leadership Forum')).toBeInTheDocument();
+    expect(screen.getByText('Attendance:').parentElement).toHaveTextContent('Attendance: 120');
+    expect(screen.getByText('Helix Hall: APPROVED')).toBeInTheDocument();
+    expect(screen.getByText('Equipment requests could not be loaded: Server unavailable')).toBeInTheDocument();
+    // An empty list here would wrongly tell staff that no equipment is needed.
+    expect(screen.queryByText('No equipment requested yet.')).not.toBeInTheDocument();
   });
 });

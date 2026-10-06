@@ -23,6 +23,7 @@ export default function EventDetail() {
   const [venues, setVenues] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [equipmentRequests, setEquipmentRequests] = useState([]);
+  const [equipmentError, setEquipmentError] = useState('');
   const [comment, setComment] = useState('');
   const [venueId, setVenueId] = useState('');
   const [reason, setReason] = useState('');
@@ -39,7 +40,11 @@ export default function EventDetail() {
       canViewPlanning ? api('/api/venues') : Promise.resolve({ venues: [] }),
       api(`/api/events/${id}/venue-bookings`),
       // SCRUM-39 AC2: Attendees aren't allowed planning details, so they never ask for this.
-      canViewPlanning ? api(`/api/events/${id}/equipment-requests`) : Promise.resolve({ requests: [] }),
+      // SCRUM-39 AC1: a failure here is shown in the equipment card only, so it can't stop
+      // the user from viewing the rest of the event.
+      canViewPlanning
+        ? api(`/api/events/${id}/equipment-requests`).catch((err) => ({ requests: [], loadError: err.message }))
+        : Promise.resolve({ requests: [] }),
     ]);
     setEvent(eventRes.event);
     setHistory(historyRes.history || []);
@@ -47,6 +52,7 @@ export default function EventDetail() {
     setVenues(venueRes.venues || []);
     setBookings(bookingRes.bookings || []);
     setEquipmentRequests(equipmentRes.requests || []);
+    setEquipmentError(equipmentRes.loadError || '');
   }, [id, canViewPlanning]);
 
   useEffect(() => {
@@ -214,7 +220,8 @@ export default function EventDetail() {
           </div>
           {canViewPlanning && <div className="card">
             <h3>Equipment requests</h3>
-            {equipmentRequests.length ? equipmentRequests.map((item) => (
+            {equipmentError ? <p className="alert">Equipment requests could not be loaded: {equipmentError}</p>
+              : equipmentRequests.length ? equipmentRequests.map((item) => (
               <p key={item.id}>
                 {item.equipment_name || 'Item no longer in catalogue'} × {item.quantity}: {item.status}
               </p>
