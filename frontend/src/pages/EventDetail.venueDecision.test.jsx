@@ -128,7 +128,7 @@ describe('SCRUM-78 notice on the Notifications page', () => {
         event_id: 3,
         type: 'BOOKING_DECISION',
         title: 'Venue booking rejected',
-        body: 'Your venue booking request for Leadership Forum at Helix Hall was rejected. Reason: Stage under repair',
+        body: 'The venue booking request for Leadership Forum at Helix Hall was rejected. Reason: Stage under repair',
         read_at: null,
       }],
     });

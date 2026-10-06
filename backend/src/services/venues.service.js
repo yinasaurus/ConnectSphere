@@ -342,7 +342,8 @@ async function decideBooking(user, id, decision) {
  */
 function buildBookingDecisionNotice({ status, eventName, venueName, reason, alternativeSuggestion }) {
   const outcome = status === BOOKING_STATUS.APPROVED ? 'approved' : 'rejected';
-  const parts = [`Your venue booking request for ${eventName} at ${venueName} was ${outcome}.`];
+  // "The", not "Your": after a reassignment the Coordinator told may not have sent it.
+  const parts = [`The venue booking request for ${eventName} at ${venueName} was ${outcome}.`];
   if (outcome === 'rejected') {
     const givenReason = String(reason || '').trim();
     const givenAlternative = String(alternativeSuggestion || '').trim();

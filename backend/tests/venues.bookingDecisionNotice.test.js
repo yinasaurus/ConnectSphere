@@ -84,7 +84,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
       event_id: 50,
       type: 'BOOKING_DECISION',
       title: 'Venue booking approved',
-      body: 'Your venue booking request for Leadership Forum at Helix Hall was approved.',
+      body: 'The venue booking request for Leadership Forum at Helix Hall was approved.',
     }]);
   });
 
@@ -104,7 +104,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
     expect(notificationRows()).toEqual([expect.objectContaining({
       user_id: 21,
       title: 'Venue booking rejected',
-      body: 'Your venue booking request for Leadership Forum at Helix Hall was rejected.'
+      body: 'The venue booking request for Leadership Forum at Helix Hall was rejected.'
         + ' Reason: Stage under repair Suggested alternative: Orchid Room',
     })]);
   });
@@ -122,7 +122,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
     mockLookups();
     await venuesService.decideBooking(STAFF, 5, { approve: false, reason: 'Double-booked by facilities' });
     const [row] = notificationRows();
-    expect(row.body).toBe('Your venue booking request for Leadership Forum at Helix Hall was rejected.'
+    expect(row.body).toBe('The venue booking request for Leadership Forum at Helix Hall was rejected.'
       + ' Reason: Double-booked by facilities');
   });
 
@@ -144,7 +144,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
     await venuesService.decideBooking(STAFF, 5, { approve: false, reason });
     expect(notificationRows()).toEqual([expect.objectContaining({
       user_id: 21,
-      body: 'Your venue booking request for Leadership Forum at Helix Hall was rejected.',
+      body: 'The venue booking request for Leadership Forum at Helix Hall was rejected.',
     })]);
   });
 
@@ -160,7 +160,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
     mockLookups();
     await venuesService.decideBooking(STAFF, 5, { approve: false, reason: '', alternativeSuggestion: 'Orchid Room' });
     const [row] = notificationRows();
-    expect(row.body).toBe('Your venue booking request for Leadership Forum at Helix Hall was rejected.'
+    expect(row.body).toBe('The venue booking request for Leadership Forum at Helix Hall was rejected.'
       + ' Suggested alternative: Orchid Room');
     expect(row.body).not.toContain('Reason');
   });
@@ -177,7 +177,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
     mockLookups();
     await venuesService.decideBooking(STAFF, 5, { approve: true, reason: 'Approved, use the side entrance' });
     const [row] = notificationRows();
-    expect(row.body).toBe('Your venue booking request for Leadership Forum at Helix Hall was approved.');
+    expect(row.body).toBe('The venue booking request for Leadership Forum at Helix Hall was approved.');
   });
 
   /*
@@ -192,7 +192,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
     mockLookups({ venue: null });
     await venuesService.decideBooking(STAFF, 5, { approve: true });
     const [row] = notificationRows();
-    expect(row.body).toBe('Your venue booking request for Leadership Forum at venue #8 was approved.');
+    expect(row.body).toBe('The venue booking request for Leadership Forum at venue #8 was approved.');
     expect(row.event_id).toBe(50);
   });
 
@@ -374,7 +374,7 @@ describe('SCRUM-78 POST /api/venues/bookings/:id/decision (route, real session c
     expect(notificationRows()).toEqual([expect.objectContaining({
       user_id: 21,
       event_id: 50,
-      body: 'Your venue booking request for Leadership Forum at Helix Hall was rejected.'
+      body: 'The venue booking request for Leadership Forum at Helix Hall was rejected.'
         + ' Reason: Stage under repair Suggested alternative: Orchid Room',
     })]);
   });
