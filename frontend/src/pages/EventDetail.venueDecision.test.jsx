@@ -87,7 +87,8 @@ describe('SCRUM-78 Venue Staff decision on the event page', () => {
       await user.click(screen.getByRole('button', { name: 'Reject venue' }));
       const body = decisionBody();
       expect(body.approve).toBe(false);
-      // Checked one by one: toEqual would treat a missing field and an undefined one alike.
+      // Undefined fields are dropped when the body is sent as JSON, so the server gets no
+      // reason and no alternative; in particular the old "Venue not suitable" default is gone.
       expect(body.reason).toBeUndefined();
       expect(body.alternativeSuggestion).toBeUndefined();
     }
@@ -114,8 +115,9 @@ describe('SCRUM-78 notice on the Notifications page', () => {
   /*
    * AC:       SCRUM-78 AC2 + AC4 (display side)
    * Scenario: The Coordinator opens Notifications after a rejection.
-   * Setup:    The API returns the BOOKING_DECISION notice the backend writes for a rejection
-   *           with a reason, linked to event 3.
+   * Setup:    The API returns a BOOKING_DECISION notice for a rejection with a reason, linked
+   *           to event 3. Its text is a copy of what the backend writes; the backend text
+   *           itself is checked in US78-N03, so this test only proves the page shows it.
    * Expected: The title, the full text (event, venue, reason) and a link to the event are
    *           shown, so the Coordinator can act without searching for the event.
    * Type:     normal
