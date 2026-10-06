@@ -18,6 +18,8 @@ router.get(
   controller.bookings
 );
 router.post('/bookings', requireRole(ROLES.EVENT_COORDINATOR), controller.requestBooking);
+// Venue Staff approve or reject a booking request; the assigned Coordinator is notified
+// (SCRUM-78). Anyone else gets 403 here, before anything is saved or sent.
 router.post('/bookings/:id/decision', requireRole(ROLES.VENUE_STAFF), controller.decideBooking);
 
 router.get('/unavailability', controller.unavailability);

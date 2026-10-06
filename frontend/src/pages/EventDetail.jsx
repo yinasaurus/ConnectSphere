@@ -5,6 +5,14 @@ import { useAuth } from '../auth';
 import StatusBadge from '../components/StatusBadge';
 import { ROLES } from '../constants';
 
+/**
+ * Purpose: one event's page. Shows the event and, depending on the user's roles, the actions
+ * they can take: Organisers submit, Coordinators review and request a venue, Venue Staff
+ * approve or reject the pending venue booking, Attendees register.
+ * AC: SCRUM-78 AC1-AC3 (the Venue Staff decision card sends the reason and alternative
+ * staff typed, or none). The other sections belong to earlier stories.
+ * Failure: load errors are shown in place of the event; action errors are shown above it.
+ */
 export default function EventDetail() {
   const { id } = useParams();
   const { user, hasRole } = useAuth();
@@ -22,6 +30,8 @@ export default function EventDetail() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
+  // Loads the event, its venue bookings and, for planning roles only, history, comments and
+  // venues; other roles never request planning data they aren't allowed to see.
   const reload = useCallback(async () => {
     const [eventRes, historyRes, commentRes, venueRes, bookingRes] = await Promise.all([
       api(`/api/events/${id}`),
@@ -41,6 +51,8 @@ export default function EventDetail() {
     reload().catch((err) => setError(err.message));
   }, [reload]);
 
+  // Runs one button's API call, then shows "Updated." and reloads the page data, or shows the
+  // server's error message. Used by every action button, including Approve/Reject venue.
   async function run(action) {
     setError('');
     setMessage('');

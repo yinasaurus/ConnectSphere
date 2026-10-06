@@ -355,6 +355,18 @@ function buildBookingDecisionNotice({ status, eventName, venueName, reason, alte
   return { title: `Venue booking ${outcome}`, body: parts.join(' ') };
 }
 
+/**
+ * Purpose: finds a booking at the venue that overlaps the requested time once setup and
+ * turnaround are added (W7 #1: the occupied window includes setup and turnaround), so
+ * requestBooking can refuse a double booking.
+ * AC: used by requestBooking; for SCRUM-78 AC6 it means a refused request never becomes a
+ * pending booking.
+ * Business rule source: Week 4 Q&A, "confirmed bookings block availability". PENDING and
+ * TENTATIVE bookings also count here (NEEDS HUMAN: purpose unclear, the Q&A leaves pending
+ * conflicts to the team).
+ * Inputs: venueId, startAt, endAt, and setup/turnaround minutes (missing or 0 counts as 30).
+ * Output: the first overlapping booking ({ id }) or null. Database errors are passed on.
+ */
 async function findConflict(venueId, startAt, endAt, setupMinutes = 30, teardownMinutes = 30) {
   const start = new Date(startAt);
   const end = new Date(endAt);
