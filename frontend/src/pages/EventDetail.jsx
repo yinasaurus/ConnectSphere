@@ -5,6 +5,14 @@ import { useAuth } from '../auth';
 import StatusBadge from '../components/StatusBadge';
 import { ROLES } from '../constants';
 
+/**
+ * Purpose: one event's page. Shows the event and, depending on the user's roles, the actions
+ * they can take: Organisers submit, Coordinators review and request a venue, Venue Staff
+ * approve or reject the pending venue booking, Attendees register.
+ * AC: SCRUM-78 AC1-AC3 (the Venue Staff decision card sends the reason and alternative
+ * staff typed, or none). The other sections belong to earlier stories.
+ * Failure: load errors are shown in place of the event; action errors are shown above it.
+ */
 export default function EventDetail() {
   const { id } = useParams();
   const { user, hasRole } = useAuth();
@@ -17,9 +25,13 @@ export default function EventDetail() {
   const [comment, setComment] = useState('');
   const [venueId, setVenueId] = useState('');
   const [reason, setReason] = useState('');
+  const [venueReason, setVenueReason] = useState('');
+  const [venueAlternative, setVenueAlternative] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
+  // Loads the event, its venue bookings and, for planning roles only, history, comments and
+  // venues; other roles never request planning data they aren't allowed to see.
   const reload = useCallback(async () => {
     const [eventRes, historyRes, commentRes, venueRes, bookingRes] = await Promise.all([
       api(`/api/events/${id}`),
@@ -39,6 +51,8 @@ export default function EventDetail() {
     reload().catch((err) => setError(err.message));
   }, [reload]);
 
+  // Runs one button's API call, then shows "Updated." and reloads the page data, or shows the
+  // server's error message. Used by every action button, including Approve/Reject venue.
   async function run(action) {
     setError('');
     setMessage('');
@@ -149,14 +163,32 @@ export default function EventDetail() {
             </div>
           )}
 
+          {/* SCRUM-78 AC2/AC3: what staff type here goes into the Coordinator's notice. A
+              blank box sends nothing, so the notice shows no reason rather than a made-up one. */}
           {hasRole(ROLES.VENUE_STAFF) && assignedBooking && assignedBooking.status === 'PENDING' && (
-            <div className="card actions">
-              <button className="btn" onClick={() => run(() => api(`/api/venues/bookings/${assignedBooking.id}/decision`, { method: 'POST', body: { approve: true } }))}>
-                Approve venue
-              </button>
-              <button className="btn danger" onClick={() => run(() => api(`/api/venues/bookings/${assignedBooking.id}/decision`, { method: 'POST', body: { approve: false, reason: reason || 'Venue not suitable' } }))}>
-                Reject venue
-              </button>
+            <div className="card stack">
+              <label htmlFor="venue-decision-reason">Reason for rejecting (optional)</label>
+              <textarea id="venue-decision-reason" value={venueReason} onChange={(e) => setVenueReason(e.target.value)} />
+              <label htmlFor="venue-decision-alternative">Suggested alternative (optional)</label>
+              <input id="venue-decision-alternative" value={venueAlternative} onChange={(e) => setVenueAlternative(e.target.value)} />
+              <div className="actions">
+                <button className="btn" onClick={() => run(() => api(`/api/venues/bookings/${assignedBooking.id}/decision`, { method: 'POST', body: { approve: true } }))}>
+                  Approve venue
+                </button>
+                <button
+                  className="btn danger"
+                  onClick={() => run(() => api(`/api/venues/bookings/${assignedBooking.id}/decision`, {
+                    method: 'POST',
+                    body: {
+                      approve: false,
+                      reason: venueReason.trim() || undefined,
+                      alternativeSuggestion: venueAlternative.trim() || undefined,
+                    },
+                  }))}
+                >
+                  Reject venue
+                </button>
+              </div>
             </div>
           )}
 

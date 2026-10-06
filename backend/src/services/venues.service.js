@@ -343,6 +343,16 @@ async function listBookings(filters = {}) {
   }));
 }
 
+/**
+ * Purpose: an Event Coordinator asks for a venue for an event. The request is saved as
+ * PENDING for Venue Staff to decide, and an audit entry is written.
+ * AC: SCRUM-78 AC6, no notice is sent here because nothing has been decided yet.
+ * Inputs: user (must have EVENT_COORDINATOR) and payload { eventId, venueId, startAt, endAt,
+ * setupMinutes, teardownMinutes, notes }. Missing setup/teardown minutes are saved as 30
+ * (NEEDS HUMAN: purpose unclear, the venue's own setup_minutes/teardown_minutes are not used).
+ * Output: the created booking row. Throws 403 if the user is not a Coordinator and 409 if
+ * the venue already has a pending, tentative or approved booking overlapping the window.
+ */
 async function requestBooking(user, payload) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only coordinators can request venue bookings', 'FORBIDDEN');
@@ -375,6 +385,17 @@ async function requestBooking(user, payload) {
   return created;
 }
 
+/**
+ * Purpose: Venue Staff approve or reject a venue booking request. The decision is saved
+ * first, then the event's assigned Coordinator is notified so they can proceed or arrange
+ * an alternative.
+ * AC: SCRUM-78 AC1-AC5 (the notice), AC6 (no notice unless the decision was saved).
+ * Inputs: user (must have VENUE_STAFF), booking id, and decision { approve, reason,
+ * alternativeSuggestion }. A truthy `approve` means APPROVED; anything else means REJECTED.
+ * Output: the updated booking row. Throws 403 if the user is not Venue Staff and 404 if the
+ * booking doesn't exist; database errors are passed on. It does not check that the booking
+ * is still PENDING, so deciding it again sends another notice (NEEDS HUMAN).
+ */
 async function decideBooking(user, id, decision) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can approve or reject bookings', 'FORBIDDEN');
@@ -392,20 +413,64 @@ async function decideBooking(user, id, decision) {
     decided_at: new Date().toISOString(),
   });
 
+  // SCRUM-78 AC5: only the event's assigned Coordinator is told, not whoever sent the
+  // request (that may be a previous Coordinator after a reassignment).
   const event = await fetchOne(supabase.from('events').select('*').eq('id', booking.event_id));
   if (event?.coordinator_id) {
-    await notifyUser(
-      event.coordinator_id,
-      'BOOKING_DECISION',
-      `Venue booking ${status.toLowerCase()}`,
-      decision.reason || `Booking for ${event.name} was ${status.toLowerCase()}.`,
-      event.id
-    );
+    const venue = await fetchOne(supabase.from('venues').select('id, name').eq('id', booking.venue_id));
+    const notice = buildBookingDecisionNotice({
+      status,
+      eventName: event.name,
+      venueName: venue?.name || `venue #${booking.venue_id}`,
+      reason: decision.reason,
+      alternativeSuggestion: decision.alternativeSuggestion,
+    });
+    await notifyUser(event.coordinator_id, 'BOOKING_DECISION', notice.title, notice.body, event.id);
   }
 
   return updated;
 }
 
+/**
+ * Purpose: the text of the notice an event's Coordinator gets when Venue Staff approve or
+ * reject their venue booking request, so they can go ahead or look for another venue
+ * without checking manually.
+ * AC: SCRUM-78 AC1 (approval), AC2 (rejection includes the reason and suggested
+ * alternative staff gave), AC3 (no reason given: no reason line), AC4 (names the event
+ * and the venue).
+ * Business rule source: Week 4 Q&A, "free text reason is reasonable" and an alternative
+ * suggestion is optional.
+ * Inputs: status (APPROVED or REJECTED), eventName, venueName, and the optional reason and
+ * alternativeSuggestion. Blank or whitespace-only text counts as not given.
+ * Output: { title, body }. Never throws.
+ */
+function buildBookingDecisionNotice({ status, eventName, venueName, reason, alternativeSuggestion }) {
+  const outcome = status === BOOKING_STATUS.APPROVED ? 'approved' : 'rejected';
+  // "The", not "Your": after a reassignment the Coordinator told may not have sent it.
+  const parts = [`The venue booking request for ${eventName} at ${venueName} was ${outcome}.`];
+  if (outcome === 'rejected') {
+    const givenReason = String(reason || '').trim();
+    const givenAlternative = String(alternativeSuggestion || '').trim();
+    if (givenReason) parts.push(`Reason: ${givenReason}`);
+    if (givenAlternative) parts.push(`Suggested alternative: ${givenAlternative}`);
+  }
+  // The title stays short because notifications.title is varchar(200) and event plus venue
+  // names could exceed it; the event and venue go in the body (text) instead.
+  return { title: `Venue booking ${outcome}`, body: parts.join(' ') };
+}
+
+/**
+ * Purpose: finds a booking at the venue that overlaps the requested time once setup and
+ * turnaround are added (W7 #1: the occupied window includes setup and turnaround), so
+ * requestBooking can refuse a double booking.
+ * AC: used by requestBooking; for SCRUM-78 AC6 it means a refused request never becomes a
+ * pending booking.
+ * Business rule source: Week 4 Q&A, "confirmed bookings block availability". PENDING and
+ * TENTATIVE bookings also count here (NEEDS HUMAN: purpose unclear, the Q&A leaves pending
+ * conflicts to the team).
+ * Inputs: venueId, startAt, endAt, and setup/turnaround minutes (missing or 0 counts as 30).
+ * Output: the first overlapping booking ({ id }) or null. Database errors are passed on.
+ */
 async function findConflict(venueId, startAt, endAt, setupMinutes = 30, teardownMinutes = 30) {
   const start = new Date(startAt);
   const end = new Date(endAt);
@@ -452,6 +517,7 @@ module.exports = {
   listBookings,
   requestBooking,
   decideBooking,
+  buildBookingDecisionNotice,
   listUnavailability,
   blockVenue,
   computeOccupiedWindow,
