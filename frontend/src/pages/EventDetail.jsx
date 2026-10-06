@@ -8,6 +8,7 @@ import { ROLES } from '../constants';
 export default function EventDetail() {
   const { id } = useParams();
   const { user, hasRole } = useAuth();
+  const canViewPlanning = hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT);
   const [event, setEvent] = useState(null);
   const [history, setHistory] = useState([]);
   const [comments, setComments] = useState([]);
@@ -22,17 +23,17 @@ export default function EventDetail() {
   const reload = useCallback(async () => {
     const [eventRes, historyRes, commentRes, venueRes, bookingRes] = await Promise.all([
       api(`/api/events/${id}`),
-      api(`/api/events/${id}/history`),
-      api(`/api/comments/${id}`),
-      api('/api/venues'),
-      api('/api/venues/bookings'),
+      canViewPlanning ? api(`/api/events/${id}/history`) : Promise.resolve({ history: [] }),
+      canViewPlanning ? api(`/api/comments/${id}`) : Promise.resolve({ comments: [] }),
+      canViewPlanning ? api('/api/venues') : Promise.resolve({ venues: [] }),
+      api(`/api/events/${id}/venue-bookings`),
     ]);
     setEvent(eventRes.event);
     setHistory(historyRes.history || []);
     setComments(commentRes.comments || []);
     setVenues(venueRes.venues || []);
-    setBookings((bookingRes.bookings || []).filter((row) => String(row.event_id) === String(id)));
-  }, [id]);
+    setBookings(bookingRes.bookings || []);
+  }, [id, canViewPlanning]);
 
   useEffect(() => {
     reload().catch((err) => setError(err.message));
@@ -166,7 +167,7 @@ export default function EventDetail() {
             </div>
           )}
 
-          <div className="card">
+          {canViewPlanning && <div className="card">
             <h3>Discussion</h3>
             {comments.map((item) => (
               <div className="comment" key={item.id}>
@@ -182,22 +183,22 @@ export default function EventDetail() {
             >
               Post comment
             </button>
-          </div>
+          </div>}
         </div>
 
         <div className="stack">
-          <div className="card">
+          {canViewPlanning && <div className="card">
             <h3>People</h3>
             <p><strong>Organiser:</strong> {event.organiserName}</p>
             <p><strong>Coordinator:</strong> {event.coordinatorName || 'Will be auto-assigned on submit'}</p>
-          </div>
+          </div>}
           <div className="card">
             <h3>Venue booking</h3>
             {bookings.length ? bookings.map((booking) => (
               <p key={booking.id}>{booking.venue_name}: {booking.status}</p>
             )) : <p className="muted">No booking yet. Essential arrangements must be approved before confirmation.</p>}
           </div>
-          <div className="card">
+          {canViewPlanning && <div className="card">
             <h3>Status history</h3>
             {history.map((item) => (
               <p key={item.id}>
@@ -206,7 +207,7 @@ export default function EventDetail() {
               </p>
             ))}
             {!history.length && <p className="muted">No transitions yet.</p>}
-          </div>
+          </div>}
         </div>
       </div>
     </>

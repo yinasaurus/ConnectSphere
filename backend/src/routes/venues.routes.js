@@ -10,10 +10,17 @@ const router = express.Router();
 router.use(requireAuth);
 
 router.get('/', controller.list);
+
 router.post('/', requireRole(ROLES.VENUE_STAFF), validateBody(createVenueSchema), controller.create);
 router.patch('/:id', requireRole(ROLES.VENUE_STAFF), validateBody(updateVenueSchema), controller.update);
+router.get('/search', controller.search);
 
-router.get('/bookings', controller.bookings);
+
+router.get(
+  '/bookings',
+  requireRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF),
+  controller.bookings
+);
 router.post('/bookings', requireRole(ROLES.EVENT_COORDINATOR), controller.requestBooking);
 router.post('/bookings/:id/decision', requireRole(ROLES.VENUE_STAFF), controller.decideBooking);
 

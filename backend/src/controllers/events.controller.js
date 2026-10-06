@@ -14,6 +14,11 @@ const get = asyncHandler(async (req, res) => {
   res.json({ event });
 });
 
+const venueBookings = asyncHandler(async (req, res) => {
+  const bookings = await eventsService.listVenueBookings(req.user, req.params.id);
+  res.json({ bookings });
+});
+
 const create = asyncHandler(async (req, res) => {
   const event = await eventsService.createEvent(req.user, req.body);
   res.status(201).json({ event });
@@ -61,6 +66,7 @@ const acceptReassign = asyncHandler(async (req, res) => {
 module.exports = {
   list,
   get,
+  venueBookings,
   create,
   update,
   submit,
