@@ -70,6 +70,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Coordinators can **view** other events but only **edit** assigned ones | list vs update |
 | Reassignment: current coordinator requests, new coordinator accepts | `/reassign` endpoints |
 | Organisers only see their **organisation** | list visibility |
+| Event details (SCRUM-39): Coordinators, Venue Staff, Technical Support and the owning Organiser see attendance, date/time, venue needs, the booked venue, equipment notes and equipment requests in any stage, including Planning and Confirmed; Attendees get the public view of confirmed events only | `GET /api/events/:id`, `/:id/venue-bookings`, `/:id/equipment-requests` → `EventDetail` |
 | Multiple roles on one account | `user_roles` + demo user `hybrid@...` |
 | Venue staff CRUD venues; tech staff maintain equipment | venue/equipment routes |
 | Confirmed bookings block overlapping windows, including setup/teardown | `findConflict` |
