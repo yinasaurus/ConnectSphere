@@ -288,18 +288,49 @@ async function decideBooking(user, id, decision) {
     decided_at: new Date().toISOString(),
   });
 
+  // SCRUM-78 AC5: only the event's assigned Coordinator is told, not whoever sent the
+  // request (that may be a previous Coordinator after a reassignment).
   const event = await fetchOne(supabase.from('events').select('*').eq('id', booking.event_id));
   if (event?.coordinator_id) {
-    await notifyUser(
-      event.coordinator_id,
-      'BOOKING_DECISION',
-      `Venue booking ${status.toLowerCase()}`,
-      decision.reason || `Booking for ${event.name} was ${status.toLowerCase()}.`,
-      event.id
-    );
+    const venue = await fetchOne(supabase.from('venues').select('id, name').eq('id', booking.venue_id));
+    const notice = buildBookingDecisionNotice({
+      status,
+      eventName: event.name,
+      venueName: venue?.name || `venue #${booking.venue_id}`,
+      reason: decision.reason,
+      alternativeSuggestion: decision.alternativeSuggestion,
+    });
+    await notifyUser(event.coordinator_id, 'BOOKING_DECISION', notice.title, notice.body, event.id);
   }
 
   return updated;
+}
+
+/**
+ * Purpose: the text of the notice an event's Coordinator gets when Venue Staff approve or
+ * reject their venue booking request, so they can go ahead or look for another venue
+ * without checking manually.
+ * AC: SCRUM-78 AC1 (approval), AC2 (rejection includes the reason and suggested
+ * alternative staff gave), AC3 (no reason given: no reason line), AC4 (names the event
+ * and the venue).
+ * Business rule source: Week 4 Q&A, "free text reason is reasonable" and an alternative
+ * suggestion is optional.
+ * Inputs: status (APPROVED or REJECTED), eventName, venueName, and the optional reason and
+ * alternativeSuggestion. Blank or whitespace-only text counts as not given.
+ * Output: { title, body }. Never throws.
+ */
+function buildBookingDecisionNotice({ status, eventName, venueName, reason, alternativeSuggestion }) {
+  const outcome = status === BOOKING_STATUS.APPROVED ? 'approved' : 'rejected';
+  const parts = [`Your venue booking request for ${eventName} at ${venueName} was ${outcome}.`];
+  if (outcome === 'rejected') {
+    const givenReason = String(reason || '').trim();
+    const givenAlternative = String(alternativeSuggestion || '').trim();
+    if (givenReason) parts.push(`Reason: ${givenReason}`);
+    if (givenAlternative) parts.push(`Suggested alternative: ${givenAlternative}`);
+  }
+  // The title stays short because notifications.title is varchar(200) and event plus venue
+  // names could exceed it; the event and venue go in the body (text) instead.
+  return { title: `Venue booking ${outcome}`, body: parts.join(' ') };
 }
 
 async function findConflict(venueId, startAt, endAt, setupMinutes = 30, teardownMinutes = 30) {
@@ -348,6 +379,7 @@ module.exports = {
   listBookings,
   requestBooking,
   decideBooking,
+  buildBookingDecisionNotice,
   listUnavailability,
   blockVenue,
   computeOccupiedWindow,
