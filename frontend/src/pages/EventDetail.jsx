@@ -5,6 +5,14 @@ import { useAuth } from '../auth';
 import StatusBadge from '../components/StatusBadge';
 import { ROLES } from '../constants';
 
+/**
+ * Purpose: one event's page. Shows its latest details and, depending on the user's roles,
+ * the actions they can take (submit, review, request or decide a venue, register).
+ * AC: SCRUM-39 AC1 + AC2 (the "Request details", "Venue booking" and "Equipment requests"
+ * cards show attendance, date, time, venue and equipment). Other sections belong to
+ * earlier stories.
+ * Failure: if the event can't be loaded, the server's message is shown instead of details.
+ */
 export default function EventDetail() {
   const { id } = useParams();
   const { user, hasRole } = useAuth();
@@ -21,6 +29,8 @@ export default function EventDetail() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
+  // Loads the event, its venue bookings and, for planning roles only, history, comments,
+  // venues and equipment requests; Attendees never request planning data.
   const reload = useCallback(async () => {
     const [eventRes, historyRes, commentRes, venueRes, bookingRes, equipmentRes] = await Promise.all([
       api(`/api/events/${id}`),

@@ -40,6 +40,14 @@ function findMissingSubmissionFields(row) {
   });
 }
 
+/**
+ * Purpose: turns an events row (snake_case, with joined organisation/organiser/coordinator
+ * names) into the camelCase event the API returns.
+ * AC: SCRUM-39 AC2 (attendance, start/end date and time, venue needs and equipment notes
+ * come from here).
+ * Input: a database row or null. Output: the event object, or null for no row. Empty
+ * columns stay null.
+ */
 function mapEvent(row) {
   if (!row) return null;
   return {
@@ -78,6 +86,18 @@ function mapEvent(row) {
   };
 }
 
+/**
+ * Purpose: decides whether a user may see one event at all.
+ * AC: SCRUM-39 AC1 (who the "authorised users" are).
+ * Business rule source: Week 4 Q&A, "Coordinator can view other events for planning
+ * purpose"; Week 2 Q&A, Organisers can't view events of unrelated clients (requirements
+ * document section 8b).
+ * Rules: Coordinators, Venue Staff and Technical Support see every event; Organisers see
+ * their own organisation's (none if they have no organisation); Attendees see only
+ * Confirmed events that take registrations; anyone else sees nothing. No stage is blocked
+ * for internal roles.
+ * Output: true or false. Never throws.
+ */
 function canViewEvent(user, row) {
   if (hasRole(user, ROLES.EVENT_COORDINATOR)
     || hasRole(user, ROLES.VENUE_STAFF)
@@ -93,11 +113,22 @@ function canViewEvent(user, row) {
   return false;
 }
 
+/**
+ * Purpose: whether a user's roles allow planning details (attendance, venue needs,
+ * equipment, history, comments) rather than the public Attendee view.
+ * AC: SCRUM-39 AC1 + AC2 (Attendees keep the public view, agreed decision).
+ * Output: true for Organiser, Coordinator, Venue Staff or Technical Support; false otherwise.
+ */
 function canViewPlanning(user) {
   return [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT]
     .some((role) => hasRole(user, role));
 }
 
+/**
+ * Purpose: returns the full event for planning roles and a reduced public copy for others.
+ * AC: SCRUM-39 AC2 (planning roles get every AC2 field), AC1 (Attendees don't).
+ * Inputs: the user and an events row the user may already see (checked by canViewEvent).
+ */
 function visibleEvent(user, row) {
   const event = mapEvent(row);
   if (canViewPlanning(user)) return event;
@@ -146,6 +177,14 @@ async function listEvents(user, filters = {}) {
   return rows.filter((row) => canViewEvent(user, row)).map((row) => visibleEvent(user, row));
 }
 
+/**
+ * Purpose: loads one event for the signed-in user, always fresh from the database, so the
+ * details shown are the latest.
+ * AC: SCRUM-39 AC1 + AC2.
+ * Inputs: the user and the event id. Output: the event as visibleEvent shapes it.
+ * Failure: 404 "Event not found" both when it doesn't exist and when the user may not see
+ * it, so outsiders can't tell the two apart.
+ */
 async function getEvent(user, id) {
   const row = await fetchOne(
     supabase.from('events').select(EVENT_SELECT).eq('id', id)
@@ -154,6 +193,12 @@ async function getEvent(user, id) {
   return visibleEvent(user, row);
 }
 
+/**
+ * Purpose: the venue bookings for one event (venue name and status), shown with its details.
+ * AC: SCRUM-39 AC2 (venue).
+ * Inputs: the user and the event id. Output: [{ id, event_id, venue_id, status, venue_name }].
+ * Attendees only get APPROVED bookings. Failure: 404 from getEvent, before bookings are read.
+ */
 async function listVenueBookings(user, eventId) {
   // Reuse event visibility before querying bookings, including client isolation.
   const event = await getEvent(user, eventId);

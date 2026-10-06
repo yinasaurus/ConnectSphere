@@ -9,11 +9,19 @@ const list = asyncHandler(async (req, res) => {
   res.json({ events });
 });
 
+/**
+ * Purpose: GET /api/events/:id, one event's details for the signed-in user.
+ * AC: SCRUM-39 AC1 + AC2. Output: 200 { event }; 404 from the service goes to the error handler.
+ */
 const get = asyncHandler(async (req, res) => {
   const event = await eventsService.getEvent(req.user, req.params.id);
   res.json({ event });
 });
 
+/**
+ * Purpose: GET /api/events/:id/venue-bookings, the event's venue bookings.
+ * AC: SCRUM-39 AC2 (venue). Output: 200 { bookings }; 404 goes to the error handler.
+ */
 const venueBookings = asyncHandler(async (req, res) => {
   const bookings = await eventsService.listVenueBookings(req.user, req.params.id);
   res.json({ bookings });
