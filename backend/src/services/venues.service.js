@@ -239,6 +239,16 @@ async function listBookings(filters = {}) {
   }));
 }
 
+/**
+ * Purpose: an Event Coordinator asks for a venue for an event. The request is saved as
+ * PENDING for Venue Staff to decide, and an audit entry is written.
+ * AC: SCRUM-78 AC6, no notice is sent here because nothing has been decided yet.
+ * Inputs: user (must have EVENT_COORDINATOR) and payload { eventId, venueId, startAt, endAt,
+ * setupMinutes, teardownMinutes, notes }. Missing setup/teardown minutes are saved as 30
+ * (NEEDS HUMAN: purpose unclear, the venue's own setup_minutes/teardown_minutes are not used).
+ * Output: the created booking row. Throws 403 if the user is not a Coordinator and 409 if
+ * the venue already has a pending, tentative or approved booking overlapping the window.
+ */
 async function requestBooking(user, payload) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only coordinators can request venue bookings', 'FORBIDDEN');
@@ -271,6 +281,17 @@ async function requestBooking(user, payload) {
   return created;
 }
 
+/**
+ * Purpose: Venue Staff approve or reject a venue booking request. The decision is saved
+ * first, then the event's assigned Coordinator is notified so they can proceed or arrange
+ * an alternative.
+ * AC: SCRUM-78 AC1-AC5 (the notice), AC6 (no notice unless the decision was saved).
+ * Inputs: user (must have VENUE_STAFF), booking id, and decision { approve, reason,
+ * alternativeSuggestion }. A truthy `approve` means APPROVED; anything else means REJECTED.
+ * Output: the updated booking row. Throws 403 if the user is not Venue Staff and 404 if the
+ * booking doesn't exist; database errors are passed on. It does not check that the booking
+ * is still PENDING, so deciding it again sends another notice (NEEDS HUMAN).
+ */
 async function decideBooking(user, id, decision) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can approve or reject bookings', 'FORBIDDEN');
