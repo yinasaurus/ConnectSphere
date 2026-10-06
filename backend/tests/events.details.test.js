@@ -236,6 +236,23 @@ describe('SCRUM-39 GET /api/events/:id/venue-bookings (venue, AC2)', () => {
     expect(res.body.bookings).toEqual([{ id: 7, event_id: 3, venue_id: 8, status: 'APPROVED', venue_name: 'Helix Hall' }]);
     expect(chain.eq).toHaveBeenCalledWith('event_id', 3);
   });
+
+  /*
+   * AC:       SCRUM-39 AC2 (venue)
+   * Scenario: A booking whose venue record can't be found any more.
+   * Setup:    Coordinator; event 3; one PENDING booking with venues null.
+   * Expected: 200; the booking is still returned with venue_name null instead of failing,
+   *           so the booking status stays visible.
+   * Type:     boundary
+   */
+  it('US39-V02 (AC2): a booking without a venue record still comes back', async () => {
+    const get = as([ROLES.EVENT_COORDINATOR]);
+    fetchOne.mockResolvedValueOnce(eventRow());
+    fetchMany.mockResolvedValueOnce([{ id: 9, event_id: 3, venue_id: 8, status: 'PENDING', venues: null }]);
+    const res = await get('/api/events/3/venue-bookings');
+    expect(res.status).toBe(200);
+    expect(res.body.bookings).toEqual([{ id: 9, event_id: 3, venue_id: 8, status: 'PENDING', venue_name: null }]);
+  });
 });
 
 describe('SCRUM-39 GET /api/events/:id/equipment-requests (equipment, AC2)', () => {

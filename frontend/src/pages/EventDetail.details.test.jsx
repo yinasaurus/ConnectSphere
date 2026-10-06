@@ -169,4 +169,21 @@ describe('SCRUM-39 event details on the event page', () => {
     // An empty list here would wrongly tell staff that no equipment is needed.
     expect(screen.queryByText('No equipment requested yet.')).not.toBeInTheDocument();
   });
+
+  /*
+   * AC:       SCRUM-39 AC2
+   * Scenario: The equipment reply comes back without a requests list.
+   * Setup:    Coordinator; GET /api/events/3/equipment-requests returns {}; everything else
+   *           as normal.
+   * Expected: The card shows "No equipment requested yet." and the rest of the page loads.
+   * Type:     boundary
+   */
+  it('US39-F06 (AC2): a reply without a requests list shows the empty message', async () => {
+    mockApi();
+    const normal = api.getMockImplementation();
+    api.mockImplementation(async (path) => (path === '/api/events/3/equipment-requests' ? {} : normal(path)));
+    renderAs('EVENT_COORDINATOR');
+    expect(await screen.findByText('Leadership Forum')).toBeInTheDocument();
+    expect(screen.getByText('No equipment requested yet.')).toBeInTheDocument();
+  });
 });
