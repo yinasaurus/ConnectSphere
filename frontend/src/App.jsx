@@ -13,6 +13,9 @@ import Venues from './pages/Venues';
 import Equipment from './pages/Equipment';
 import Notifications from './pages/Notifications';
 import Profile from './pages/Profile';
+import { ROLES } from './constants';
+
+const requestRoles = [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR];
 
 export default function App() {
   return (
@@ -30,13 +33,20 @@ export default function App() {
           >
             <Route index element={<Dashboard />} />
             <Route path="events" element={<Events />} />
-            <Route path="events/new" element={<NewEvent />} />
-            <Route path="events/:id/edit" element={<NewEvent />} />
-            <Route path="drafts" element={<Drafts />} />
+            <Route path="events/new" element={<ProtectedRoute allowedRoles={requestRoles}><NewEvent /></ProtectedRoute>} />
+            <Route path="events/:id/edit" element={<ProtectedRoute allowedRoles={requestRoles}><NewEvent /></ProtectedRoute>} />
+            <Route path="drafts" element={<ProtectedRoute allowedRoles={requestRoles}><Drafts /></ProtectedRoute>} />
             <Route path="events/:id" element={<EventDetail />} />
             <Route path="calendar" element={<CalendarPage />} />
-            <Route path="venues" element={<Venues />} />
-            <Route path="equipment" element={<Equipment />} />
+            <Route
+              path="venues"
+              element={
+                <ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF]}>
+                  <Venues />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="equipment" element={<ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR, ROLES.TECHNICAL_SUPPORT]}><Equipment /></ProtectedRoute>} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="profile" element={<Profile />} />
           </Route>

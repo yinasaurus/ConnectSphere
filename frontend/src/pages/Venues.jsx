@@ -16,6 +16,16 @@ const emptyForm = {
   layouts: [],
 };
 
+const EMPTY_SEARCH = {
+  startAt: '',
+  endAt: '',
+  capacityMin: '',
+  location: '',
+  accessibility: '',
+  layout: '',
+  facilities: '',
+};
+
 function venueForm(venue) {
   return {
     name: venue.name || '',
@@ -33,7 +43,6 @@ function venueForm(venue) {
     )),
   };
 }
-
 export default function Venues() {
   const { hasRole } = useAuth();
   const [venues, setVenues] = useState([]);
@@ -53,6 +62,11 @@ export default function Venues() {
   const [saveToast, setSaveToast] = useState('');
   const [saving, setSaving] = useState(false);
   const updateCardRef = useRef(null);
+
+  const [searchForm, setSearchForm] = useState(EMPTY_SEARCH);
+  const [searchResults, setSearchResults] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   async function reload() {
     const [venueRes, bookingRes] = await Promise.all([
@@ -135,6 +149,42 @@ export default function Venues() {
     }
   }
 
+  async function runSearch(e) {
+    e.preventDefault();
+    if (Boolean(searchForm.startAt) !== Boolean(searchForm.endAt)) {
+      setSearchError('Pick both a start and an end date/time, or neither.');
+      return;
+    }
+
+    setSearching(true);
+    setSearchError('');
+    try {
+      const params = new URLSearchParams();
+      if (searchForm.startAt && searchForm.endAt) {
+        params.set('startAt', new Date(searchForm.startAt).toISOString());
+        params.set('endAt', new Date(searchForm.endAt).toISOString());
+      }
+      if (searchForm.capacityMin) params.set('capacityMin', searchForm.capacityMin);
+      if (searchForm.location) params.set('location', searchForm.location);
+      if (searchForm.accessibility) params.set('accessibility', searchForm.accessibility);
+      if (searchForm.layout) params.set('layout', searchForm.layout);
+      if (searchForm.facilities) params.set('facilities', searchForm.facilities);
+
+      const res = await api(`/api/venues/search?${params.toString()}`);
+      setSearchResults(res.venues || []);
+    } catch (err) {
+      setSearchResults(null);
+      setSearchError(err.message);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function clearSearch() {
+    setSearchForm(EMPTY_SEARCH);
+    setSearchResults(null);
+    setSearchError('');
+  }
   return (
     <>
       <div className="topbar">
@@ -144,6 +194,7 @@ export default function Venues() {
         </div>
       </div>
       {error && <div className="alert">{error}</div>}
+      {error && <div className="alert">{error}</div>}
       {saveToast && (
         <div className="venue-save-toast" role="status">
           <span className="venue-save-toast-check" aria-hidden="true">✓</span>
@@ -151,6 +202,101 @@ export default function Venues() {
         </div>
       )}
 
+      <div className="card" style={{ marginBottom: 18 }}>
+        <h3>Search available venues</h3>
+        <p className="muted">
+          Filtering is strict: a venue must match every filter you set. Add a date and time to
+          also check availability (setup/turnaround time, confirmed bookings, tentative holds,
+          and unavailability periods are all accounted for).
+        </p>
+        <form onSubmit={runSearch} className="grid-2">
+          <div className="stack">
+            <label className="muted">Event start</label>
+            <input
+              type="datetime-local"
+              value={searchForm.startAt}
+              onChange={(e) => setSearchForm({ ...searchForm, startAt: e.target.value })}
+            />
+            <label className="muted">Event end</label>
+            <input
+              type="datetime-local"
+              value={searchForm.endAt}
+              onChange={(e) => setSearchForm({ ...searchForm, endAt: e.target.value })}
+            />
+            <label className="muted">Minimum capacity</label>
+            <input
+              type="number"
+              min="0"
+              placeholder="e.g. 50"
+              value={searchForm.capacityMin}
+              onChange={(e) => setSearchForm({ ...searchForm, capacityMin: e.target.value })}
+            />
+          </div>
+          <div className="stack">
+            <label className="muted">Location</label>
+            <input
+              placeholder="e.g. Level 2"
+              value={searchForm.location}
+              onChange={(e) => setSearchForm({ ...searchForm, location: e.target.value })}
+            />
+            <label className="muted">Accessibility</label>
+            <input
+              placeholder="e.g. Wheelchair access"
+              value={searchForm.accessibility}
+              onChange={(e) => setSearchForm({ ...searchForm, accessibility: e.target.value })}
+            />
+            <label className="muted">Room layout</label>
+            <select
+              value={searchForm.layout}
+              onChange={(e) => setSearchForm({ ...searchForm, layout: e.target.value })}
+            >
+              <option value="">Any layout</option>
+              {LAYOUTS.map((layout) => <option key={layout}>{layout}</option>)}
+            </select>
+            <label className="muted">Facilities (comma-separated)</label>
+            <input
+              placeholder="e.g. Projector, Audio"
+              value={searchForm.facilities}
+              onChange={(e) => setSearchForm({ ...searchForm, facilities: e.target.value })}
+            />
+          </div>
+          <div className="stack" style={{ gridColumn: '1 / -1', flexDirection: 'row' }}>
+            <button className="btn" type="submit" disabled={searching}>
+              {searching ? 'Searching…' : 'Search venues'}
+            </button>
+            <button className="btn ghost" type="button" onClick={clearSearch}>
+              Clear
+            </button>
+          </div>
+        </form>
+
+        {searchError && <div className="alert" style={{ marginTop: 12 }}>{searchError}</div>}
+
+        {searchResults !== null && (
+          <div style={{ marginTop: 18 }}>
+            <h3>Results</h3>
+            {searchResults.length === 0 ? (
+              <p className="muted">No venues match your selected filters.</p>
+            ) : (
+              <div className="cards">
+                {searchResults.map((venue) => (
+                  <div className="card" key={venue.id}>
+                    <h3>{venue.name}</h3>
+                    <p className="muted">{venue.location}</p>
+                    <p>Capacity {venue.capacity}</p>
+                    <p>{venue.accessibility}</p>
+                    <div className="roles">
+                      {(venue.layouts || []).map((layout) => <span className="pill" key={layout}>{layout}</span>)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <h2>Full catalogue</h2>
       <div className="cards">
         {venues.map((venue) => (
           <button
