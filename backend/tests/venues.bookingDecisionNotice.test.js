@@ -262,6 +262,27 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
 
   /*
    * AC:       SCRUM-78 AC6
+   * Scenario: A booking request is refused before it is created.
+   * Setup:    (a) the sender is Venue Staff, not a Coordinator (403); (b) the venue already
+   *           has an overlapping booking (409), returned by the conflict query.
+   * Expected: No booking is created and no notice is written. Nothing exists to decide yet,
+   *           so the Coordinator must not hear anything.
+   * Type:     error
+   */
+  it.each([
+    ['the sender is not a Coordinator', STAFF, [], 403],
+    ['the venue already has an overlapping booking', { id: 21, roles: [ROLES.EVENT_COORDINATOR] }, [{ id: 77 }], 409],
+  ])('US78-N13 (AC6): no booking and no notice when %s', async (_label, user, conflicts, status) => {
+    fetchMany.mockResolvedValueOnce(conflicts);
+    await expect(venuesService.requestBooking(user, {
+      eventId: 50, venueId: 8, startAt: '2026-10-20T10:00:00Z', endAt: '2026-10-20T12:00:00Z',
+    })).rejects.toMatchObject({ status });
+    // No insert at all: neither the booking nor a notification was written.
+    expect(insertOne).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-78 AC6
    * Scenario: A decision attempt fails, so the request stays pending.
    * Setup:    (a) the user is not Venue Staff (403); (b) the booking doesn't exist (404);
    *           (c) saving the decision fails in the database.
