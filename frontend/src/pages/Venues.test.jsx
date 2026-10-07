@@ -38,6 +38,14 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+// Same messages as the real number rules in backend/src/validators/venues.validators.js.
+function numberIssue(value, label, min) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return `${label} must be a number`;
+  if (!Number.isInteger(value)) return `${label} must be a whole number`;
+  if (value < min) return `${label} must be at least ${min}`;
+  return null;
+}
+
 function mockDatabaseApi({ validateUpdate = false } = {}) {
   api.mockImplementation(async (path, options = {}) => {
     if (path === '/api/venues' && options.method === 'POST') {
@@ -66,15 +74,14 @@ function mockDatabaseApi({ validateUpdate = false } = {}) {
         const { name, capacity, setupMinutes, teardownMinutes, isActive, operatingHours } = options.body;
         const details = [];
         if (!name?.trim()) details.push({ field: 'name', message: 'Venue name is required' });
-        if (!Number.isInteger(capacity) || capacity < 0) {
-          details.push({ field: 'capacity', message: 'Capacity must be a non-negative integer' });
-        }
-        if (!Number.isInteger(setupMinutes) || setupMinutes < 0) {
-          details.push({ field: 'setupMinutes', message: 'Setup minutes must be a non-negative integer' });
-        }
-        if (!Number.isInteger(teardownMinutes) || teardownMinutes < 0) {
-          details.push({ field: 'teardownMinutes', message: 'Teardown minutes must be a non-negative integer' });
-        }
+        [
+          ['capacity', capacity, 'Capacity', 1],
+          ['setupMinutes', setupMinutes, 'Setup minutes', 0],
+          ['teardownMinutes', teardownMinutes, 'Teardown minutes', 0],
+        ].forEach(([field, value, label, min]) => {
+          const message = numberIssue(value, label, min);
+          if (message) details.push({ field, message });
+        });
         if (typeof isActive !== 'boolean') {
           details.push({ field: 'isActive', message: 'Active status must be true or false' });
         }
@@ -205,11 +212,21 @@ describe('Venues page inputs', () => {
     expect(api.mock.calls.at(-1)[0]).toBe('/api/venues');
   });
 
+  /*
+   * AC:       SCUM-7 AC4; SCRUM-59 AC4 (setup and turnaround rows)
+   * Scenario: Venue Staff clear the capacity, setup or teardown (turnaround) box on the
+   *           Update venue form and save.
+   * Setup:    Helix Hall selected. A cleared number box is sent as '', and the mocked API
+   *           answers with the same messages the real validator gives for a non-number.
+   * Expected: The form shows which field is wrong and why, and the saved venue is unchanged,
+   *           because an empty value is not a number and is rejected rather than saved.
+   * Type:     error
+   */
   it.each([
-    ['capacity', 'Capacity', 'capacity: Capacity must be a non-negative integer'],
-    ['setup minutes', 'Setup (mins)', 'setupMinutes: Setup minutes must be a non-negative integer'],
-    ['teardown minutes', 'Teardown (mins)', 'teardownMinutes: Teardown minutes must be a non-negative integer'],
-  ])('shows a validation error when mandatory %s is empty', async (_field, label, expectedMessage) => {
+    ['capacity', 'Capacity', 'capacity: Capacity must be a number'],
+    ['setup minutes', 'Setup (mins)', 'setupMinutes: Setup minutes must be a number'],
+    ['teardown minutes', 'Teardown (mins)', 'teardownMinutes: Teardown minutes must be a number'],
+  ])('shows the rejection when the %s box is cleared', async (_field, label, expectedMessage) => {
     const user = userEvent.setup();
     mockDatabaseApi({ validateUpdate: true });
     renderVenues();
@@ -419,5 +436,98 @@ describe('Venues page inputs', () => {
     expect(screen.queryByRole('heading', { name: 'Update venue' })).not.toBeInTheDocument();
     expect(api).not.toHaveBeenCalledWith('/api/venues/1', expect.anything());
     expect(database.venues[0].name).toBe('Helix Hall');
+  });
+
+  /*
+   * AC:       SCRUM-59 AC1, AC2, AC3
+   * Scenario: Venue Staff change the setup and turnaround times, save, close the form and
+   *           open the venue again.
+   * Setup:    Helix Hall saved at 30/30. Setup is changed to 15 and turnaround ("Teardown"
+   *           on the form) to 0, the lowest allowed value.
+   * Expected: The PATCH sends 15 and 0 as numbers; after saving, and again after reopening,
+   *           the form shows 15 and 0. 0 must not come back as the 30-minute default.
+   * Type:     boundary
+   */
+  it('shows the saved setup and turnaround minutes when the venue is reopened', async () => {
+    const user = userEvent.setup();
+    renderVenues();
+    await user.click(await screen.findByRole('button', { name: /Helix Hall/i }));
+    const update = within(formCard('Update venue'));
+
+    await user.clear(update.getByLabelText('Setup (mins)'));
+    await user.type(update.getByLabelText('Setup (mins)'), '15');
+    await user.clear(update.getByLabelText('Teardown (mins)'));
+    await user.type(update.getByLabelText('Teardown (mins)'), '0');
+    await user.click(update.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(database.venues[0]).toMatchObject({ setupMinutes: 15, teardownMinutes: 0 }));
+    expect(api).toHaveBeenCalledWith('/api/venues/1', expect.objectContaining({
+      method: 'PATCH',
+      body: expect.objectContaining({ setupMinutes: 15, teardownMinutes: 0 }),
+    }));
+    expect(update.getByLabelText('Setup (mins)')).toHaveValue(15);
+    expect(update.getByLabelText('Teardown (mins)')).toHaveValue(0);
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: /Helix Hall/i }));
+    const reopened = within(formCard('Update venue'));
+    expect(reopened.getByLabelText('Setup (mins)')).toHaveValue(15);
+    expect(reopened.getByLabelText('Teardown (mins)')).toHaveValue(0);
+  });
+
+  /*
+   * AC:       SCRUM-59 AC4
+   * Scenario: Venue Staff type a negative setup time and save.
+   * Setup:    Helix Hall saved at 30/30. The API answers the PATCH the way the real
+   *           validator does for -5 (400 with the setupMinutes field and message).
+   * Expected: The form shows which field is wrong, nothing is saved, and reopening the
+   *           venue shows the saved 30, not the rejected -5.
+   * Type:     error
+   */
+  it('shows the rejection for a negative setup time and keeps the saved value', async () => {
+    const user = userEvent.setup();
+    const normal = api.getMockImplementation();
+    api.mockImplementation(async (path, options = {}) => {
+      if (path === '/api/venues/1' && options.method === 'PATCH' && options.body.setupMinutes < 0) {
+        const error = new Error('Setup minutes must be at least 0');
+        error.details = [{ field: 'setupMinutes', message: 'Setup minutes must be at least 0' }];
+        throw error;
+      }
+      return normal(path, options);
+    });
+    renderVenues();
+    await user.click(await screen.findByRole('button', { name: /Helix Hall/i }));
+    const update = within(formCard('Update venue'));
+
+    await user.clear(update.getByLabelText('Setup (mins)'));
+    await user.type(update.getByLabelText('Setup (mins)'), '-5');
+    await user.click(update.getByRole('button', { name: 'Save changes' }));
+
+    expect(await update.findByText('setupMinutes: Setup minutes must be at least 0')).toBeInTheDocument();
+    expect(database.venues[0].setupMinutes).toBe(30);
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: /Helix Hall/i }));
+    expect(within(formCard('Update venue')).getByLabelText('Setup (mins)')).toHaveValue(30);
+  });
+
+  /*
+   * AC:       SCRUM-59 AC5
+   * Scenario: An Event Coordinator opens the Venues page and clicks a venue.
+   * Setup:    Signed in with the Event Coordinator role only.
+   * Expected: No Update venue form and no setup or turnaround inputs appear, so the values
+   *           can't be changed from the page. (The API also refuses with 403; see
+   *           venues.setupTurnaround.test.js.)
+   * Type:     error
+   */
+  it('does not offer the setup and turnaround fields to a non-Venue-Staff user', async () => {
+    const user = userEvent.setup();
+    useAuth.mockReturnValue({ hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
+    renderVenues();
+    await user.click(await screen.findByRole('button', { name: /Helix Hall/i }));
+
+    expect(screen.queryByRole('heading', { name: 'Update venue' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Setup (mins)')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Teardown (mins)')).not.toBeInTheDocument();
   });
 });
