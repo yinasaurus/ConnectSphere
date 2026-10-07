@@ -71,12 +71,14 @@ export default function NewEvent() {
 
   useEffect(() => {
     if (!isEditing) return;
-    api('/api/events/' + id).then((event) => {
+    setEditable(false);
+    api('/api/events/' + id).then((res) => {
+      const event = res.event || res;
       setEventData(event);
-      const ownsDraft = event.organiserId === user.id && (
+      const ownsDraft = event.organiserId === user?.id && (
         event.status === 'DRAFT' || (event.status === 'UNDER_REVIEW' && event.subState === 'ACTION_REQUIRED')
       );
-      const assigned = canCoordinate && event.coordinatorId === user.id;
+      const assigned = canCoordinate && event.coordinatorId === user?.id;
       if (!ownsDraft && !assigned) {
         setError('You do not have access to edit this event.');
         return;
@@ -100,7 +102,7 @@ export default function NewEvent() {
         clonedFromEventId: event.clonedFromEventId || '',
       });
     }).catch((err) => setError(err.message));
-  }, [id, isEditing, user.id, canCoordinate]);
+  }, [id, isEditing, user?.id, canCoordinate]);
 
   function set(field, value) {
     setForm((current) => ({ ...current, [field]: value }));

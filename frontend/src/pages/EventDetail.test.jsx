@@ -49,6 +49,11 @@ describe('SCUM-16 (Event Clarification & Review Panel)', () => {
     const user = userEvent.setup();
     let sentRemarks = null;
 
+    useAuth.mockReturnValue({
+      user: coordinatorUser,
+      hasRole: (...roles) => roles.some((r) => coordinatorUser.roles.includes(r)),
+    });
+
     const eventData = {
       id: 5,
       name: 'Global AI Summit',
@@ -70,7 +75,7 @@ describe('SCUM-16 (Event Clarification & Review Panel)', () => {
       if (path === '/api/events/5/history') return Promise.resolve({ history: [] });
       if (path === '/api/comments/5') return Promise.resolve({ comments: [] });
       if (path === '/api/venues') return Promise.resolve({ venues: [] });
-      if (path === '/api/venues/bookings') return Promise.resolve({ bookings: [] });
+      if (path === '/api/venues/bookings' || path === '/api/events/5/venue-bookings') return Promise.resolve({ bookings: [] });
       if (path === '/api/events/5/clarification' && options.method === 'POST') {
         sentRemarks = options.body.remarks;
         return Promise.resolve({
@@ -122,6 +127,11 @@ describe('SCUM-16 (Event Clarification & Review Panel)', () => {
     const user = userEvent.setup();
     let sentResponse = null;
 
+    useAuth.mockReturnValue({
+      user: organiserUser,
+      hasRole: (...roles) => roles.some((r) => organiserUser.roles.includes(r)),
+    });
+
     const eventNeedingAttention = {
       id: 5,
       name: 'Global AI Summit',
@@ -143,7 +153,7 @@ describe('SCUM-16 (Event Clarification & Review Panel)', () => {
       if (path === '/api/events/5/history') return Promise.resolve({ history: [] });
       if (path === '/api/comments/5') return Promise.resolve({ comments: [] });
       if (path === '/api/venues') return Promise.resolve({ venues: [] });
-      if (path === '/api/venues/bookings') return Promise.resolve({ bookings: [] });
+      if (path === '/api/venues/bookings' || path === '/api/events/5/venue-bookings') return Promise.resolve({ bookings: [] });
       if (path === '/api/events/5/clarification/respond' && options.method === 'POST') {
         sentResponse = options.body.response;
         return Promise.resolve({
@@ -198,6 +208,11 @@ describe('SCUM-16 (Event Clarification & Review Panel)', () => {
    * Type:     normal
    */
   it('US16-UI03 (AC5): displays Clarification Provided banner and shows response notes to coordinator', async () => {
+    useAuth.mockReturnValue({
+      user: organiserUser,
+      hasRole: (...roles) => roles.some((r) => organiserUser.roles.includes(r)),
+    });
+
     const eventClarified = {
       id: 5,
       name: 'Global AI Summit',

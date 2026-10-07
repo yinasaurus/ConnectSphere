@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import EventDecisionPanel from '../components/EventDecisionPanel';
 import StatusBadge from '../components/StatusBadge';
 import { ROLES } from '../constants';
 
@@ -71,8 +72,8 @@ export default function EventDetail() {
 
   if (!event) return <p className="muted">{error || 'Loading event…'}</p>;
 
-  const isOrganiser = event.organiserId === user.id;
-  const isCoordinator = event.coordinatorId === user.id;
+  const isOrganiser = event.organiserId === user?.id;
+  const isCoordinator = event.coordinatorId === user?.id;
   const assignedBooking = bookings[0];
 
   return (
@@ -171,7 +172,7 @@ export default function EventDetail() {
 
           {isCoordinator && (
             <div className="card stack review-panel">
-              <h3>Coordinator review actions</h3>
+              <h3>Coordinator {event.status === 'UNDER_REVIEW' ? 'review actions' : 'actions'}</h3>
               {event.status === 'UNDER_REVIEW' && (
                 <>
                   <div style={{ padding: '8px 12px', background: 'var(--paper)', borderRadius: 10, fontSize: '0.9rem' }}>
@@ -190,15 +191,15 @@ export default function EventDetail() {
                       </p>
                     )}
                   </div>
+                  <EventDecisionPanel
+                    onDecide={(decision, text) => run(() => api(`/api/events/${id}/decision`, {
+                      method: 'POST',
+                      body: { decision, reason: text },
+                    }))}
+                  />
                   <div className="actions">
-                    <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'PLANNING' } }))}>
-                      Approve for planning
-                    </button>
                     <button className="btn secondary" onClick={() => setShowClarificationInput(!showClarificationInput)}>
                       {event.subState === 'ACTION_REQUIRED' ? 'Update Clarification' : 'Request Clarification / Amendments'}
-                    </button>
-                    <button className="btn danger" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'REJECTED', reason: reason || 'Returned for rework' } }))}>
-                      Reject / return
                     </button>
                   </div>
 
