@@ -71,7 +71,7 @@ export default function NewEvent() {
 
   useEffect(() => {
     if (!isEditing) return;
-    setEditable(false);
+    api('/api/events/' + id).then((event) => {
       setEventData(event);
       const ownsDraft = event.organiserId === user.id && (
         event.status === 'DRAFT' || (event.status === 'UNDER_REVIEW' && event.subState === 'ACTION_REQUIRED')
