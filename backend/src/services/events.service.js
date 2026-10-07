@@ -182,9 +182,10 @@ async function listVenueBookings(user, eventId) {
   // Reuse event visibility before querying bookings, including client isolation.
   const event = await getEvent(user, eventId);
   let query = supabase.from('venue_bookings')
-      .select('id, event_id, venue_id, status, venues ( name )')
+      // Return saved timing values so each event request can show its own occupied window.
+      .select('id, event_id, venue_id, status, start_at, end_at, setup_minutes, teardown_minutes, created_at, venues ( name )')
       .eq('event_id', event.id)
-      .order('start_at');
+      .order('created_at', { ascending: false });
   if (!canViewPlanning(user)) query = query.eq('status', 'APPROVED');
   const rows = await fetchMany(query);
   // Event readers need booking status, not internal notes or decision metadata.
@@ -193,6 +194,12 @@ async function listVenueBookings(user, eventId) {
     event_id: row.event_id,
     venue_id: row.venue_id,
     status: row.status,
+    // Expose only the fields needed to display request dates and occupied windows.
+    start_at: row.start_at,
+    end_at: row.end_at,
+    setup_minutes: row.setup_minutes,
+    teardown_minutes: row.teardown_minutes,
+    created_at: row.created_at,
     venue_name: row.venues?.name || null,
   }));
 }

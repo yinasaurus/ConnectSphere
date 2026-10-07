@@ -376,8 +376,9 @@ async function requestBooking(user, payload) {
     status: BOOKING_STATUS.PENDING,
     start_at: payload.startAt,
     end_at: payload.endAt,
-    setup_minutes: payload.setupMinutes || 30,
-    teardown_minutes: payload.teardownMinutes || 30,
+    // Nullish defaults preserve an explicitly configured zero-minute setup or turnaround.
+    setup_minutes: payload.setupMinutes ?? 30,
+    teardown_minutes: payload.teardownMinutes ?? 30,
     notes: payload.notes || null,
   });
 
@@ -474,8 +475,9 @@ function buildBookingDecisionNotice({ status, eventName, venueName, reason, alte
 async function findConflict(venueId, startAt, endAt, setupMinutes = 30, teardownMinutes = 30) {
   const start = new Date(startAt);
   const end = new Date(endAt);
-  start.setMinutes(start.getMinutes() - Number(setupMinutes || 30));
-  end.setMinutes(end.getMinutes() + Number(teardownMinutes || 30));
+  // Use defaults only when configuration is absent, not when a valid value is zero.
+  start.setMinutes(start.getMinutes() - Number(setupMinutes ?? 30));
+  end.setMinutes(end.getMinutes() + Number(teardownMinutes ?? 30));
 
   const rows = await fetchMany(
     supabase

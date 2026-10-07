@@ -243,6 +243,14 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
   });
 
   /*
+   * AC:       SCRUM-26 AC2 + AC3 + AC6
+   * Scenario: A Coordinator submits an event-specific request with venue and date/time.
+   * Setup:    No conflicting booking exists for the selected venue and occupied interval.
+   * Expected: The request is created as Pending with the supplied event, venue, and time
+   *           details, and no decision notice is sent before staff review it.
+   * Type:     normal
+   */
+  /*
    * AC:       SCRUM-78 AC6
    * Scenario: A Coordinator sends a booking request, which is now pending.
    * Setup:    No conflicting booking; the request is created with status PENDING.
@@ -260,6 +268,43 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
     expect(notificationRows()).toEqual([]);
   });
 
+  /* A configured zero-minute interval must survive persistence without becoming the default. */
+  /*
+   * AC:       SCRUM-26 AC5 + AC9
+   * Scenario: The selected venue has a valid zero-minute setup and turnaround.
+   * Setup:    A Coordinator submits an otherwise valid event and venue request with both
+   *           timing values set to zero.
+   * Expected: The saved request preserves both zero values, allowing its occupied window
+   *           to match the configured venue timings.
+   * Type:     boundary
+   */
+  it('preserves zero setup and turnaround minutes in a venue booking request', async () => {
+    fetchMany.mockResolvedValueOnce([]);
+    const coordinator = { id: 21, roles: [ROLES.EVENT_COORDINATOR] };
+    await venuesService.requestBooking(coordinator, {
+      eventId: 50,
+      venueId: 8,
+      startAt: '2026-10-20T10:00:00Z',
+      endAt: '2026-10-20T12:00:00Z',
+      setupMinutes: 0,
+      teardownMinutes: 0,
+    });
+
+    expect(insertOne).toHaveBeenCalledWith('venue_bookings', expect.objectContaining({
+      setup_minutes: 0,
+      teardown_minutes: 0,
+    }));
+  });
+
+  /*
+  * AC:       SCRUM-26 AC5 / Submission Guardrails
+  * Scenario: Submitting an unauthorized or conflicting venue booking request.
+  * Setup:    Tests two rejection conditions:
+  *           1. Sender is Venue Staff instead of an Event Coordinator (403 Forbidden).
+  *           2. Venue is already double-booked for that time slot (409 Conflict).
+  * Expected: The system rejects the request with an error and writes nothing to the database.
+  * Type:     error
+  */
   /*
    * AC:       SCRUM-78 AC6
    * Scenario: A booking request is refused before it is created.
