@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import ConflictModal from '../components/ConflictModal';
 import { LAYOUTS, ROLES } from '../constants';
 
 const emptyForm = {
@@ -63,6 +64,7 @@ export default function Venues() {
   const [error, setError] = useState('');
   const [updateError, setUpdateError] = useState('');
   const [saveToast, setSaveToast] = useState('');
+  const [conflictModalMsg, setConflictModalMsg] = useState('');
   const [saving, setSaving] = useState(false);
   const updateCardRef = useRef(null);
 
@@ -418,6 +420,8 @@ export default function Venues() {
               <th>Venue</th>
               <th>Status</th>
               <th>Window</th>
+              {hasRole(ROLES.VENUE_STAFF) && <th>Conflict Status</th>}
+              {hasRole(ROLES.VENUE_STAFF) && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -427,9 +431,84 @@ export default function Venues() {
                 <td>{booking.venue_name}</td>
                 <td>{booking.status}</td>
                 <td>{new Date(booking.start_at).toLocaleString()}</td>
+                {hasRole(ROLES.VENUE_STAFF) && (
+                  <td>
+                    {booking.has_conflict ? (
+                      <span style={{ color: '#b91c1c', fontWeight: 600, fontSize: '0.85rem' }}>
+                        ⚠️ Conflict with {booking.conflict_details?.eventName || 'confirmed booking'}
+                      </span>
+                    ) : (
+                      booking.status === 'PENDING' ? (
+                        <span style={{ color: '#15803d', fontSize: '0.85rem' }}>✓ No conflict</span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )
+                    )}
+                  </td>
+                )}
+                {hasRole(ROLES.VENUE_STAFF) && (
+                  <td>
+                    {booking.status === 'PENDING' ? (
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          type="button"
+                          className="btn sm"
+                          onClick={async () => {
+                            setError('');
+                            setConflictModalMsg('');
+                            try {
+                              await api(`/api/venues/bookings/${booking.id}/decision`, {
+                                method: 'POST',
+                                body: { approve: true },
+                              });
+                              setSaveToast('Booking approved');
+                              window.setTimeout(() => setSaveToast(''), 2500);
+                              await reload();
+                            } catch (err) {
+                              if (
+                                err.status === 409 ||
+                                err.code === 'BOOKING_CONFLICT' ||
+                                err.message?.toLowerCase().includes('already has a confirmed') ||
+                                err.message?.toLowerCase().includes('booking in that window')
+                              ) {
+                                setConflictModalMsg(err.message);
+                              } else {
+                                setError(err.message);
+                              }
+                            }
+                          }}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          className="btn sm danger"
+                          onClick={async () => {
+                            setError('');
+                            try {
+                              await api(`/api/venues/bookings/${booking.id}/decision`, {
+                                method: 'POST',
+                                body: { approve: false },
+                              });
+                              setSaveToast('Booking rejected');
+                              window.setTimeout(() => setSaveToast(''), 2500);
+                              await reload();
+                            } catch (err) {
+                              setError(err.message);
+                            }
+                          }}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
-            {!bookings.length && <tr><td colSpan="4" className="muted">No bookings yet.</td></tr>}
+            {!bookings.length && <tr><td colSpan={hasRole(ROLES.VENUE_STAFF) ? 6 : 4} className="muted">No bookings yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -494,6 +573,11 @@ export default function Venues() {
           )}
         </div>
       )}
+      <ConflictModal
+        isOpen={Boolean(conflictModalMsg)}
+        onClose={() => setConflictModalMsg('')}
+        message={conflictModalMsg}
+      />
     </>
   );
 }

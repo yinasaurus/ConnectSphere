@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import ConflictModal from '../components/ConflictModal';
 import EventDecisionPanel from '../components/EventDecisionPanel';
 import StatusBadge from '../components/StatusBadge';
 import { ROLES } from '../constants';
@@ -48,6 +49,7 @@ export default function EventDetail() {
   const [clarificationNotes, setClarificationNotes] = useState('');
   const [showRespondForm, setShowRespondForm] = useState(false);
   const [clarificationReply, setClarificationReply] = useState('');
+  const [conflictModalMsg, setConflictModalMsg] = useState('');
 
   // Loads the event, its venue bookings and, for planning roles only, history, comments and
   // venues; other roles never request planning data they aren't allowed to see.
@@ -75,12 +77,17 @@ export default function EventDetail() {
   async function run(action) {
     setError('');
     setMessage('');
+    setConflictModalMsg('');
     try {
       await action();
       setMessage('Updated.');
       await reload();
     } catch (err) {
-      setError(err.message);
+      if (err.code === 'BOOKING_CONFLICT') {
+        setConflictModalMsg(err.message);
+      } else {
+        setError(err.message);
+      }
     }
   }
 
@@ -90,7 +97,7 @@ export default function EventDetail() {
   const isCoordinator = event.coordinatorId === user?.id;
   // Venue requests are available during the approved/planning phase, not before approval.
   const canBookVenue = ['APPROVED', 'PLANNING'].includes(event.status);
-  const assignedBooking = bookings[0];
+  const assignedBooking = bookings.find((b) => b.status === 'PENDING') || bookings[0];
 
   return (
     <>
@@ -388,6 +395,11 @@ export default function EventDetail() {
           </div>}
         </div>
       </div>
+      <ConflictModal
+        isOpen={Boolean(conflictModalMsg)}
+        onClose={() => setConflictModalMsg('')}
+        message={conflictModalMsg}
+      />
     </>
   );
 }
