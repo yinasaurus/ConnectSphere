@@ -106,11 +106,15 @@ create table if not exists events (
   operational_notes text,
   venue_ready boolean not null default false,
   equipment_ready boolean not null default false,
+  sub_state varchar(40),
+  review_remarks text,
+  clarification_response text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create index if not exists events_status_idx on events (status);
+create index if not exists events_sub_state_idx on events (sub_state);
 create index if not exists events_start_at_idx on events (start_at);
 
 create table if not exists event_status_history (

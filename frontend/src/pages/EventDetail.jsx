@@ -30,6 +30,10 @@ export default function EventDetail() {
   const [venueAlternative, setVenueAlternative] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [showClarificationInput, setShowClarificationInput] = useState(false);
+  const [clarificationNotes, setClarificationNotes] = useState('');
+  const [showRespondForm, setShowRespondForm] = useState(false);
+  const [clarificationReply, setClarificationReply] = useState('');
 
   // Loads the event, its venue bookings and, for planning roles only, history, comments and
   // venues; other roles never request planning data they aren't allowed to see.
@@ -68,8 +72,8 @@ export default function EventDetail() {
 
   if (!event) return <p className="muted">{error || 'Loading event…'}</p>;
 
-  const isOrganiser = event.organiserId === user.id;
-  const isCoordinator = event.coordinatorId === user.id;
+  const isOrganiser = event.organiserId === user?.id;
+  const isCoordinator = event.coordinatorId === user?.id;
   const assignedBooking = bookings[0];
 
   return (
@@ -80,7 +84,7 @@ export default function EventDetail() {
           <h1>{event.name}</h1>
           <p>{event.purpose}</p>
         </div>
-        <StatusBadge status={event.status} />
+        <StatusBadge status={event.status} subState={event.subState} />
       </div>
       {error && <div className="alert">{error}</div>}
       {message && <div className="alert success">{message}</div>}
@@ -108,16 +112,135 @@ export default function EventDetail() {
             </div>
           )}
 
+          {isOrganiser && event.status === 'UNDER_REVIEW' && event.subState === 'ACTION_REQUIRED' && (
+            <div className="card attention-card stack">
+              <div className="row-between">
+                <h3 style={{ margin: 0, color: '#92400e' }}>Action Required: Clarification Requested</h3>
+                <StatusBadge status={event.status} subState={event.subState} />
+              </div>
+              <p>The event coordinator has reviewed your request and needs additional details or amendments before moving to planning.</p>
+              <div className="alert warning" style={{ whiteSpace: 'pre-wrap', margin: '4px 0 12px' }}>
+                <strong>Coordinator review remarks:</strong>
+                <p style={{ marginTop: 4 }}>{event.reviewRemarks}</p>
+              </div>
+              <div className="actions">
+                <Link className="btn" to={`/app/events/${id}/edit`}>Edit & Amend Details</Link>
+                <button className="btn secondary" onClick={() => setShowRespondForm(!showRespondForm)}>
+                  {showRespondForm ? 'Close Response Form' : 'Send Clarification Response'}
+                </button>
+              </div>
+
+              {showRespondForm && (
+                <div className="stack" style={{ marginTop: 12, padding: 12, background: 'var(--paper)', borderRadius: 12 }}>
+                  <label><strong>Your response / clarification notes</strong></label>
+                  <textarea
+                    value={clarificationReply}
+                    onChange={(e) => setClarificationReply(e.target.value)}
+                    placeholder="Describe the changes made or answer the coordinator's questions..."
+                  />
+                  <div className="actions">
+                    <button
+                      className="btn"
+                      disabled={!clarificationReply.trim()}
+                      onClick={() => run(async () => {
+                        await api(`/api/events/${id}/clarification/respond`, {
+                          method: 'POST',
+                          body: { response: clarificationReply },
+                        });
+                        setClarificationReply('');
+                        setShowRespondForm(false);
+                      })}
+                    >
+                      Submit Response
+                    </button>
+                    <button className="btn ghost" onClick={() => setShowRespondForm(false)}>Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isOrganiser && event.status === 'UNDER_REVIEW' && event.subState === 'CLARIFICATION_PROVIDED' && (
+            <div className="card alert info stack">
+              <strong>Clarification Provided</strong>
+              <p>Your clarification notes have been submitted to the coordinator for evaluation.</p>
+              {event.clarificationResponse && (
+                <p className="muted" style={{ fontSize: '0.88rem' }}><strong>Your note:</strong> {event.clarificationResponse}</p>
+              )}
+            </div>
+          )}
+
           {isCoordinator && (
-            <div className="card stack">
-              <h3>Coordinator actions</h3>
+            <div className="card stack review-panel">
+              <h3>Coordinator {event.status === 'UNDER_REVIEW' ? 'review actions' : 'actions'}</h3>
               {event.status === 'UNDER_REVIEW' && (
-                <EventDecisionPanel
-                  onDecide={(decision, text) => run(() => api(`/api/events/${id}/decision`, {
-                    method: 'POST',
-                    body: { decision, reason: text },
-                  }))}
-                />
+                <>
+                  <div style={{ padding: '8px 12px', background: 'var(--paper)', borderRadius: 10, fontSize: '0.9rem' }}>
+                    <p style={{ margin: '0 0 4px' }}>
+                      <strong>Current review phase:</strong>{' '}
+                      <StatusBadge status={event.status} subState={event.subState} />
+                    </p>
+                    {event.reviewRemarks && (
+                      <p style={{ margin: '4px 0' }} className="muted">
+                        <strong>Requested clarification:</strong> {event.reviewRemarks}
+                      </p>
+                    )}
+                    {event.clarificationResponse && (
+                      <p style={{ margin: '4px 0', color: '#075985' }}>
+                        <strong>Organizer response:</strong> {event.clarificationResponse}
+                      </p>
+                    )}
+                    {history.some((item) => item.note?.startsWith('Clarification ')) && (
+                      <div style={{ marginTop: 8 }}>
+                        <p style={{ margin: '0 0 4px' }}><strong>Clarification history</strong></p>
+                        {history.filter((item) => item.note?.startsWith('Clarification ')).map((item) => (
+                          <p key={item.id} className="muted" style={{ margin: '2px 0', fontSize: '0.88rem' }}>
+                            {item.actor_name ? `${item.actor_name}: ` : ''}{item.note}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <EventDecisionPanel
+                    onDecide={(decision, text) => run(() => api(`/api/events/${id}/decision`, {
+                      method: 'POST',
+                      body: { decision, reason: text },
+                    }))}
+                  />
+                  <div className="actions">
+                    <button className="btn secondary" onClick={() => setShowClarificationInput(!showClarificationInput)}>
+                      {event.subState === 'ACTION_REQUIRED' ? 'Update Clarification' : 'Request Clarification / Amendments'}
+                    </button>
+                  </div>
+
+                  {showClarificationInput && (
+                    <div className="stack" style={{ marginTop: 8, padding: 12, background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 12 }}>
+                      <label style={{ margin: 0 }}><strong>Review remarks / requested amendments *</strong></label>
+                      <textarea
+                        value={clarificationNotes}
+                        onChange={(e) => setClarificationNotes(e.target.value)}
+                        placeholder="State incomplete details or amendments needed from the organizer..."
+                      />
+                      <div className="actions">
+                        <button
+                          className="btn"
+                          disabled={!clarificationNotes.trim()}
+                          onClick={() => run(async () => {
+                            await api(`/api/events/${id}/clarification`, {
+                              method: 'POST',
+                              body: { remarks: clarificationNotes },
+                            });
+                            setClarificationNotes('');
+                            setShowClarificationInput(false);
+                          })}
+                        >
+                          Send Clarification Request
+                        </button>
+                        <button className="btn ghost" onClick={() => setShowClarificationInput(false)}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
               {event.status === 'PLANNING' && (
                 <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'CONFIRMED' } }))}>
@@ -239,6 +362,11 @@ export default function EventDetail() {
               <p key={item.id}>
                 {item.from_status || '—'} → {item.to_status}
                 <span className="muted"> · {item.actor_name}</span>
+                {item.note && (
+                  <span className="muted" style={{ display: 'block', marginTop: 2 }}>
+                    {item.note}
+                  </span>
+                )}
               </p>
             ))}
             {!history.length && <p className="muted">No transitions yet.</p>}
