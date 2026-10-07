@@ -23,8 +23,8 @@ describe('SCUM-13 routes with real JWT authentication and role middleware', () =
   const app = createApp();
   const token = jwt.sign({ sub: 1, roles: [ROLES.VENUE_STAFF] }, env.jwtSecret);
   const cases = [
-    ['post', '/api/venues', venues.createVenue, [ROLES.VENUE_STAFF], 201],
-    ['patch', '/api/venues/2', venues.updateVenue, [ROLES.VENUE_STAFF], 200],
+    ['post', '/api/venues', venues.createVenue, [ROLES.VENUE_STAFF], 201, { name: 'RBAC Hall', capacity: 10 }],
+    ['patch', '/api/venues/2', venues.updateVenue, [ROLES.VENUE_STAFF], 200, { capacity: 10 }],
     ['get', '/api/venues/bookings', venues.listBookings, [ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF], 200],
     ['post', '/api/venues/bookings', venues.requestBooking, [ROLES.EVENT_COORDINATOR], 201],
     ['post', '/api/venues/bookings/2/decision', venues.decideBooking, [ROLES.VENUE_STAFF], 200],
@@ -44,12 +44,12 @@ describe('SCUM-13 routes with real JWT authentication and role middleware', () =
     }
   });
 
-  for (const [method, path, handler, allowed, success] of cases) {
+  for (const [method, path, handler, allowed, success, validBody] of cases) {
     it.each([...Object.values(ROLES), 'UNKNOWN'])(`${method} ${path} checks database role %s`, async (role) => {
       db.fetchMany.mockResolvedValue([{ role }]);
       const res = await request(app)[method](path)
         .set('Cookie', `${env.sessionCookieName}=${token}`)
-        .send({ roles: [ROLES.VENUE_STAFF], role: ROLES.EVENT_COORDINATOR });
+        .send(allowed.includes(role) && validBody ? validBody : { roles: [ROLES.VENUE_STAFF], role: ROLES.EVENT_COORDINATOR });
       expect(res.status).toBe(allowed.includes(role) ? success : 403);
       expect(handler).toHaveBeenCalledTimes(allowed.includes(role) ? 1 : 0);
     });
@@ -79,7 +79,7 @@ describe('SCUM-13 routes with real JWT authentication and role middleware', () =
 
   it('allows a hybrid user when the permitted role is second', async () => {
     db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }, { role: ROLES.VENUE_STAFF }]);
-    const res = await request(app).post('/api/venues').set('Cookie', `${env.sessionCookieName}=${token}`).send({});
+    const res = await request(app).post('/api/venues').set('Cookie', `${env.sessionCookieName}=${token}`).send({ name: 'RBAC Hall', capacity: 10 });
     expect(res.status).toBe(201);
   });
 });

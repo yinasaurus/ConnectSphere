@@ -1,6 +1,8 @@
 const express = require('express');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { ROLES } = require('../constants/roles');
+const { validateBody } = require('../middleware/validate');
+const { eventDecisionSchema } = require('../validators/events.validators');
 const controller = require('../controllers/events.controller');
 const registrations = require('../controllers/registrations.controller');
 
@@ -14,7 +16,15 @@ router.get('/:id', controller.get);
 router.get('/:id/venue-bookings', controller.venueBookings);
 router.patch('/:id', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.update);
 router.post('/:id/submit', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.submit);
+router.post(
+  '/:id/decision',
+  requireRole(ROLES.EVENT_COORDINATOR),
+  validateBody(eventDecisionSchema),
+  controller.decide
+);
 router.post('/:id/status', requireRole(ROLES.EVENT_COORDINATOR), controller.changeStatus);
+router.post('/:id/clarification', requireRole(ROLES.EVENT_COORDINATOR), controller.requestClarification);
+router.post('/:id/clarification/respond', controller.respondClarification);
 router.get('/:id/history', controller.history);
 router.post('/:id/reassign', requireRole(ROLES.EVENT_COORDINATOR), controller.requestReassign);
 router.post('/:id/reassign/accept', requireRole(ROLES.EVENT_COORDINATOR), controller.acceptReassign);
