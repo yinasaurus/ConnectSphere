@@ -1,6 +1,13 @@
 const { supabase, fetchOne, fetchMany, fetchCount, insertOne, updateById } = require('../config/db');
 const { ROLES } = require('../constants/roles');
-const { EVENT_STATUS, EVENT_SUB_STATE, SIGNIFICANT_FIELDS } = require('../constants/statuses');
+const {
+  EVENT_STATUS,
+  EVENT_SUB_STATE,
+  EVENT_DECISION,
+  MIN_REJECTION_REASON_LENGTH,
+  SIGNIFICANT_FIELDS,
+} = require('../constants/statuses');
+const { REJECTION_REASON_MESSAGE } = require('../validators/events.validators');
 const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
 const { assertTransition, assertSubStateTransition } = require('../domain/statusMachine');
@@ -38,6 +45,24 @@ function findMissingSubmissionFields(row) {
     if (column === 'expected_attendance') return !value || value <= 0;
     return value === null || value === undefined || String(value).trim() === '';
   });
+}
+
+// Guards against events like "starts 6 Oct, ends 5 Oct" that are never valid,
+// whichever of create/update set the dates. Skipped when either side is
+// absent (e.g. a draft saved before its dates are filled in, SCUM-15).
+function validateDateRange(startAt, endAt) {
+  if (startAt === null || startAt === undefined || endAt === null || endAt === undefined) return;
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+  if (start >= end) {
+    throw httpError(
+      400,
+      'Event start date/time must be before the end date/time',
+      'VALIDATION_ERROR',
+      { fields: ['startAt', 'endAt'] }
+    );
+  }
 }
 
 function mapEvent(row) {
@@ -96,6 +121,28 @@ function canViewEvent(user, row) {
   return false;
 }
 
+function canViewPlanning(user) {
+  return [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT]
+    .some((role) => hasRole(user, role));
+}
+
+function visibleEvent(user, row) {
+  const event = mapEvent(row);
+  if (canViewPlanning(user)) return event;
+  // Attendees receive registration details, not internal planning fields.
+  const { id, name, description, purpose, category, status, startAt, endAt,
+    registrationRequired, registrationOpensAt, registrationClosesAt,
+    registrationCapacity, registrationOpen } = event;
+  return { id, name, description, purpose, category, status, startAt, endAt,
+    registrationRequired, registrationOpensAt, registrationClosesAt,
+    registrationCapacity, registrationOpen };
+}
+
+async function assertPlanningAccess(user, eventId) {
+  if (!canViewPlanning(user)) throw httpError(403, 'Planning information is restricted', 'FORBIDDEN');
+  return getEvent(user, eventId);
+}
+
 function applyVisibility(query, user) {
   if (hasRole(user, ROLES.EVENT_COORDINATOR)
     || hasRole(user, ROLES.VENUE_STAFF)
@@ -125,7 +172,7 @@ async function listEvents(user, filters = {}) {
   }
 
   const rows = await fetchMany(query);
-  return rows.filter((row) => canViewEvent(user, row)).map(mapEvent);
+  return rows.filter((row) => canViewEvent(user, row)).map((row) => visibleEvent(user, row));
 }
 
 async function getEvent(user, id) {
@@ -133,7 +180,26 @@ async function getEvent(user, id) {
     supabase.from('events').select(EVENT_SELECT).eq('id', id)
   );
   if (!row || !canViewEvent(user, row)) throw httpError(404, 'Event not found', 'NOT_FOUND');
-  return mapEvent(row);
+  return visibleEvent(user, row);
+}
+
+async function listVenueBookings(user, eventId) {
+  // Reuse event visibility before querying bookings, including client isolation.
+  const event = await getEvent(user, eventId);
+  let query = supabase.from('venue_bookings')
+      .select('id, event_id, venue_id, status, venues ( name )')
+      .eq('event_id', event.id)
+      .order('start_at');
+  if (!canViewPlanning(user)) query = query.eq('status', 'APPROVED');
+  const rows = await fetchMany(query);
+  // Event readers need booking status, not internal notes or decision metadata.
+  return rows.map((row) => ({
+    id: row.id,
+    event_id: row.event_id,
+    venue_id: row.venue_id,
+    status: row.status,
+    venue_name: row.venues?.name || null,
+  }));
 }
 
 async function createEvent(user, payload) {
@@ -143,6 +209,8 @@ async function createEvent(user, payload) {
 
   const name = (payload.name || '').trim();
   if (!name) throw httpError(400, 'Event name is required', 'VALIDATION_ERROR');
+
+  validateDateRange(payload.startAt, payload.endAt);
 
   const created = await insertOne('events', {
     organisation_id: user.organisationId || payload.organisationId || null,
@@ -208,6 +276,10 @@ async function updateEvent(user, id, payload) {
   }
 
   const patch = toEventPatch(payload);
+  const nextStart = 'start_at' in patch ? patch.start_at : existing.start_at;
+  const nextEnd = 'end_at' in patch ? patch.end_at : existing.end_at;
+  validateDateRange(nextStart, nextEnd);
+
   patch.updated_at = new Date().toISOString();
   await updateById('events', id, patch);
   await writeAudit(user.id, 'EVENT_UPDATED', 'event', id, payload);
@@ -233,12 +305,6 @@ function toEventPatch(payload) {
     registrationClosesAt: 'registration_closes_at',
     registrationCapacity: 'registration_capacity',
     registrationOpen: 'registration_open',
-    operationalNotes: 'operational_notes',
-    venueReady: 'venue_ready',
-    equipmentReady: 'equipment_ready',
-    subState: 'sub_state',
-    reviewRemarks: 'review_remarks',
-    clarificationResponse: 'clarification_response',
   };
 
   const dateFields = new Set(['start_at', 'end_at', 'registration_opens_at', 'registration_closes_at']);
@@ -262,7 +328,11 @@ function toEventPatch(payload) {
 async function submitEvent(user, id) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
-  if (existing.organiser_id !== user.id && !hasRole(user, ROLES.EVENT_COORDINATOR)) {
+  const ownsRequest = existing.organiser_id === user.id
+    && (hasRole(user, ROLES.EVENT_ORGANISER) || hasRole(user, ROLES.EVENT_COORDINATOR));
+  const assignedCoordinator = existing.coordinator_id === user.id
+    && hasRole(user, ROLES.EVENT_COORDINATOR);
+  if (!ownsRequest && !assignedCoordinator) {
     throw httpError(403, 'Only the organiser can submit this request', 'FORBIDDEN');
   }
 
@@ -304,18 +374,56 @@ async function submitEvent(user, id) {
   return getEvent(user, id);
 }
 
-async function changeStatus(user, id, nextStatus, reason) {
+const DECISION_TARGET_STATUS = {
+  [EVENT_DECISION.APPROVE]: EVENT_STATUS.PLANNING,
+  [EVENT_DECISION.REJECT]: EVENT_STATUS.REJECTED,
+};
+
+async function decideEvent(user, id, decision, reason) {
+  const nextStatus = DECISION_TARGET_STATUS[decision];
+  if (!nextStatus) throw httpError(400, 'Decision must be APPROVE or REJECT', 'VALIDATION_ERROR');
+  return changeStatus(user, id, nextStatus, reason, { expectedStatus: EVENT_STATUS.UNDER_REVIEW });
+}
+
+function statusNotification(name, fromStatus, nextStatus, note) {
+  if (nextStatus === EVENT_STATUS.REJECTED) {
+    return { title: 'Event request rejected', body: `${name} was rejected. Reason: ${note}` };
+  }
+  if (fromStatus === EVENT_STATUS.UNDER_REVIEW && nextStatus === EVENT_STATUS.PLANNING) {
+    const comment = note ? ` Coordinator comment: ${note}` : '';
+    return { title: 'Event request approved', body: `${name} was approved for planning.${comment}` };
+  }
+  return {
+    title: `Event ${nextStatus.toLowerCase().replace('_', ' ')}`,
+    body: `${name} is now ${nextStatus}.`,
+  };
+}
+
+async function changeStatus(user, id, nextStatus, reason, { expectedStatus } = {}) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only coordinators can change event status', 'FORBIDDEN');
   }
 
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
-  if (existing.coordinator_id && existing.coordinator_id !== user.id) {
+  if (existing.coordinator_id !== user.id) {
     throw httpError(403, 'Only the assigned coordinator can update this event', 'FORBIDDEN');
   }
 
+  if (expectedStatus && existing.status !== expectedStatus) {
+    throw httpError(
+      409,
+      'Only event requests under review can be approved or rejected',
+      'INVALID_STATUS_TRANSITION'
+    );
+  }
+
   assertTransition(existing.status, nextStatus);
+
+  const note = typeof reason === 'string' ? reason.trim() : '';
+  if (nextStatus === EVENT_STATUS.REJECTED && note.length < MIN_REJECTION_REASON_LENGTH) {
+    throw httpError(400, REJECTION_REASON_MESSAGE, 'VALIDATION_ERROR', { fields: ['reason'] });
+  }
 
   const patch = {
     status: nextStatus,
@@ -324,7 +432,7 @@ async function changeStatus(user, id, nextStatus, reason) {
   };
 
   if (nextStatus === EVENT_STATUS.REJECTED) {
-    patch.rejection_reason = reason || 'Rejected';
+    patch.rejection_reason = note;
   }
   if (nextStatus === EVENT_STATUS.CONFIRMED) {
     const ready = await isReadyToConfirm(existing);
@@ -334,21 +442,16 @@ async function changeStatus(user, id, nextStatus, reason) {
   }
 
   await updateById('events', id, patch);
-  await writeStatusHistory(id, user.id, existing.status, nextStatus, reason || null);
+  await writeStatusHistory(id, user.id, existing.status, nextStatus, note || null);
   await writeAudit(user.id, 'EVENT_STATUS_CHANGED', 'event', id, {
     from: existing.status,
     to: nextStatus,
-    reason,
+    reason: note || null,
   });
 
   if (existing.organiser_id) {
-    await notifyUser(
-      existing.organiser_id,
-      'EVENT_STATUS_CHANGED',
-      `Event ${nextStatus.toLowerCase().replace('_', ' ')}`,
-      `${existing.name} is now ${nextStatus}.`,
-      id
-    );
+    const { title, body } = statusNotification(existing.name, existing.status, nextStatus, note);
+    await notifyUser(existing.organiser_id, 'EVENT_STATUS_CHANGED', title, body, id);
   }
 
   return getEvent(user, id);
@@ -457,7 +560,7 @@ async function writeStatusHistory(eventId, actorId, fromStatus, toStatus, note) 
 }
 
 async function listHistory(user, eventId) {
-  await getEvent(user, eventId);
+  await assertPlanningAccess(user, eventId);
   const rows = await fetchMany(
     supabase
       .from('event_status_history')
@@ -530,7 +633,7 @@ async function respondClarification(user, id, response, amendments = {}) {
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
 
   const isOrganiser = existing.organiser_id === user.id;
-  if (!isOrganiser && !hasRole(user, ROLES.EVENT_COORDINATOR)) {
+  if (!isOrganiser) {
     throw httpError(403, 'Only the event organiser can respond to clarification requests', 'FORBIDDEN');
   }
 
@@ -542,13 +645,21 @@ async function respondClarification(user, id, response, amendments = {}) {
     throw httpError(409, 'No clarification is currently requested for this event', 'INVALID_SUB_STATE');
   }
 
+  const trimmedResponse = (response || '').trim();
+  const validAmendments = amendments && typeof amendments === 'object'
+    ? Object.fromEntries(Object.entries(amendments).filter(([_, v]) => v !== undefined && v !== ''))
+    : {};
+  const hasAmendments = Object.keys(validAmendments).length > 0;
+
+  if (!trimmedResponse && !hasAmendments) {
+    throw httpError(400, 'Clarification response text or amendments are required', 'VALIDATION_ERROR');
+  }
+
   assertSubStateTransition(existing.sub_state, EVENT_SUB_STATE.CLARIFICATION_PROVIDED);
 
-  const trimmedResponse = (response || '').trim();
-
   let patch = {};
-  if (amendments && Object.keys(amendments).length) {
-    patch = toEventPatch(amendments);
+  if (hasAmendments) {
+    patch = toEventPatch(validAmendments);
   }
 
   patch.sub_state = EVENT_SUB_STATE.CLARIFICATION_PROVIDED;
@@ -587,9 +698,12 @@ async function respondClarification(user, id, response, amendments = {}) {
 module.exports = {
   listEvents,
   getEvent,
+  listVenueBookings,
+  assertPlanningAccess,
   createEvent,
   updateEvent,
   submitEvent,
+  decideEvent,
   changeStatus,
   requestClarification,
   respondClarification,

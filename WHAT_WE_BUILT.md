@@ -69,6 +69,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Coordinators are **auto-assigned**, one per event, fair load | least active events on submit |
 | Coordinators can **view** other events but only **edit** assigned ones | list vs update |
 | Reassignment: current coordinator requests, new coordinator accepts | `/reassign` endpoints |
+| Approve / reject (SCRUM-17): only the **assigned** coordinator decides, nobody while unassigned; reject needs a reason of 10–1000 characters; organiser is notified with the reason; reason kept on the event, in status history and in the audit log | `POST /api/events/:id/decision` → `decideEvent` |
 | Organisers only see their **organisation** | list visibility |
 | Multiple roles on one account | `user_roles` + demo user `hybrid@...` |
 | Venue staff CRUD venues; tech staff maintain equipment | venue/equipment routes |
@@ -77,6 +78,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Confirm requires an approved venue booking | `isReadyToConfirm` |
 | Registration after confirmed; FCFS + waitlist notify on withdraw | `registrations.service` |
 | Audit log + in-app notifications | `audit.service` |
+| Booking decision notice (SCRUM-78): when Venue Staff approve or reject, only the event's assigned Coordinator is notified; the notice names the event and venue, and a rejection includes the reason and suggested alternative if staff gave them (no reason line otherwise); nothing is sent while the request is pending | `decideBooking` → `buildBookingDecisionNotice` → `notifyUser`, reason/alternative boxes on the event page |
 | Accounts are **not** self-serve signup | login only; seed users stand in for the future identity integration |
 
 Notification channel is in-app for now. The same `notifyUser()` helper can later send email without changing every feature.

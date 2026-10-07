@@ -37,6 +37,8 @@ export const SUB_STATE_LABELS = {
   CLARIFICATION_PROVIDED: 'Clarification provided',
 };
 
+export const MIN_REJECTION_REASON_LENGTH = 10;
+
 export const CATEGORIES = [
   'CONFERENCE',
   'WORKSHOP',

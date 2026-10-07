@@ -14,6 +14,11 @@ const get = asyncHandler(async (req, res) => {
   res.json({ event });
 });
 
+const venueBookings = asyncHandler(async (req, res) => {
+  const bookings = await eventsService.listVenueBookings(req.user, req.params.id);
+  res.json({ bookings });
+});
+
 const create = asyncHandler(async (req, res) => {
   const event = await eventsService.createEvent(req.user, req.body);
   res.status(201).json({ event });
@@ -26,6 +31,16 @@ const update = asyncHandler(async (req, res) => {
 
 const submit = asyncHandler(async (req, res) => {
   const event = await eventsService.submitEvent(req.user, req.params.id);
+  res.json({ event });
+});
+
+const decide = asyncHandler(async (req, res) => {
+  const event = await eventsService.decideEvent(
+    req.user,
+    req.params.id,
+    req.body.decision,
+    req.body.reason
+  );
   res.json({ event });
 });
 
@@ -80,9 +95,11 @@ const respondClarification = asyncHandler(async (req, res) => {
 module.exports = {
   list,
   get,
+  venueBookings,
   create,
   update,
   submit,
+  decide,
   changeStatus,
   history,
   requestReassign,
