@@ -247,6 +247,67 @@ describe('SCUM-16 (Event Clarification & Review Panel)', () => {
     expect(await screen.findByText('Clarification Provided')).toBeInTheDocument();
     expect(screen.getByText(/attendance adjusted to 150 banquet style/i)).toBeInTheDocument();
   });
+
+  /*
+   * AC:       AC5 (UI: clarification history)
+   * Scenario: Coordinator opens an event that has had two clarification rounds
+   * Setup:    Status history includes every request and response note, newest first
+   * Expected: Status history and the coordinator panel show all four notes, not only the latest
+   * Type:     normal
+   */
+  it('US16-UI04 (AC5): coordinator sees every clarification request and response in history', async () => {
+    useAuth.mockReturnValue({
+      user: coordinatorUser,
+      hasRole: (...roles) => roles.some((r) => coordinatorUser.roles.includes(r)),
+    });
+
+    const eventClarified = {
+      id: 5,
+      name: 'Global AI Summit',
+      status: 'UNDER_REVIEW',
+      subState: 'CLARIFICATION_PROVIDED',
+      reviewRemarks: 'Round 2 Question',
+      clarificationResponse: 'Round 2 Answer',
+      coordinatorId: 10,
+      organiserId: 20,
+    };
+
+    api.mockImplementation((path) => {
+      if (path === '/api/auth/me') return Promise.resolve({ user: coordinatorUser });
+      if (path === '/api/events/5') return Promise.resolve({ event: eventClarified });
+      if (path === '/api/events/5/history') {
+        return Promise.resolve({
+          history: [
+            { id: 4, from_status: 'UNDER_REVIEW', to_status: 'UNDER_REVIEW', actor_name: 'Aisha Rahman', note: 'Clarification responded: Round 2 Answer' },
+            { id: 3, from_status: 'UNDER_REVIEW', to_status: 'UNDER_REVIEW', actor_name: 'Chloe Lim', note: 'Clarification requested: Round 2 Question' },
+            { id: 2, from_status: 'UNDER_REVIEW', to_status: 'UNDER_REVIEW', actor_name: 'Aisha Rahman', note: 'Clarification responded: Round 1 Answer' },
+            { id: 1, from_status: 'UNDER_REVIEW', to_status: 'UNDER_REVIEW', actor_name: 'Chloe Lim', note: 'Clarification requested: Round 1 Question' },
+          ],
+        });
+      }
+      if (path === '/api/comments/5') return Promise.resolve({ comments: [] });
+      if (path === '/api/venues') return Promise.resolve({ venues: [] });
+      if (path === '/api/events/5/venue-bookings') return Promise.resolve({ bookings: [] });
+      throw new Error(`Unhandled api: ${path}`);
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/app/events/5']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/app/events/:id" element={<EventDetail />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Global AI Summit')).toBeInTheDocument();
+    expect(screen.getByText('Clarification history')).toBeInTheDocument();
+    expect(screen.getAllByText(/Clarification requested: Round 1 Question/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Clarification responded: Round 1 Answer/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Clarification requested: Round 2 Question/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Clarification responded: Round 2 Answer/).length).toBeGreaterThan(0);
+  });
 });
 
 describe('EventDetail SCRUM-17 & Base tests', () => {

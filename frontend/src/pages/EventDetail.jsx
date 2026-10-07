@@ -190,6 +190,16 @@ export default function EventDetail() {
                         <strong>Organizer response:</strong> {event.clarificationResponse}
                       </p>
                     )}
+                    {history.some((item) => item.note?.startsWith('Clarification ')) && (
+                      <div style={{ marginTop: 8 }}>
+                        <p style={{ margin: '0 0 4px' }}><strong>Clarification history</strong></p>
+                        {history.filter((item) => item.note?.startsWith('Clarification ')).map((item) => (
+                          <p key={item.id} className="muted" style={{ margin: '2px 0', fontSize: '0.88rem' }}>
+                            {item.actor_name ? `${item.actor_name}: ` : ''}{item.note}
+                          </p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <EventDecisionPanel
                     onDecide={(decision, text) => run(() => api(`/api/events/${id}/decision`, {
@@ -352,6 +362,11 @@ export default function EventDetail() {
               <p key={item.id}>
                 {item.from_status || '—'} → {item.to_status}
                 <span className="muted"> · {item.actor_name}</span>
+                {item.note && (
+                  <span className="muted" style={{ display: 'block', marginTop: 2 }}>
+                    {item.note}
+                  </span>
+                )}
               </p>
             ))}
             {!history.length && <p className="muted">No transitions yet.</p>}
