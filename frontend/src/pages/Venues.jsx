@@ -44,6 +44,184 @@ const EMPTY_SEARCH = {
   facilities: '',
 };
 
+/** SCRUM-18: per-booking status badge with colour-coded pill. */
+function BookingStatusBadge({ status }) {
+  const colours = {
+    PENDING: '#b45309',
+    APPROVED: '#15803d',
+    REJECTED: '#b91c1c',
+    TENTATIVE: '#1d4ed8',
+    CANCELLED: '#6b7280',
+  };
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '2px 10px',
+        borderRadius: 12,
+        fontSize: '0.78rem',
+        fontWeight: 600,
+        background: colours[status] || '#374151',
+        color: '#fff',
+      }}
+    >
+      {status}
+    </span>
+  );
+}
+
+/**
+ * SCRUM-18 AC2/AC3: one card per pending booking shown to Venue Staff.
+ * Displays event, venue, date, time, and booking window so staff have full context
+ * before deciding. Each card has its own reason/alternative inputs and Approve/Reject
+ * buttons so bookings are decided independently (AC9).
+ */
+function PendingBookingCard({ booking, onDecide }) {
+  const [reason, setReason] = useState('');
+  const [alternative, setAlternative] = useState('');
+  const [deciding, setDeciding] = useState(false);
+  const [localError, setLocalError] = useState('');
+
+  async function decide(approve) {
+    setDeciding(true);
+    setLocalError('');
+    try {
+      await onDecide(booking.id, approve, reason.trim() || undefined, alternative.trim() || undefined);
+      setReason('');
+      setAlternative('');
+    } catch (err) {
+      setLocalError(err.message);
+    } finally {
+      setDeciding(false);
+    }
+  }
+
+  const bookingWindow = `${new Date(booking.start_at).toLocaleString()} – ${new Date(booking.end_at).toLocaleString()}`;
+  const eventWindow = booking.event_start_at
+    ? `${new Date(booking.event_start_at).toLocaleString()} – ${new Date(booking.event_end_at).toLocaleString()}`
+    : 'TBC';
+
+  return (
+    <div
+      style={{
+        border: '1px solid #fcd34d',
+        borderRadius: 10,
+        padding: '16px 20px',
+        background: 'rgba(251,191,36,0.06)',
+        marginBottom: 14,
+      }}
+      data-testid={`pending-booking-${booking.id}`}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: 2 }}>
+            {booking.event_name || `Event #${booking.event_id}`}
+          </div>
+          <div className="muted" style={{ fontSize: '0.85rem', marginBottom: 6 }}>
+            {booking.venue_name || `Venue #${booking.venue_id}`}
+          </div>
+          <p style={{ margin: '3px 0', fontSize: '0.88rem' }}>
+            <strong>Booking window:</strong> {bookingWindow}
+          </p>
+          <p style={{ margin: '3px 0', fontSize: '0.88rem' }}>
+            <strong>Event date:</strong> {eventWindow}
+          </p>
+          {booking.notes && (
+            <p style={{ margin: '3px 0', fontSize: '0.88rem' }}>
+              <strong>Notes:</strong> {booking.notes}
+            </p>
+          )}
+        </div>
+        <BookingStatusBadge status={booking.status} />
+      </div>
+
+      {localError && <div className="alert" style={{ marginTop: 10 }}>{localError}</div>}
+
+      <div style={{ marginTop: 14 }}>
+        <label
+          htmlFor={`reason-${booking.id}`}
+          style={{ display: 'block', fontSize: '0.85rem', marginBottom: 4 }}
+          className="muted"
+        >
+          Rejection reason (optional)
+        </label>
+        <textarea
+          id={`reason-${booking.id}`}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Explain why the booking is rejected, if applicable"
+          rows={2}
+          style={{ width: '100%', marginBottom: 8 }}
+        />
+        <label
+          htmlFor={`alt-${booking.id}`}
+          style={{ display: 'block', fontSize: '0.85rem', marginBottom: 4 }}
+          className="muted"
+        >
+          Suggested alternative (optional)
+        </label>
+        <input
+          id={`alt-${booking.id}`}
+          value={alternative}
+          onChange={(e) => setAlternative(e.target.value)}
+          placeholder="e.g. Orchid Room on the same date"
+          style={{ width: '100%', marginBottom: 12 }}
+        />
+        <div className="actions">
+          <button
+            id={`approve-booking-${booking.id}`}
+            className="btn"
+            disabled={deciding}
+            onClick={() => decide(true)}
+          >
+            {deciding ? 'Saving…' : 'Approve'}
+          </button>
+          <button
+            id={`reject-booking-${booking.id}`}
+            className="btn danger"
+            disabled={deciding}
+            onClick={() => decide(false)}
+          >
+            {deciding ? 'Saving…' : 'Reject'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * SCRUM-18 AC7/AC8: read-only row in the decided bookings table.
+ * Shows status, booking window, and (for rejected bookings) the reason and alternative.
+ */
+function BookingRow({ booking }) {
+  const isRejected = booking.status === 'REJECTED';
+  return (
+    <tr>
+      <td>{booking.event_name || `Event #${booking.event_id}`}</td>
+      <td>{booking.venue_name || `Venue #${booking.venue_id}`}</td>
+      <td><BookingStatusBadge status={booking.status} /></td>
+      <td>
+        {booking.start_at ? new Date(booking.start_at).toLocaleString() : '—'}
+        {booking.end_at && ` – ${new Date(booking.end_at).toLocaleString()}`}
+      </td>
+      <td>
+        {isRejected && booking.decision_reason && (
+          <span style={{ color: '#b91c1c', fontSize: '0.85rem' }}>
+            {booking.decision_reason}
+          </span>
+        )}
+        {isRejected && booking.alternative_suggestion && (
+          <span style={{ color: '#374151', fontSize: '0.85rem', display: 'block' }}>
+            Alt: {booking.alternative_suggestion}
+          </span>
+        )}
+        {!isRejected && <span className="muted">—</span>}
+      </td>
+    </tr>
+  );
+}
+
 export default function Venues() {
   const { hasRole } = useAuth();
   const [venues, setVenues] = useState([]);
@@ -70,6 +248,10 @@ export default function Venues() {
   const [searchResults, setSearchResults] = useState(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
+
+  const isVenueStaff = hasRole(ROLES.VENUE_STAFF);
+  const pendingBookings = bookings.filter((b) => b.status === 'PENDING');
+  const decidedBookings = bookings.filter((b) => b.status !== 'PENDING');
 
   async function reload() {
     const [venueRes, bookingRes] = await Promise.all([
@@ -199,6 +381,19 @@ export default function Venues() {
     setSearchError('');
   }
 
+  /**
+   * SCRUM-18 AC3/AC4/AC5: Venue Staff decide a single pending booking.
+   * Approving/rejecting one booking does NOT change the status of any other
+   * booking on the same event (AC9 — each is decided independently).
+   */
+  async function handleDecide(bookingId, approve, reason, alternativeSuggestion) {
+    await api(`/api/venues/bookings/${bookingId}/decision`, {
+      method: 'POST',
+      body: { approve, reason, alternativeSuggestion },
+    });
+    await reload();
+  }
+
   return (
     <>
       <div className="topbar">
@@ -214,7 +409,6 @@ export default function Venues() {
           {saveToast}
         </div>
       )}
-
 
       <div className="card" style={{ marginBottom: 18 }}>
         <h3>Search available venues</h3>
@@ -370,29 +564,71 @@ export default function Venues() {
         </div>
       )}
 
+      {/*
+        SCRUM-18 AC1/AC2/AC3: Booking requests section.
+        Venue Staff see pending requests as actionable cards (each with full details and
+        independent approve/reject controls). Decided bookings appear in a table below.
+        Non-staff (Coordinators, Organisers) see only the status table (AC7/AC8).
+      */}
       <div className="card" style={{ marginTop: 18 }}>
         <h3>Booking requests</h3>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Event</th>
-              <th>Venue</th>
-              <th>Status</th>
-              <th>Window</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bookings.map((booking) => (
-              <tr key={booking.id}>
-                <td>{booking.event_name}</td>
-                <td>{booking.venue_name}</td>
-                <td>{booking.status}</td>
-                <td>{new Date(booking.start_at).toLocaleString()}</td>
-              </tr>
+
+        {isVenueStaff && pendingBookings.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <h4 style={{ marginBottom: 10 }}>
+              Pending approval
+              <span
+                style={{
+                  marginLeft: 8,
+                  background: '#fcd34d',
+                  color: '#92400e',
+                  borderRadius: 12,
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  padding: '2px 9px',
+                }}
+              >
+                {pendingBookings.length}
+              </span>
+            </h4>
+            {pendingBookings.map((booking) => (
+              <PendingBookingCard
+                key={booking.id}
+                booking={booking}
+                onDecide={handleDecide}
+              />
             ))}
-            {!bookings.length && <tr><td colSpan="4" className="muted">No bookings yet.</td></tr>}
-          </tbody>
-        </table>
+          </div>
+        )}
+
+        {isVenueStaff && pendingBookings.length === 0 && (
+          <p className="muted" style={{ marginBottom: 16 }}>No pending booking requests.</p>
+        )}
+
+        {/* Decided bookings table — Venue Staff see only decided ones; others see all */}
+        {(isVenueStaff ? decidedBookings : bookings).length > 0 ? (
+          <>
+            {isVenueStaff && <h4 style={{ marginBottom: 10 }}>Decided bookings</h4>}
+            <table className="table" id="bookings-table">
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Venue</th>
+                  <th>Status</th>
+                  <th>Window</th>
+                  <th>Decision / Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(isVenueStaff ? decidedBookings : bookings).map((booking) => (
+                  <BookingRow key={booking.id} booking={booking} />
+                ))}
+              </tbody>
+            </table>
+          </>
+        ) : (
+          !isVenueStaff && <p className="muted">No bookings yet.</p>
+        )}
       </div>
 
       {hasRole(ROLES.VENUE_STAFF) && (

@@ -329,7 +329,7 @@ async function updateVenue(user, id, payload) {
 async function listBookings(filters = {}) {
   let query = supabase
     .from('venue_bookings')
-    .select('*, venues ( name ), events ( name )')
+    .select('*, venues ( name ), events ( name, start_at, end_at )')
     .order('start_at');
 
   if (filters.venueId) query = query.eq('venue_id', filters.venueId);
@@ -337,9 +337,25 @@ async function listBookings(filters = {}) {
 
   const rows = await fetchMany(query);
   return rows.map((row) => ({
-    ...row,
+    id: row.id,
+    event_id: row.event_id,
+    venue_id: row.venue_id,
+    requested_by: row.requested_by,
+    decided_by: row.decided_by,
+    status: row.status,
+    start_at: row.start_at,
+    end_at: row.end_at,
+    setup_minutes: row.setup_minutes,
+    teardown_minutes: row.teardown_minutes,
+    notes: row.notes,
+    decision_reason: row.decision_reason,
+    alternative_suggestion: row.alternative_suggestion,
+    decided_at: row.decided_at,
+    created_at: row.created_at,
     venue_name: row.venues?.name,
     event_name: row.events?.name,
+    event_start_at: row.events?.start_at,
+    event_end_at: row.events?.end_at,
   }));
 }
 
@@ -389,12 +405,13 @@ async function requestBooking(user, payload) {
  * Purpose: Venue Staff approve or reject a venue booking request. The decision is saved
  * first, then the event's assigned Coordinator is notified so they can proceed or arrange
  * an alternative.
- * AC: SCRUM-78 AC1-AC5 (the notice), AC6 (no notice unless the decision was saved).
+ * AC: SCRUM-18 AC4/AC5 (APPROVED/REJECTED status), AC6 (notification), SCRUM-78 AC1-AC5.
  * Inputs: user (must have VENUE_STAFF), booking id, and decision { approve, reason,
  * alternativeSuggestion }. A truthy `approve` means APPROVED; anything else means REJECTED.
- * Output: the updated booking row. Throws 403 if the user is not Venue Staff and 404 if the
- * booking doesn't exist; database errors are passed on. It does not check that the booking
- * is still PENDING, so deciding it again sends another notice (NEEDS HUMAN).
+ * Output: the updated booking row. Throws 403 if the user is not Venue Staff, 404 if the
+ * booking doesn't exist, and 409 if the booking has already been decided (not PENDING).
+ * Each booking is decided independently: approving/rejecting one does not affect others on
+ * the same event (SCRUM-18 AC9).
  */
 async function decideBooking(user, id, decision) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
@@ -403,6 +420,16 @@ async function decideBooking(user, id, decision) {
 
   const booking = await fetchOne(supabase.from('venue_bookings').select('*').eq('id', id));
   if (!booking) throw httpError(404, 'Booking not found', 'NOT_FOUND');
+
+  // SCRUM-18 AC4: only PENDING bookings can be decided; rejecting an already-decided
+  // booking would send a duplicate notice to the Coordinator (NEEDS HUMAN resolved).
+  if (booking.status !== BOOKING_STATUS.PENDING) {
+    throw httpError(
+      409,
+      `This booking has already been ${booking.status.toLowerCase()} and cannot be changed`,
+      'ALREADY_DECIDED'
+    );
+  }
 
   const status = decision.approve ? BOOKING_STATUS.APPROVED : BOOKING_STATUS.REJECTED;
   const updated = await updateById('venue_bookings', id, {

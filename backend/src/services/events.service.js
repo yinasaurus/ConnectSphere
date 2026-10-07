@@ -182,19 +182,25 @@ async function listVenueBookings(user, eventId) {
   // Reuse event visibility before querying bookings, including client isolation.
   const event = await getEvent(user, eventId);
   let query = supabase.from('venue_bookings')
-      .select('id, event_id, venue_id, status, venues ( name )')
+      .select('id, event_id, venue_id, status, decision_reason, alternative_suggestion, venues ( name )')
       .eq('event_id', event.id)
       .order('start_at');
   if (!canViewPlanning(user)) query = query.eq('status', 'APPROVED');
   const rows = await fetchMany(query);
-  // Event readers need booking status, not internal notes or decision metadata.
-  return rows.map((row) => ({
-    id: row.id,
-    event_id: row.event_id,
-    venue_id: row.venue_id,
-    status: row.status,
-    venue_name: row.venues?.name || null,
-  }));
+  return rows.map((row) => {
+    const item = {
+      id: row.id,
+      event_id: row.event_id,
+      venue_id: row.venue_id,
+      status: row.status,
+      venue_name: row.venues?.name || null,
+    };
+    if (canViewPlanning(user)) {
+      if (row.decision_reason !== undefined) item.decision_reason = row.decision_reason;
+      if (row.alternative_suggestion !== undefined) item.alternative_suggestion = row.alternative_suggestion;
+    }
+    return item;
+  });
 }
 
 async function createEvent(user, payload) {

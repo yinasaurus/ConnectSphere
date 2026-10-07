@@ -6,12 +6,38 @@ import EventDecisionPanel from '../components/EventDecisionPanel';
 import StatusBadge from '../components/StatusBadge';
 import { ROLES } from '../constants';
 
+/** SCRUM-18: colour-coded booking status badge. */
+function BookingStatusBadge({ status }) {
+  const colours = {
+    PENDING: '#b45309',
+    APPROVED: '#15803d',
+    REJECTED: '#b91c1c',
+    TENTATIVE: '#1d4ed8',
+    CANCELLED: '#6b7280',
+  };
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '2px 10px',
+      borderRadius: 12,
+      fontSize: '0.78rem',
+      fontWeight: 600,
+      background: colours[status] || '#374151',
+      color: '#fff',
+      marginLeft: 6,
+    }}>
+      {status}
+    </span>
+  );
+}
+
 /**
  * Purpose: one event's page. Shows the event and, depending on the user's roles, the actions
  * they can take: Organisers submit, Coordinators review and request a venue, Venue Staff
- * approve or reject the pending venue booking, Attendees register.
- * AC: SCRUM-78 AC1-AC3 (the Venue Staff decision card sends the reason and alternative
- * staff typed, or none). The other sections belong to earlier stories.
+ * approve or reject pending venue bookings, Attendees register.
+ * AC: SCRUM-18 AC1-AC9 (venue booking approval/rejection flow with full details visible).
+ *     SCRUM-78 AC1-AC3 (the Venue Staff decision card sends the reason and alternative
+ *     staff typed, or none). The other sections belong to earlier stories.
  * Failure: load errors are shown in place of the event; action errors are shown above it.
  */
 export default function EventDetail() {
@@ -26,8 +52,9 @@ export default function EventDetail() {
   const [comment, setComment] = useState('');
   const [venueId, setVenueId] = useState('');
   const [reason, setReason] = useState('');
-  const [venueReason, setVenueReason] = useState('');
-  const [venueAlternative, setVenueAlternative] = useState('');
+  // Per-booking reason/alternative state for Venue Staff (keyed by booking id).
+  const [venueReasons, setVenueReasons] = useState({});
+  const [venueAlternatives, setVenueAlternatives] = useState({});
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -70,7 +97,8 @@ export default function EventDetail() {
 
   const isOrganiser = event.organiserId === user.id;
   const isCoordinator = event.coordinatorId === user.id;
-  const assignedBooking = bookings[0];
+  // SCRUM-18 AC9: there may be several bookings; pending ones are each decided independently.
+  const pendingBookings = bookings.filter((b) => b.status === 'PENDING');
 
   return (
     <>
@@ -166,32 +194,56 @@ export default function EventDetail() {
             </div>
           )}
 
-          {/* SCRUM-78 AC2/AC3: what staff type here goes into the Coordinator's notice. A
-              blank box sends nothing, so the notice shows no reason rather than a made-up one. */}
-          {hasRole(ROLES.VENUE_STAFF) && assignedBooking && assignedBooking.status === 'PENDING' && (
+          {/* SCRUM-18 AC3/AC9: Venue Staff see every pending booking for this event
+              and can approve/reject each one independently.
+              SCRUM-78 AC2/AC3: what staff type goes into the Coordinator's notice. */}
+          {hasRole(ROLES.VENUE_STAFF) && pendingBookings.length > 0 && (
             <div className="card stack">
-              <label htmlFor="venue-decision-reason">Reason for rejecting (optional)</label>
-              <textarea id="venue-decision-reason" value={venueReason} onChange={(e) => setVenueReason(e.target.value)} />
-              <label htmlFor="venue-decision-alternative">Suggested alternative (optional)</label>
-              <input id="venue-decision-alternative" value={venueAlternative} onChange={(e) => setVenueAlternative(e.target.value)} />
-              <div className="actions">
-                <button className="btn" onClick={() => run(() => api(`/api/venues/bookings/${assignedBooking.id}/decision`, { method: 'POST', body: { approve: true } }))}>
-                  Approve venue
-                </button>
-                <button
-                  className="btn danger"
-                  onClick={() => run(() => api(`/api/venues/bookings/${assignedBooking.id}/decision`, {
-                    method: 'POST',
-                    body: {
-                      approve: false,
-                      reason: venueReason.trim() || undefined,
-                      alternativeSuggestion: venueAlternative.trim() || undefined,
-                    },
-                  }))}
-                >
-                  Reject venue
-                </button>
-              </div>
+              <h3>Venue booking decisions</h3>
+              {pendingBookings.map((booking) => (
+                <div key={booking.id} style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 14, marginTop: 14 }}>
+                  <p style={{ fontWeight: 600, marginBottom: 4 }}>
+                    {booking.venue_name || `Venue #${booking.venue_id}`}
+                    <BookingStatusBadge status={booking.status} />
+                  </p>
+                  <label htmlFor={`venue-decision-reason-${booking.id}`}>Reason for rejecting (optional)</label>
+                  <textarea
+                    id={`venue-decision-reason-${booking.id}`}
+                    value={venueReasons[booking.id] || ''}
+                    onChange={(e) => setVenueReasons((prev) => ({ ...prev, [booking.id]: e.target.value }))}
+                  />
+                  <label htmlFor={`venue-decision-alternative-${booking.id}`}>Suggested alternative (optional)</label>
+                  <input
+                    id={`venue-decision-alternative-${booking.id}`}
+                    value={venueAlternatives[booking.id] || ''}
+                    onChange={(e) => setVenueAlternatives((prev) => ({ ...prev, [booking.id]: e.target.value }))}
+                  />
+                  <div className="actions">
+                    <button
+                      className="btn"
+                      onClick={() => run(() => api(`/api/venues/bookings/${booking.id}/decision`, {
+                        method: 'POST',
+                        body: { approve: true },
+                      }))}
+                    >
+                      Approve venue
+                    </button>
+                    <button
+                      className="btn danger"
+                      onClick={() => run(() => api(`/api/venues/bookings/${booking.id}/decision`, {
+                        method: 'POST',
+                        body: {
+                          approve: false,
+                          reason: (venueReasons[booking.id] || '').trim() || undefined,
+                          alternativeSuggestion: (venueAlternatives[booking.id] || '').trim() || undefined,
+                        },
+                      }))}
+                    >
+                      Reject venue
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -227,12 +279,41 @@ export default function EventDetail() {
             <p><strong>Organiser:</strong> {event.organiserName}</p>
             <p><strong>Coordinator:</strong> {event.coordinatorName || 'Will be auto-assigned on submit'}</p>
           </div>}
+
+          {/* SCRUM-18 AC7/AC8: Event Coordinator sees all venue bookings for this event
+              with status, rejection reason, and suggested alternative for each one. */}
           <div className="card">
-            <h3>Venue booking</h3>
+            <h3>Venue bookings</h3>
             {bookings.length ? bookings.map((booking) => (
-              <p key={booking.id}>{booking.venue_name}: {booking.status}</p>
+              <div key={booking.id} style={{ marginBottom: 10 }}>
+                <p style={{ margin: '2px 0' }}>
+                  <span style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 }}>
+                    {booking.venue_name || `Venue #${booking.venue_id}`}: {booking.status}
+                  </span>
+                  <strong>{booking.venue_name || `Venue #${booking.venue_id}`}</strong>
+                  <BookingStatusBadge status={booking.status} />
+                </p>
+                {/* SCRUM-18 AC8: Coordinator sees the rejection reason and suggested alternative. */}
+                {booking.status === 'REJECTED' && booking.decision_reason && (
+                  <p style={{ margin: '2px 0', fontSize: '0.88rem', color: '#ef4444' }}>
+                    Reason: {booking.decision_reason}
+                  </p>
+                )}
+                {booking.status === 'REJECTED' && booking.alternative_suggestion && (
+                  <p style={{ margin: '2px 0', fontSize: '0.88rem' }}>
+                    Suggested alternative: {booking.alternative_suggestion}
+                  </p>
+                )}
+                {/* SCRUM-18 AC8: an approved booking is labelled as a confirmed booking. */}
+                {booking.status === 'APPROVED' && (
+                  <p style={{ margin: '2px 0', fontSize: '0.88rem', color: '#22c55e' }}>
+                    ✓ Confirmed venue booking
+                  </p>
+                )}
+              </div>
             )) : <p className="muted">No booking yet. Essential arrangements must be approved before confirmation.</p>}
           </div>
+
           {canViewPlanning && <div className="card">
             <h3>Status history</h3>
             {history.map((item) => (
