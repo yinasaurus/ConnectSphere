@@ -38,9 +38,67 @@ function getOccupiedWindow(startAt, endAt, setupMinutes, turnaroundMinutes) {
   return { start, end };
 }
 
+// Treat empty values and "none" answers as no constraint, and split recorded lists into comparable items.
+// Uses Regex to extract out requirements
+function parseRequirements(value) {
+  if (!value || /^(none|n\/a|not applicable|no special requirements)$/i.test(value.trim())) return [];
+  return value.split(/[,;\n]|\s+and\s+/i)
+    .map((item) => item.trim().replace(/[.!?]+$/, ''))
+    .filter(Boolean);
+}
+
+// Compare each requested feature independently so a mismatch in 1 feature/criteria does not hide the others.
+function getVenueSuitability(event, venue, booking) {
+  if (!venue) {
+    return { suitable: null, reasons: ['Venue details are unavailable for this request.'] };
+  }
+
+  const reasons = [];
+  const attendance = Number(
+    booking?.expected_attendance ?? booking?.expectedAttendance ?? event.expectedAttendance
+  );
+
+  // check attendance > venue capcity
+  const capacity = Number(venue.capacity);
+  if (Number.isFinite(attendance) && attendance > 0 && Number.isFinite(capacity) && attendance > capacity) {
+    reasons.push(`Expected attendance (${attendance}) exceeds venue capacity (${capacity}).`);
+  }
+
+  // places missing accessbility requirements into an array and add it into an error message
+  const missingAccessibility = parseRequirements(event.accessibilityNeeds)
+    .filter((required) => !parseRequirements(venue.accessibility)
+      .some((available) => available.toLowerCase().includes(required.toLowerCase())));
+  if (missingAccessibility.length) {
+    reasons.push(`Missing accessibility features: ${missingAccessibility.join(', ')}.`);
+  }
+
+  // places missing facility requirements into an array and add it into an error message
+  const requiredFacilities = [
+    ...parseRequirements(event.venueRequirements),
+    ...parseRequirements(event.equipmentNotes),
+  ];
+  const missingFacilities = [...new Set(requiredFacilities
+    .filter((required) => !parseRequirements(venue.facilities)
+      .some((available) => available.toLowerCase().includes(required.toLowerCase()))))];
+  if (missingFacilities.length) {
+    reasons.push(`Missing required facilities: ${missingFacilities.join(', ')}.`);
+  }
+
+  // places missing layout requirements into an array and add it into an error message
+  const layout = event.layoutPreference?.trim();
+  const supportedLayouts = Array.isArray(venue.layouts) ? venue.layouts : [];
+  if (layout && !supportedLayouts.some((available) => (
+    String(available).toLowerCase() === layout.toLowerCase()
+  ))) {
+    reasons.push(`Room layout '${layout}' is not supported by this venue.`);
+  }
+
+  return { suitable: reasons.length === 0, reasons };
+}
+
 // Render one request with its own saved timing, submission date, and decision status.
 // Displays "Requests for this event" card - venue booking request and its status (bottom right)
-function BookingRequest({ booking }) {
+function BookingRequest({ booking, event, venues }) {
   const validWindow = isValidDate(booking.start_at)
     && isValidDate(booking.end_at)
     && hasValidMinutes(booking.setup_minutes)
@@ -48,6 +106,11 @@ function BookingRequest({ booking }) {
   const window = validWindow
     ? getOccupiedWindow(booking.start_at, booking.end_at, booking.setup_minutes, booking.teardown_minutes)
     : null;
+  // Get venue details and evaluate venue suitability for this venue booking request.
+  const venue = booking.venue_details
+    ? { id: booking.venue_id, ...booking.venue_details }
+    : venues.find((item) => String(item.id) === String(booking.venue_id));
+  const suitability = getVenueSuitability(event, venue, booking);
 
   return (
     <div className="venue-request-row">
@@ -61,6 +124,24 @@ function BookingRequest({ booking }) {
           : 'Occupied window unavailable'}
         {booking.created_at && ` · Submitted ${formatSubmittedDate(booking.created_at)}`}
       </p>
+      {/* Venue suitability is advisory (do not restrict) and isolated/independant to this individual venue request. */}
+      <div
+        className={`venue-suitability ${suitability.suitable === null
+          ? 'unavailable'
+          : suitability.suitable ? 'suitable' : 'unsuitable'}`}
+        role={suitability.suitable === false ? 'alert' : 'status'}
+      >
+        <strong>
+          {suitability.suitable === null
+            ? 'Suitability unavailable'
+            : suitability.suitable ? 'Venue appears suitable' : 'Venue appears unsuitable'}
+        </strong>
+        {suitability.reasons.length > 0 && (
+          <ul>
+            {suitability.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
@@ -129,8 +210,10 @@ export default function VenueBooking() {
   const occupiedWindow = eventTimeValid && venueTimesValid
     ? getOccupiedWindow(event.startAt, event.endAt, venue.setupMinutes, venue.teardownMinutes)
     : null;
-  // Checks if venue is selected and expected attendance > venue capacity 
-  const capacityWarning = venue && Number(event?.expectedAttendance) > Number(venue.capacity);
+  // Capacity remains an advisory check; the required checklist controls whether submission is enabled.
+  // Checks if venue is selected and expected attendance > venue capacity
+  // Suitability is advisory and intentionally does not participate in canSubmit.
+  const suitability = venue ? getVenueSuitability(event, venue) : null;
 
   // Submit only the event, venue, schedule, and configured window inputs required by the API.
   async function submitRequest() {
@@ -187,6 +270,23 @@ export default function VenueBooking() {
                 </option>
               ))}
             </select>
+
+            {/* Show suitability beside the selector, but keep unsuitable venues available to book. */}
+            {suitability && (
+              <div
+                className={`venue-suitability ${suitability.suitable ? 'suitable' : 'unsuitable'}`}
+                role={suitability.suitable ? 'status' : 'alert'}
+              >
+                <strong>
+                  {suitability.suitable ? 'Venue appears suitable' : 'Venue appears unsuitable'}
+                </strong>
+                {suitability.reasons.length > 0 && (
+                  <ul>
+                    {suitability.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                  </ul>
+                )}
+              </div>
+            )}
             {/* Without both saved buffer values, neither the occupied window nor conflict range is known. */}
             {venue && !venueTimesValid && (
               <p className="booking-warning" role="alert">
@@ -247,12 +347,6 @@ export default function VenueBooking() {
               <div><dt>Equipment</dt><dd>{event.equipmentNotes || 'None specified'}</dd></div>
               <div><dt>Accessibility</dt><dd>{event.accessibilityNeeds || 'Not specified'}</dd></div>
             </dl>
-            {/* Capacity is advisory here; the required checklist below controls whether submission is enabled. */}
-            {capacityWarning && (
-              <p className="booking-warning" role="status">
-                {venue.name} seats {venue.capacity}. Your attendance is {event.expectedAttendance}.
-              </p>
-            )}
           </section>
         </div>
 
@@ -282,7 +376,7 @@ export default function VenueBooking() {
             <h2>Requests for this event</h2>
             {/* Render each prior request independently so its own timing and review status remain visible. */}
             {bookings.length ? bookings.map((booking) => (
-              <BookingRequest key={booking.id} booking={booking} />
+              <BookingRequest key={booking.id} booking={booking} event={event} venues={venues} />
             )) : <p className="muted">No venue requests for this event yet.</p>}
           </section>
         </aside>

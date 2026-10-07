@@ -40,18 +40,36 @@ describe('event-specific venue booking access', () => {
         id: 7, event_id: 3, venue_id: 2, status: 'APPROVED',
         start_at: '2026-10-11T10:00:00Z', end_at: '2026-10-11T12:00:00Z',
         setup_minutes: 30, teardown_minutes: 45, created_at: '2026-10-05T12:00:00Z',
-        venues: { name: 'Hall' }, notes: 'Internal only',
+        // Include venue capability data returned by the booking-summary query.
+        venues: {
+          name: 'Hall',
+          capacity: 100,
+          facilities: 'Projector, stage',
+          accessibility: 'Wheelchair access',
+          venue_layouts: [{ layout: 'THEATRE' }],
+        },
+        notes: 'Internal only',
       },
     ]);
   });
 
   /*
-   * AC:       SCRUM-26 AC7 + AC8 + AC9
+   * AC:       SCRUM-25 AC3 + AC4 (API capability data support)
+   * Scenario: An event organizer loads a booking's venue capability data for suitability review.
+   * Setup:    The event has a booking whose venue record contains facilities, accessibility
+   *           features, and supported room layouts, as well as capacity.
+   * Expected: The event-scoped response includes these venue attributes; this test checks
+   *           data availability, not the frontend's suitability comparison or result.
+   * Type:     normal
+   */
+  /*
+   * AC:       SCRUM-26 AC2 + AC9 (booking-summary timing data support)
    * Scenario: An event organizer loads an event's existing venue request summary.
    * Setup:    The event has an Approved booking with saved event times, setup/turnaround
    *           values, submission date, and venue name.
-   * Expected: The response is scoped to this event and includes the fields needed to show
-   *           this request's status, occupied window, and submission date.
+   * Expected: The event-scoped response includes this booking's saved date/time and buffer
+   *           values for the client to render; this test does not assert occupied-window
+   *           calculation or display, or multiple requests.
    * Type:     normal
    */
   it('lets an organiser read their event booking summary, scoped in the database', async () => {
@@ -64,6 +82,12 @@ describe('event-specific venue booking access', () => {
         start_at: '2026-10-11T10:00:00Z', end_at: '2026-10-11T12:00:00Z',
         setup_minutes: 30, teardown_minutes: 45, created_at: '2026-10-05T12:00:00Z',
         venue_name: 'Hall',
+        venue_details: {
+          capacity: 100,
+          facilities: 'Projector, stage',
+          accessibility: 'Wheelchair access',
+          layouts: ['THEATRE'],
+        },
       },
     ]);
   });
@@ -83,10 +107,11 @@ describe('event-specific venue booking access', () => {
   });
 
   /*
-   * AC:       SCRUM-26 AC7
+   * AC:       SCRUM-26 AC7 (endpoint access)
    * Scenario: Venue Staff and Coordinators load the event's booking requests.
    * Setup:    The signed-in user has either the Event Coordinator or Venue Staff role.
-   * Expected: Both internal roles can access the event-specific booking endpoint.
+   * Expected: Both internal roles receive a successful response from the event-specific
+   *           booking endpoint; this assertion checks access, not the response contents.
    * Type:     normal
    */
   it.each([ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF])('allows existing internal event access for %s', async (role) => {
@@ -120,7 +145,7 @@ describe('event-specific venue booking access', () => {
   });
 
   /*
-   * AC:       SCRUM-26 AC7 + AC8
+   * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility)
    * Scenario: An attendee loads the public booking summary for a confirmed event.
    * Setup:    The event is confirmed and registration-required; its booking list includes
    *           internal and Approved requests.

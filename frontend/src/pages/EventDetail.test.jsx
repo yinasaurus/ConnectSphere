@@ -19,10 +19,11 @@ beforeEach(() => {
 });
 
 /*
- * AC:       SCRUM 26 Submit Venue Booking Request AC8
- * Scenario: Coordinator views event page containing a previously submitted venue booking.
+ * AC:       SCRUM-26 AC8 (display of one existing request only)
+ * Scenario: An Event Organiser views their event page containing a previously submitted booking.
  * Setup:    The event-scoped booking endpoint returns an Approved request for Hall.
- * Expected: Displays this event's venue information without retrieving all system bookings.
+ * Expected: Displays this event's request and status without retrieving the global booking
+ *           queue; this test does not cover multiple requests.
  * Type:     normal
  */
 it('loads an organiser event and its booking without requesting the restricted global queue', async () => {
@@ -45,12 +46,12 @@ it('loads an organiser event and its booking without requesting the restricted g
   expect(api).not.toHaveBeenCalledWith('/api/venues/bookings');
 });
 /*
- * AC:       SCRUM 26 Submit Venue Booking Request AC1 + AC4
+ * AC:       Not directly covered by SCRUM-26 (event-specific booking-page navigation)
  * Scenario: An assigned Event Coordinator opens venue booking for an eligible event.
  * Setup:    The event is Approved or Planning and the application route is protected
  *           for Event Coordinators.
- * Expected: Selecting "Book a venue" opens the booking page for this event, where the
- *           Coordinator can review its details before submitting a request.
+ * Expected: Selecting "Book a venue" opens the event-specific booking page, showing the
+ *           event title and a link back to its details.
  * Type:     normal
  */
 /* 
@@ -211,12 +212,12 @@ it('US17-F16: the organiser sees the rejection reason on a rejected event', asyn
 });
 
 /*
- * AC:       SCRUM 26 Submit Venue Booking Request AC7
+ * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility)
  * Scenario: An attendee requests an event that has venue booking information.
  * Setup:    The attendee can access only a confirmed public event and is not a
  *           Coordinator or Venue Staff member.
- * Expected: The event page loads without requesting restricted planning or booking
- *           management data, keeping staff-only request handling private.
+ * Expected: The event page shows its public event and registration information, hides
+ *           staff-only panels, and does not request comments or event status history.
  * Type:     boundary
  */
 it('loads an attendee event without requesting restricted planning data', async () => {

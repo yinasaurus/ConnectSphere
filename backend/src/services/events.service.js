@@ -183,7 +183,8 @@ async function listVenueBookings(user, eventId) {
   const event = await getEvent(user, eventId);
   let query = supabase.from('venue_bookings')
       // Return saved timing values so each event request can show its own occupied window.
-      .select('id, event_id, venue_id, status, start_at, end_at, setup_minutes, teardown_minutes, created_at, venues ( name )')
+      // Include venue capabilities so suitability remains assessable for inactive historical venues.
+      .select('id, event_id, venue_id, status, start_at, end_at, setup_minutes, teardown_minutes, created_at, venues ( name, capacity, facilities, accessibility, venue_layouts ( layout ) )')
       .eq('event_id', event.id)
       .order('created_at', { ascending: false });
   if (!canViewPlanning(user)) query = query.eq('status', 'APPROVED');
@@ -201,6 +202,13 @@ async function listVenueBookings(user, eventId) {
     teardown_minutes: row.teardown_minutes,
     created_at: row.created_at,
     venue_name: row.venues?.name || null,
+    // Return only catalogue attributes needed to assess this request's venue independently.
+    venue_details: row.venues ? {
+      capacity: row.venues.capacity,
+      facilities: row.venues.facilities,
+      accessibility: row.venues.accessibility,
+      layouts: (row.venues.venue_layouts || []).map((layout) => layout.layout),
+    } : null,
   }));
 }
 

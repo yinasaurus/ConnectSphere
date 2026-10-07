@@ -243,11 +243,11 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
   });
 
   /*
-   * AC:       SCRUM-26 AC2 + AC3 + AC6
-   * Scenario: A Coordinator submits an event-specific request with venue and date/time.
+   * AC:       SCRUM-26 AC6
+   * Scenario: A Coordinator submits a request which is saved with an initial Pending status.
    * Setup:    No conflicting booking exists for the selected venue and occupied interval.
-   * Expected: The request is created as Pending with the supplied event, venue, and time
-   *           details, and no decision notice is sent before staff review it.
+   * Expected: The service returns a Pending request and writes no decision notice; this test
+   *           does not assert the saved event, venue, or date/time fields.
    * Type:     normal
    */
   /*
@@ -270,12 +270,12 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
 
   /* A configured zero-minute interval must survive persistence without becoming the default. */
   /*
-   * AC:       SCRUM-26 AC5 + AC9
-   * Scenario: The selected venue has a valid zero-minute setup and turnaround.
+   * AC:       SCRUM-26 AC9 (saved timing inputs)
+   * Scenario: The selected venue has configured zero-minute setup and turnaround values.
    * Setup:    A Coordinator submits an otherwise valid event and venue request with both
    *           timing values set to zero.
-   * Expected: The saved request preserves both zero values, allowing its occupied window
-   *           to match the configured venue timings.
+   * Expected: Persistence preserves both zero values for a later occupied-window
+   *           calculation; this test does not calculate or display that window.
    * Type:     boundary
    */
   it('preserves zero setup and turnaround minutes in a venue booking request', async () => {
@@ -297,7 +297,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
   });
 
   /*
-  * AC:       SCRUM-26 AC5 / Submission Guardrails
+  * AC:       Not covered by SCRUM-25/26 (authorization and scheduling-conflict guardrails)
   * Scenario: Submitting an unauthorized or conflicting venue booking request.
   * Setup:    Tests two rejection conditions:
   *           1. Sender is Venue Staff instead of an Event Coordinator (403 Forbidden).
