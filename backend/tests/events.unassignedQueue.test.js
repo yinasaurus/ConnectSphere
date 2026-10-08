@@ -296,6 +296,25 @@ describe('SCRUM-28 unassigned queue (service)', () => {
   });
 
   /*
+   * AC: not an AC check — coverage for listEvents when neither unassigned nor status is set
+   * Scenario: A caller lists events with no filters (Dashboard, default GET /api/events).
+   * Setup: One draft in the organisation; listEvents is called with an empty filters object.
+   * Expected: No status filter and no coordinator_id IS NULL filter; the draft is returned.
+   * Type: normal
+   */
+  it('listEvents with no filters does not apply a status or unassigned queue filter', async () => {
+    db.fetchMany.mockResolvedValue([event]);
+
+    const listed = await service.listEvents(organiser);
+
+    expect(query.eq).not.toHaveBeenCalledWith('status', EVENT_STATUS.SUBMITTED);
+    expect(query.eq).not.toHaveBeenCalledWith('status', event.status);
+    expect(query.is).not.toHaveBeenCalled();
+    expect(listed).toHaveLength(1);
+    expect(listed[0].id).toBe(3);
+  });
+
+  /*
    * AC: SCRUM-28 AC3
    * Scenario: Under Review (coordinator assigned in later stories) is not the unassigned queue.
    * Setup: UNDER_REVIEW with coordinator 2 — the old submit destination.
@@ -458,6 +477,31 @@ describe('SCRUM-28 GET /api/events?unassigned=true (route)', () => {
 
     const res = await request(app)
       .get('/api/events?unassigned=true')
+      .set('Cookie', `${env.sessionCookieName}=${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.events).toHaveLength(1);
+    expect(res.body.events[0].status).toBe(EVENT_STATUS.SUBMITTED);
+    expect(res.body.events[0].coordinatorId).toBeNull();
+  });
+
+  /*
+   * AC: SCRUM-28 AC3
+   * Scenario: Queue listing through the API using the numeric query flag unassigned=1.
+   * Setup: Auth organiser; fetchMany returns SUBMITTED with coordinator_id null.
+   * Expected: Same queue as unassigned=true — 200 with that event still unassigned.
+   * Type: normal
+   */
+  it('AC3: GET unassigned=1 returns the same unassigned queue as unassigned=true', async () => {
+    event.status = EVENT_STATUS.SUBMITTED;
+    event.coordinator_id = null;
+    db.fetchOne.mockResolvedValue({ id: 1, is_active: true, organisation_id: 10 });
+    db.fetchMany
+      .mockResolvedValueOnce([{ role: ROLES.EVENT_ORGANISER }])
+      .mockResolvedValueOnce([event]);
+
+    const res = await request(app)
+      .get('/api/events?unassigned=1')
       .set('Cookie', `${env.sessionCookieName}=${token}`);
 
     expect(res.status).toBe(200);

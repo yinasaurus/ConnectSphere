@@ -11,7 +11,7 @@ jest.mock('../src/services/venues.service', () => ({
   requestBooking: jest.fn(), decideBooking: jest.fn(), blockVenue: jest.fn(),
 }));
 jest.mock('../src/services/events.service', () => ({
-  createEvent: jest.fn(), updateEvent: jest.fn(), submitEvent: jest.fn(), changeStatus: jest.fn(),
+  createEvent: jest.fn(), updateEvent: jest.fn(), submitEvent: jest.fn(), openForReview: jest.fn(), changeStatus: jest.fn(),
 }));
 
 const db = require('../src/config/db');
@@ -31,6 +31,7 @@ describe('SCUM-13 routes with real JWT authentication and role middleware', () =
     ['post', '/api/events', events.createEvent, [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR], 201],
     ['patch', '/api/events/3', events.updateEvent, [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR], 200],
     ['post', '/api/events/3/submit', events.submitEvent, [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR], 200],
+    ['post', '/api/events/3/review', events.openForReview, [ROLES.EVENT_COORDINATOR], 200],
     ['post', '/api/events/3/status', events.changeStatus, [ROLES.EVENT_COORDINATOR], 200],
   ];
 

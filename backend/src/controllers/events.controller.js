@@ -18,14 +18,31 @@ const list = asyncHandler(async (req, res) => {
   res.json({ events });
 });
 
+/**
+ * Purpose: GET /api/events/:id, one event's details for the signed-in user.
+ * AC: SCRUM-39 AC1 + AC2. Output: 200 { event }; 404 from the service goes to the error handler.
+ */
 const get = asyncHandler(async (req, res) => {
   const event = await eventsService.getEvent(req.user, req.params.id);
   res.json({ event });
 });
 
+/**
+ * Purpose: GET /api/events/:id/venue-bookings, the event's venue bookings.
+ * AC: SCRUM-39 AC2 (venue). Output: 200 { bookings }; 404 goes to the error handler.
+ */
 const venueBookings = asyncHandler(async (req, res) => {
   const bookings = await eventsService.listVenueBookings(req.user, req.params.id);
   res.json({ bookings });
+});
+
+/**
+ * Purpose: GET /api/events/:id/equipment-requests, the event's equipment requests.
+ * AC: SCRUM-39 AC2. Output: 200 { requests }. 403/404 from the service go to the error handler.
+ */
+const equipmentRequests = asyncHandler(async (req, res) => {
+  const requests = await eventsService.listEquipmentRequests(req.user, req.params.id);
+  res.json({ requests });
 });
 
 const create = asyncHandler(async (req, res) => {
@@ -47,6 +64,11 @@ const update = asyncHandler(async (req, res) => {
  */
 const submit = asyncHandler(async (req, res) => {
   const event = await eventsService.submitEvent(req.user, req.params.id);
+  res.json({ event });
+});
+
+const openForReview = asyncHandler(async (req, res) => {
+  const event = await eventsService.openForReview(req.user, req.params.id);
   res.json({ event });
 });
 
@@ -112,9 +134,11 @@ module.exports = {
   list,
   get,
   venueBookings,
+  equipmentRequests,
   create,
   update,
   submit,
+  openForReview,
   decide,
   changeStatus,
   history,

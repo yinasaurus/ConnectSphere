@@ -38,6 +38,14 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+// Same messages as the real number rules in backend/src/validators/venues.validators.js.
+function numberIssue(value, label, min) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return `${label} must be a number`;
+  if (!Number.isInteger(value)) return `${label} must be a whole number`;
+  if (value < min) return `${label} must be at least ${min}`;
+  return null;
+}
+
 function mockDatabaseApi({ validateUpdate = false } = {}) {
   api.mockImplementation(async (path, options = {}) => {
     if (path === '/api/venues' && options.method === 'POST') {
@@ -60,6 +68,18 @@ function mockDatabaseApi({ validateUpdate = false } = {}) {
       return { bookings: clone(database.bookings) };
     }
 
+    const decisionMatch = path.match(/^\/api\/venues\/bookings\/(\d+)\/decision$/);
+    if (decisionMatch && options.method === 'POST') {
+      const bookingId = Number(decisionMatch[1]);
+      const booking = database.bookings.find((item) => item.id === bookingId);
+      if (booking) {
+        booking.status = options.body.approve ? 'APPROVED' : 'REJECTED';
+        booking.decision_reason = options.body.reason || null;
+        booking.alternative_suggestion = options.body.alternativeSuggestion || null;
+      }
+      return { booking: clone(booking) };
+    }
+
     if (path.startsWith('/api/venues/search')) {
       return { venues: clone(database.venues) };
     }
@@ -70,15 +90,14 @@ function mockDatabaseApi({ validateUpdate = false } = {}) {
         const { name, capacity, setupMinutes, teardownMinutes, isActive, operatingHours } = options.body;
         const details = [];
         if (!name?.trim()) details.push({ field: 'name', message: 'Venue name is required' });
-        if (!Number.isInteger(capacity) || capacity < 0) {
-          details.push({ field: 'capacity', message: 'Capacity must be a non-negative integer' });
-        }
-        if (!Number.isInteger(setupMinutes) || setupMinutes < 0) {
-          details.push({ field: 'setupMinutes', message: 'Setup minutes must be a non-negative integer' });
-        }
-        if (!Number.isInteger(teardownMinutes) || teardownMinutes < 0) {
-          details.push({ field: 'teardownMinutes', message: 'Teardown minutes must be a non-negative integer' });
-        }
+        [
+          ['capacity', capacity, 'Capacity', 1],
+          ['setupMinutes', setupMinutes, 'Setup minutes', 0],
+          ['teardownMinutes', teardownMinutes, 'Teardown minutes', 0],
+        ].forEach(([field, value, label, min]) => {
+          const message = numberIssue(value, label, min);
+          if (message) details.push({ field, message });
+        });
         if (typeof isActive !== 'boolean') {
           details.push({ field: 'isActive', message: 'Active status must be true or false' });
         }
@@ -209,11 +228,21 @@ describe('Venues page inputs', () => {
     expect(api.mock.calls.at(-1)[0]).toBe('/api/venues');
   });
 
+  /*
+   * AC:       SCUM-7 AC4; SCRUM-59 AC4 (setup and turnaround rows)
+   * Scenario: Venue Staff clear the capacity, setup or teardown (turnaround) box on the
+   *           Update venue form and save.
+   * Setup:    Helix Hall selected. A cleared number box is sent as '', and the mocked API
+   *           answers with the same messages the real validator gives for a non-number.
+   * Expected: The form shows which field is wrong and why, and the saved venue is unchanged,
+   *           because an empty value is not a number and is rejected rather than saved.
+   * Type:     error
+   */
   it.each([
-    ['capacity', 'Capacity', 'capacity: Capacity must be a non-negative integer'],
-    ['setup minutes', 'Setup (mins)', 'setupMinutes: Setup minutes must be a non-negative integer'],
-    ['teardown minutes', 'Teardown (mins)', 'teardownMinutes: Teardown minutes must be a non-negative integer'],
-  ])('shows a validation error when mandatory %s is empty', async (_field, label, expectedMessage) => {
+    ['capacity', 'Capacity', 'capacity: Capacity must be a number'],
+    ['setup minutes', 'Setup (mins)', 'setupMinutes: Setup minutes must be a number'],
+    ['teardown minutes', 'Teardown (mins)', 'teardownMinutes: Teardown minutes must be a number'],
+  ])('shows the rejection when the %s box is cleared', async (_field, label, expectedMessage) => {
     const user = userEvent.setup();
     mockDatabaseApi({ validateUpdate: true });
     renderVenues();
@@ -424,6 +453,99 @@ describe('Venues page inputs', () => {
     expect(api).not.toHaveBeenCalledWith('/api/venues/1', expect.anything());
     expect(database.venues[0].name).toBe('Helix Hall');
   });
+
+  /*
+   * AC:       SCRUM-59 AC1, AC2, AC3
+   * Scenario: Venue Staff change the setup and turnaround times, save, close the form and
+   *           open the venue again.
+   * Setup:    Helix Hall saved at 30/30. Setup is changed to 15 and turnaround ("Teardown"
+   *           on the form) to 0, the lowest allowed value.
+   * Expected: The PATCH sends 15 and 0 as numbers; after saving, and again after reopening,
+   *           the form shows 15 and 0. 0 must not come back as the 30-minute default.
+   * Type:     boundary
+   */
+  it('shows the saved setup and turnaround minutes when the venue is reopened', async () => {
+    const user = userEvent.setup();
+    renderVenues();
+    await user.click(await screen.findByRole('button', { name: /Helix Hall/i }));
+    const update = within(formCard('Update venue'));
+
+    await user.clear(update.getByLabelText('Setup (mins)'));
+    await user.type(update.getByLabelText('Setup (mins)'), '15');
+    await user.clear(update.getByLabelText('Teardown (mins)'));
+    await user.type(update.getByLabelText('Teardown (mins)'), '0');
+    await user.click(update.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(database.venues[0]).toMatchObject({ setupMinutes: 15, teardownMinutes: 0 }));
+    expect(api).toHaveBeenCalledWith('/api/venues/1', expect.objectContaining({
+      method: 'PATCH',
+      body: expect.objectContaining({ setupMinutes: 15, teardownMinutes: 0 }),
+    }));
+    expect(update.getByLabelText('Setup (mins)')).toHaveValue(15);
+    expect(update.getByLabelText('Teardown (mins)')).toHaveValue(0);
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: /Helix Hall/i }));
+    const reopened = within(formCard('Update venue'));
+    expect(reopened.getByLabelText('Setup (mins)')).toHaveValue(15);
+    expect(reopened.getByLabelText('Teardown (mins)')).toHaveValue(0);
+  });
+
+  /*
+   * AC:       SCRUM-59 AC4
+   * Scenario: Venue Staff type a negative setup time and save.
+   * Setup:    Helix Hall saved at 30/30. The API answers the PATCH the way the real
+   *           validator does for -5 (400 with the setupMinutes field and message).
+   * Expected: The form shows which field is wrong, nothing is saved, and reopening the
+   *           venue shows the saved 30, not the rejected -5.
+   * Type:     error
+   */
+  it('shows the rejection for a negative setup time and keeps the saved value', async () => {
+    const user = userEvent.setup();
+    const normal = api.getMockImplementation();
+    api.mockImplementation(async (path, options = {}) => {
+      if (path === '/api/venues/1' && options.method === 'PATCH' && options.body.setupMinutes < 0) {
+        const error = new Error('Setup minutes must be at least 0');
+        error.details = [{ field: 'setupMinutes', message: 'Setup minutes must be at least 0' }];
+        throw error;
+      }
+      return normal(path, options);
+    });
+    renderVenues();
+    await user.click(await screen.findByRole('button', { name: /Helix Hall/i }));
+    const update = within(formCard('Update venue'));
+
+    await user.clear(update.getByLabelText('Setup (mins)'));
+    await user.type(update.getByLabelText('Setup (mins)'), '-5');
+    await user.click(update.getByRole('button', { name: 'Save changes' }));
+
+    expect(await update.findByText('setupMinutes: Setup minutes must be at least 0')).toBeInTheDocument();
+    expect(database.venues[0].setupMinutes).toBe(30);
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: /Helix Hall/i }));
+    expect(within(formCard('Update venue')).getByLabelText('Setup (mins)')).toHaveValue(30);
+  });
+
+  /*
+   * AC:       SCRUM-59 AC5
+   * Scenario: An Event Coordinator opens the Venues page and clicks a venue.
+   * Setup:    Signed in with the Event Coordinator role only.
+   * Expected: No Update venue form and no setup or turnaround inputs appear, so the values
+   *           can't be changed from the page. (The API also refuses with 403; see
+   *           venues.setupTurnaround.test.js.)
+   * Type:     error
+   */
+  it('does not offer the setup and turnaround fields to a non-Venue-Staff user', async () => {
+    const user = userEvent.setup();
+    useAuth.mockReturnValue({ hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
+    renderVenues();
+    await user.click(await screen.findByRole('button', { name: /Helix Hall/i }));
+
+    expect(screen.queryByRole('heading', { name: 'Update venue' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Setup (mins)')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Teardown (mins)')).not.toBeInTheDocument();
+  });
 });
 
 const SEARCH_RESULT_VENUE = {
@@ -551,5 +673,262 @@ describe('SCUM-24 venue search results', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Search venues' }));
     expect(screen.queryByText('Operating hours: 08:00-22:00')).not.toBeInTheDocument();
+  });
+});
+
+describe('SCRUM-19 AC7: Conflict indicators and conflict modal in Venues page', () => {
+  beforeEach(() => {
+    useAuth.mockReturnValue({
+      user: { id: 40, roles: ['VENUE_STAFF'] },
+      hasRole: (...roles) => roles.includes('VENUE_STAFF'),
+    });
+    api.mockReset();
+  });
+
+  /*
+   * AC:       SCRUM-19 AC7
+   * Scenario: Venue Staff views booking requests table with conflicting and clear requests
+   * Setup:    API returns one booking with has_conflict=true and one with has_conflict=false
+   * Expected: Table shows "⚠️ Conflict with Confirmed Gala" for conflicting row and "✓ No conflict" for clear row
+   * Type:     normal
+   */
+  it('displays ⚠️ Conflict badge when has_conflict is true and ✓ No conflict when false', async () => {
+    api.mockImplementation(async (path) => {
+      if (path === '/api/venues') return { venues: [] };
+      if (path === '/api/venues/bookings') {
+        return {
+          bookings: [
+            {
+              id: 101,
+              event_name: 'Workshop A',
+              venue_name: 'Grand Ballroom',
+              status: 'PENDING',
+              start_at: '2026-10-20T10:00:00.000Z',
+              has_conflict: true,
+              conflict_details: { eventName: 'Confirmed Gala' },
+            },
+            {
+              id: 102,
+              event_name: 'Workshop B',
+              venue_name: 'Seminar Room',
+              status: 'PENDING',
+              start_at: '2026-10-20T14:00:00.000Z',
+              has_conflict: false,
+              conflict_details: null,
+            },
+          ],
+        };
+      }
+      throw new Error(`Unhandled API path: ${path}`);
+    });
+
+    render(<Venues />);
+
+    expect(await screen.findByText('⚠️ Conflict with Confirmed Gala')).toBeInTheDocument();
+    expect(screen.getByText('✓ No conflict')).toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCRUM-19 AC7
+   * Scenario: Venue Staff clicks Approve on a booking that triggers a conflict
+   * Setup:    POST /api/venues/bookings/101/decision rejects with BOOKING_CONFLICT
+   * Expected: ConflictModal opens showing the server conflict message
+   * Type:     negative
+   */
+  it('opens ConflictModal with server error message when approving a conflicting booking', async () => {
+    const user = userEvent.setup();
+    const conflictError = new Error('Cannot approve booking: venue has an overlapping confirmed booking');
+    conflictError.status = 409;
+    conflictError.code = 'BOOKING_CONFLICT';
+
+    api.mockImplementation(async (path, options = {}) => {
+      if (path === '/api/venues') return { venues: [] };
+      if (path === '/api/venues/bookings') {
+        return {
+          bookings: [
+            {
+              id: 101,
+              event_name: 'Workshop A',
+              venue_name: 'Grand Ballroom',
+              status: 'PENDING',
+              start_at: '2026-10-20T10:00:00.000Z',
+              has_conflict: true,
+              conflict_details: { eventName: 'Confirmed Gala' },
+            },
+          ],
+        };
+      }
+      if (path === '/api/venues/bookings/101/decision' && options.method === 'POST') {
+        throw conflictError;
+      }
+      throw new Error(`Unhandled API path: ${path}`);
+    });
+
+    render(<Venues />);
+
+    const approveButton = await screen.findByRole('button', { name: 'Approve' });
+    await user.click(approveButton);
+
+    expect(await screen.findByRole('heading', { name: 'Venue Booking Conflict' })).toBeInTheDocument();
+    expect(screen.getByText('Cannot approve booking: venue has an overlapping confirmed booking')).toBeInTheDocument();
+
+    // Closing the modal dismisses it
+    await user.click(screen.getByRole('button', { name: 'Got it' }));
+    expect(screen.queryByRole('heading', { name: 'Venue Booking Conflict' })).not.toBeInTheDocument();
+  });
+});
+
+describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
+  const pending1 = {
+    id: 101,
+    event_id: 50,
+    venue_id: 1,
+    status: 'PENDING',
+    event_name: 'Tech Symposium',
+    venue_name: 'Innovation Hall',
+    start_at: '2026-10-20T09:00:00.000Z',
+    end_at: '2026-10-20T12:00:00.000Z',
+    event_start_at: '2026-10-20T08:00:00.000Z',
+    event_end_at: '2026-10-20T18:00:00.000Z',
+  };
+
+  const pending2 = {
+    id: 102,
+    event_id: 51,
+    venue_id: 1,
+    status: 'PENDING',
+    event_name: 'Design Workshop',
+    venue_name: 'Innovation Hall',
+    start_at: '2026-10-21T14:00:00.000Z',
+    end_at: '2026-10-21T17:00:00.000Z',
+    event_start_at: '2026-10-21T13:00:00.000Z',
+    event_end_at: '2026-10-21T18:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    database.venues = [{
+      id: 1,
+      name: 'Innovation Hall',
+      location: 'Level 2',
+      capacity: 100,
+      facilities: 'Projector',
+      accessibility: 'Ramp',
+      operatingHours: '08:00 - 22:00',
+      setupMinutes: 30,
+      teardownMinutes: 30,
+      isActive: true,
+      layouts: ['THEATRE'],
+      layoutDetails: [{ id: 10, venue_id: 1, layout: 'THEATRE' }],
+    }];
+    database.bookings = [clone(pending1), clone(pending2)];
+    useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
+    api.mockReset();
+    mockDatabaseApi();
+  });
+
+  /*
+   * AC:       SCRUM-18 AC1 & AC2
+   * Scenario: Venue Staff views pending booking queue
+   * Setup:    Signed in as Venue Staff with two pending bookings
+   * Expected: Pending list shows event name, venue name, booking window, and event date for each request
+   * Type:     normal
+   */
+  it('US18-UI01 (AC1+AC2): pending queue shows event, venue, date and time for each booking', async () => {
+    renderVenues();
+
+    expect(await screen.findByTestId('pending-booking-101')).toBeInTheDocument();
+    expect(screen.getByText(/Pending approval/)).toBeInTheDocument();
+    expect(screen.getByText('Tech Symposium')).toBeInTheDocument();
+    expect(screen.getByText('Design Workshop')).toBeInTheDocument();
+
+    const card101 = screen.getByTestId('pending-booking-101');
+    expect(within(card101).getByText('Tech Symposium')).toBeInTheDocument();
+    expect(within(card101).getByText('Innovation Hall')).toBeInTheDocument();
+    expect(within(card101).getByText(/Booking window:/i)).toBeInTheDocument();
+    expect(within(card101).getByText(/Event date:/i)).toBeInTheDocument();
+
+    const card102 = screen.getByTestId('pending-booking-102');
+    expect(within(card102).getByText('Design Workshop')).toBeInTheDocument();
+    expect(within(card102).getByText('Innovation Hall')).toBeInTheDocument();
+    expect(within(card102).getByText(/Booking window:/i)).toBeInTheDocument();
+    expect(within(card102).getByText(/Event date:/i)).toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCRUM-18 AC3, AC5 & AC9
+   * Scenario: Venue Staff approves a pending booking
+   * Setup:    Two pending bookings (101 and 102) in database
+   * Expected: Clicking Approve on booking 101 sends decision to endpoint for booking 101 only; booking 102 remains pending
+   * Type:     normal
+   */
+  it('US18-UI02 (AC3+AC5+AC9): approving booking 101 hits decision endpoint for 101 only and keeps 102 pending', async () => {
+    const user = userEvent.setup();
+    renderVenues();
+
+    expect(await screen.findByTestId('pending-booking-101')).toBeInTheDocument();
+    expect(screen.getByTestId('pending-booking-102')).toBeInTheDocument();
+
+    const card101 = screen.getByTestId('pending-booking-101');
+    const approveBtn101 = within(card101).getByRole('button', { name: 'Approve' });
+    await user.click(approveBtn101);
+
+    await waitFor(() => {
+      const decisionCalls = api.mock.calls.filter(([path]) => path.includes('/decision'));
+      expect(decisionCalls).toHaveLength(1);
+      expect(decisionCalls[0][0]).toBe('/api/venues/bookings/101/decision');
+      expect(decisionCalls[0][1].body).toEqual({
+        approve: true,
+        reason: undefined,
+        alternativeSuggestion: undefined,
+      });
+    });
+
+    // Booking 101 is now approved and moved to decided bookings table
+    await waitFor(() => {
+      expect(screen.queryByTestId('pending-booking-101')).not.toBeInTheDocument();
+    });
+    // Booking 102 remains in pending queue
+    expect(screen.getByTestId('pending-booking-102')).toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCRUM-18 AC3, AC4, AC5 & AC9
+   * Scenario: Venue Staff rejects a pending booking with reason and suggested alternative
+   * Setup:    Two pending bookings (101 and 102) in database
+   * Expected: Typing reason and alternative in card 102 and clicking Reject sends decision to endpoint for 102 only
+   * Type:     normal
+   */
+  it('US18-UI03 (AC3+AC4+AC9): rejecting booking 102 sends reason and alternative for 102 only', async () => {
+    const user = userEvent.setup();
+    renderVenues();
+
+    expect(await screen.findByTestId('pending-booking-102')).toBeInTheDocument();
+    const card102 = screen.getByTestId('pending-booking-102');
+
+    const reasonInput = within(card102).getByPlaceholderText('Explain why the booking is rejected, if applicable');
+    const altInput = within(card102).getByPlaceholderText('e.g. Orchid Room on the same date');
+    const rejectBtn = within(card102).getByRole('button', { name: 'Reject' });
+
+    await user.type(reasonInput, 'Maintenance scheduled on lighting rig');
+    await user.type(altInput, 'Seminar Room 3');
+    await user.click(rejectBtn);
+
+    await waitFor(() => {
+      const decisionCalls = api.mock.calls.filter(([path]) => path.includes('/decision'));
+      expect(decisionCalls).toHaveLength(1);
+      expect(decisionCalls[0][0]).toBe('/api/venues/bookings/102/decision');
+      expect(decisionCalls[0][1].body).toEqual({
+        approve: false,
+        reason: 'Maintenance scheduled on lighting rig',
+        alternativeSuggestion: 'Seminar Room 3',
+      });
+    });
+
+    // Booking 102 is removed from pending queue
+    await waitFor(() => {
+      expect(screen.queryByTestId('pending-booking-102')).not.toBeInTheDocument();
+    });
+    // Booking 101 remains untouched in pending queue
+    expect(screen.getByTestId('pending-booking-101')).toBeInTheDocument();
   });
 });
