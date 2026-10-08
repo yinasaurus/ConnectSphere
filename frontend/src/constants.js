@@ -1,6 +1,7 @@
 export const ROLES = {
   EVENT_ORGANISER: 'EVENT_ORGANISER',
   EVENT_COORDINATOR: 'EVENT_COORDINATOR',
+  EVENT_COORDINATOR_LEAD: 'EVENT_COORDINATOR_LEAD',
   VENUE_STAFF: 'VENUE_STAFF',
   TECHNICAL_SUPPORT: 'TECHNICAL_SUPPORT',
   ATTENDEE: 'ATTENDEE',
@@ -9,6 +10,7 @@ export const ROLES = {
 export const ROLE_LABELS = {
   EVENT_ORGANISER: 'Event Organiser',
   EVENT_COORDINATOR: 'Event Coordinator',
+  EVENT_COORDINATOR_LEAD: 'Lead',
   VENUE_STAFF: 'Venue Staff',
   TECHNICAL_SUPPORT: 'Technical Support',
   ATTENDEE: 'Attendee',
@@ -55,6 +57,7 @@ export const LAYOUTS = ['THEATRE', 'CLASSROOM', 'BOARDROOM', 'BANQUET', 'EXHIBIT
 export const DEMO_ACCOUNTS = [
   { email: 'organiser@acme.example', role: 'Organiser (Acme)' },
   { email: 'coordinator@connectsphere.sg', role: 'Coordinator' },
+  { email: 'lead@connectsphere.sg', role: 'Lead' },
   { email: 'venue@connectsphere.sg', role: 'Venue staff' },
   { email: 'tech@connectsphere.sg', role: 'Technical support' },
   { email: 'attendee@example.com', role: 'Attendee' },
@@ -64,7 +67,7 @@ export const DEMO_ACCOUNTS = [
 export const DEMO_PASSWORD = 'Password123!';
 
 export function homePathForRoles(roles = []) {
-  if (roles.includes(ROLES.EVENT_COORDINATOR)) return '/app';
+  if (roles.includes(ROLES.EVENT_COORDINATOR) || roles.includes(ROLES.EVENT_COORDINATOR_LEAD)) return '/app';
   if (roles.includes(ROLES.VENUE_STAFF)) return '/app/venues';
   if (roles.includes(ROLES.TECHNICAL_SUPPORT)) return '/app/equipment';
   if (roles.includes(ROLES.EVENT_ORGANISER)) return '/app/events';

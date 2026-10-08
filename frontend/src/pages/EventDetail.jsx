@@ -32,12 +32,21 @@ export default function EventDetail() {
   const { id } = useParams();
   const location = useLocation();
   const { user, hasRole } = useAuth();
-  const canViewPlanning = hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT);
+  const isLead = hasRole(ROLES.EVENT_COORDINATOR_LEAD);
+  const canViewPlanning = hasRole(
+    ROLES.EVENT_ORGANISER,
+    ROLES.EVENT_COORDINATOR,
+    ROLES.EVENT_COORDINATOR_LEAD,
+    ROLES.VENUE_STAFF,
+    ROLES.TECHNICAL_SUPPORT
+  );
   const [event, setEvent] = useState(null);
   const [history, setHistory] = useState([]);
   const [comments, setComments] = useState([]);
   const [, setVenues] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [assignableCoordinators, setAssignableCoordinators] = useState([]);
+  const [assignCoordinatorId, setAssignCoordinatorId] = useState('');
   const [comment, setComment] = useState('');
   const [reason, setReason] = useState('');
   const [venueReason, setVenueReason] = useState('');
@@ -64,7 +73,18 @@ export default function EventDetail() {
     setComments(commentRes.comments || []);
     setVenues(venueRes.venues || []);
     setBookings(bookingRes.bookings || []);
-  }, [id, canViewPlanning]);
+    // Lead picks an active Coordinator by hand (W4). Only load the list when this event is still unassigned.
+    if (
+      isLead
+      && eventRes.event.status === 'SUBMITTED'
+      && !eventRes.event.coordinatorId
+    ) {
+      const coordRes = await api('/api/events/assignable-coordinators');
+      setAssignableCoordinators(coordRes.coordinators || []);
+    } else {
+      setAssignableCoordinators([]);
+    }
+  }, [id, canViewPlanning, isLead]);
 
   useEffect(() => {
     reload().catch((err) => setError(err.message));
@@ -125,6 +145,41 @@ export default function EventDetail() {
             <p><strong>Equipment:</strong> {event.equipmentNotes || '—'}</p>
             {event.rejectionReason && <p><strong>Rejection reason:</strong> {event.rejectionReason}</p>}
           </div>
+
+          {/*
+            Purpose: Lead chooses the one primary Coordinator for a Submitted event that has none.
+            AC: SCRUM-71 AC1, AC2, AC6
+            Business rule: W7 #5, W4 (manual choice). Inactive Coordinators are omitted by the API.
+            Failure: the server message is shown; the event is not changed.
+          */}
+          {isLead && event.status === 'SUBMITTED' && !event.coordinatorId && (
+            <div className="card stack">
+              <h3>Assign coordinator</h3>
+              <p className="muted">Choose an active Event Coordinator as the main point of contact. Only a Lead can do this.</p>
+              <label htmlFor="assign-coordinator">Coordinator</label>
+              <select
+                id="assign-coordinator"
+                value={assignCoordinatorId}
+                onChange={(e) => setAssignCoordinatorId(e.target.value)}
+              >
+                <option value="">Select a coordinator</option>
+                {assignableCoordinators.map((row) => (
+                  <option key={row.id} value={row.id}>{row.fullName}</option>
+                ))}
+              </select>
+              <button
+                className="btn"
+                type="button"
+                disabled={!assignCoordinatorId}
+                onClick={() => run(() => api(`/api/events/${id}/assign-coordinator`, {
+                  method: 'POST',
+                  body: { coordinatorId: Number(assignCoordinatorId) },
+                }))}
+              >
+                Assign coordinator
+              </button>
+            </div>
+          )}
 
           {isOrganiser && event.status === 'DRAFT' && (
             <div className="card actions">
