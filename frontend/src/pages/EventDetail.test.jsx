@@ -541,4 +541,114 @@ it('loads an attendee event without requesting restricted planning data', async 
   expect(api).not.toHaveBeenCalledWith('/api/comments/3');
   expect(api).not.toHaveBeenCalledWith('/api/events/3/history');
 });
+
+describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () => {
+  /*
+   * AC:       SCRUM-19 AC7
+   * Scenario: Coordinator action triggers BOOKING_CONFLICT
+   * Setup:    Event in PLANNING status; Coordinator clicks "Confirm event"; API returns error with code BOOKING_CONFLICT
+   * Expected: ConflictModal opens displaying the conflict message
+   * Type:     negative
+   */
+  it('opens ConflictModal when a coordinator request returns BOOKING_CONFLICT', async () => {
+    const user = userEvent.setup();
+    useAuth.mockReturnValue({
+      user: { id: 10 },
+      hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
+    });
+
+    const conflictErr = new Error('Cannot confirm: venue booking has an overlapping conflict');
+    conflictErr.status = 409;
+    conflictErr.code = 'BOOKING_CONFLICT';
+
+    api.mockImplementation(async (path, options = {}) => {
+      if (path === '/api/events/3') {
+        return {
+          event: {
+            id: 3,
+            name: 'Planning Phase Event',
+            status: 'PLANNING',
+            coordinatorId: 10,
+            organiserId: 1,
+          },
+        };
+      }
+      if (path === '/api/events/3/history') return { history: [] };
+      if (path === '/api/comments/3') return { comments: [] };
+      if (path === '/api/venues') return { venues: [] };
+      if (path === '/api/events/3/venue-bookings') return { bookings: [] };
+      if (path === '/api/events/3/status' && options.method === 'POST') {
+        throw conflictErr;
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/app/events/3']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes><Route path="/app/events/:id" element={<EventDetail />} /></Routes>
+      </MemoryRouter>
+    );
+
+    const confirmBtn = await screen.findByRole('button', { name: 'Confirm event' });
+    await user.click(confirmBtn);
+
+    expect(await screen.findByRole('heading', { name: 'Venue Booking Conflict' })).toBeInTheDocument();
+    expect(screen.getByText('Cannot confirm: venue booking has an overlapping conflict')).toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCRUM-19 AC7
+   * Scenario: Coordinator action triggers a non-conflict 409 (e.g. EDIT_LOCKED)
+   * Setup:    Event in PLANNING status; Coordinator clicks "Confirm event"; API returns error with code EDIT_LOCKED
+   * Expected: ConflictModal is NOT opened; standard inline alert displays error
+   * Type:     negative
+   */
+  it('does not open ConflictModal when an action returns a non-conflict 409 error', async () => {
+    const user = userEvent.setup();
+    useAuth.mockReturnValue({
+      user: { id: 10 },
+      hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
+    });
+
+    const nonConflictErr = new Error('Event cannot be confirmed because edits are locked');
+    nonConflictErr.status = 409;
+    nonConflictErr.code = 'EDIT_LOCKED';
+
+    api.mockImplementation(async (path, options = {}) => {
+      if (path === '/api/events/3') {
+        return {
+          event: {
+            id: 3,
+            name: 'Planning Phase Event',
+            status: 'PLANNING',
+            coordinatorId: 10,
+            organiserId: 1,
+          },
+        };
+      }
+      if (path === '/api/events/3/history') return { history: [] };
+      if (path === '/api/comments/3') return { comments: [] };
+      if (path === '/api/venues') return { venues: [] };
+      if (path === '/api/events/3/venue-bookings') return { bookings: [] };
+      if (path === '/api/events/3/status' && options.method === 'POST') {
+        throw nonConflictErr;
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/app/events/3']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes><Route path="/app/events/:id" element={<EventDetail />} /></Routes>
+      </MemoryRouter>
+    );
+
+    const confirmBtn = await screen.findByRole('button', { name: 'Confirm event' });
+    await user.click(confirmBtn);
+
+    // Standard inline error alert appears
+    expect(await screen.findByText('Event cannot be confirmed because edits are locked')).toBeInTheDocument();
+    // Conflict modal does NOT open
+    expect(screen.queryByRole('heading', { name: 'Venue Booking Conflict' })).not.toBeInTheDocument();
+  });
+});
 });

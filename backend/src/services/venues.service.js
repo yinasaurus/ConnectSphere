@@ -165,13 +165,12 @@ async function searchVenues(filters = {}) {
     fetchMany(
       supabase
         .from('venue_bookings')
-        .select('venue_id, start_at, end_at, setup_minutes, teardown_minutes')
+        .select('venue_id, start_at, end_at, setup_minutes, teardown_minutes, status, expires_at, hold_expires_at')
         .in('venue_id', candidateIds)
         // "confirmed booking" -> APPROVED, "active tentative hold" -> TENTATIVE.
         // PENDING is deliberately excluded: AC2 only names these two, and an
-        // undecided request shouldn't hide a venue from search. Hold expiry
-        // (SCRUM-75) isn't implemented yet, so every TENTATIVE row counts as
-        // active for now.
+        // undecided request shouldn't hide a venue from search. Active holds
+        // occupy the venue; expired holds do not (SCRUM-19 AC9).
         .in('status', [BOOKING_STATUS.APPROVED, BOOKING_STATUS.TENTATIVE])
     ),
     fetchMany(
@@ -199,6 +198,14 @@ async function searchVenues(filters = {}) {
     );
 
     const blockedByBooking = (bookingsByVenue[venue.id] || []).some((booking) => {
+      // AC9: An active tentative hold counts as occupying the venue. An expired hold does not.
+      if (booking.status === BOOKING_STATUS.TENTATIVE) {
+        const expiry = booking.expires_at || booking.hold_expires_at;
+        if (expiry && new Date(expiry) <= new Date()) {
+          return false;
+        }
+      }
+
       const bookingWindow = computeOccupiedWindow(
         booking.start_at,
         booking.end_at,
@@ -341,7 +348,8 @@ async function listBookings(filters = {}) {
   const confirmedByVenue = {};
   for (const row of rows) {
     const isConfirmed = row.status === BOOKING_STATUS.APPROVED;
-    const isHoldActive = row.status === BOOKING_STATUS.TENTATIVE && (!row.expires_at || new Date(row.expires_at) > new Date());
+    const expiry = row.expires_at || row.hold_expires_at;
+    const isHoldActive = row.status === BOOKING_STATUS.TENTATIVE && (!expiry || new Date(expiry) > new Date());
     if (isConfirmed || isHoldActive) {
       (confirmedByVenue[row.venue_id] = confirmedByVenue[row.venue_id] || []).push(row);
     }
@@ -352,14 +360,14 @@ async function listBookings(filters = {}) {
     let conflictDetails = null;
 
     if (row.status === BOOKING_STATUS.PENDING && row.start_at && row.end_at) {
-      const vSetup = row.venues?.setup_minutes ?? row.setup_minutes ?? 30;
-      const vTeardown = row.venues?.teardown_minutes ?? row.teardown_minutes ?? 30;
+      const vSetup = row.setup_minutes ?? 30;
+      const vTeardown = row.teardown_minutes ?? 30;
       const { occupiedStart, occupiedEnd } = computeOccupiedWindow(row.start_at, row.end_at, vSetup, vTeardown);
 
       const conflicting = (confirmedByVenue[row.venue_id] || []).find((confirmed) => {
         if (Number(confirmed.id) === Number(row.id)) return false;
-        const cSetup = confirmed.venues?.setup_minutes ?? confirmed.setup_minutes ?? 30;
-        const cTeardown = confirmed.venues?.teardown_minutes ?? confirmed.teardown_minutes ?? 30;
+        const cSetup = confirmed.setup_minutes ?? 30;
+        const cTeardown = confirmed.teardown_minutes ?? 30;
         const cWindow = computeOccupiedWindow(confirmed.start_at, confirmed.end_at, cSetup, cTeardown);
         return windowsOverlap(occupiedStart, occupiedEnd, cWindow.occupiedStart, cWindow.occupiedEnd);
       });
@@ -396,7 +404,7 @@ async function listBookings(filters = {}) {
  * Inputs: user (must have EVENT_COORDINATOR) and payload { eventId, venueId, startAt, endAt,
  * setupMinutes, teardownMinutes, notes }.
  * Output: the created booking row. Throws 403 if the user is not a Coordinator and 409 if
- * the venue already has a pending, tentative or approved booking overlapping the window.
+ * the venue already has a confirmed booking or active tentative hold overlapping the window.
  */
 async function requestBooking(user, payload) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
@@ -408,10 +416,11 @@ async function requestBooking(user, payload) {
     payload.startAt,
     payload.endAt,
     payload.setupMinutes,
-    payload.teardownMinutes
+    payload.teardownMinutes,
+    { confirmedOnly: true }
   );
   if (conflict) {
-    throw httpError(409, 'This venue already has a confirmed/pending booking in that window', 'BOOKING_CONFLICT');
+    throw httpError(409, 'This venue already has a confirmed booking in that window', 'BOOKING_CONFLICT');
   }
 
   const created = await insertOne('venue_bookings', {
@@ -551,7 +560,7 @@ async function findConflict(
 
   let query = supabase
     .from('venue_bookings')
-    .select('id, event_id, venue_id, start_at, end_at, setup_minutes, teardown_minutes, status')
+    .select('id, event_id, venue_id, start_at, end_at, setup_minutes, teardown_minutes, status, expires_at, hold_expires_at')
     .eq('venue_id', venueId)
     .in('status', statuses);
 
@@ -575,8 +584,8 @@ async function findConflict(
     }
 
     if (row.start_at && row.end_at) {
-      const existingSetup = Number(row.setup_minutes !== undefined && row.setup_minutes !== null ? row.setup_minutes : sMin);
-      const existingTeardown = Number(row.teardown_minutes !== undefined && row.teardown_minutes !== null ? row.teardown_minutes : tMin);
+      const existingSetup = Number(row.setup_minutes !== undefined && row.setup_minutes !== null ? row.setup_minutes : 30);
+      const existingTeardown = Number(row.teardown_minutes !== undefined && row.teardown_minutes !== null ? row.teardown_minutes : 30);
       const { occupiedStart: existingStart, occupiedEnd: existingEnd } = computeOccupiedWindow(
         row.start_at,
         row.end_at,

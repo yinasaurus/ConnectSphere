@@ -553,3 +553,105 @@ describe('SCUM-24 venue search results', () => {
     expect(screen.queryByText('Operating hours: 08:00-22:00')).not.toBeInTheDocument();
   });
 });
+
+describe('SCRUM-19 AC7: Conflict indicators and conflict modal in Venues page', () => {
+  beforeEach(() => {
+    useAuth.mockReturnValue({
+      user: { id: 40, roles: ['VENUE_STAFF'] },
+      hasRole: (...roles) => roles.includes('VENUE_STAFF'),
+    });
+    api.mockReset();
+  });
+
+  /*
+   * AC:       SCRUM-19 AC7
+   * Scenario: Venue Staff views booking requests table with conflicting and clear requests
+   * Setup:    API returns one booking with has_conflict=true and one with has_conflict=false
+   * Expected: Table shows "⚠️ Conflict with Confirmed Gala" for conflicting row and "✓ No conflict" for clear row
+   * Type:     normal
+   */
+  it('displays ⚠️ Conflict badge when has_conflict is true and ✓ No conflict when false', async () => {
+    api.mockImplementation(async (path) => {
+      if (path === '/api/venues') return { venues: [] };
+      if (path === '/api/venues/bookings') {
+        return {
+          bookings: [
+            {
+              id: 101,
+              event_name: 'Workshop A',
+              venue_name: 'Grand Ballroom',
+              status: 'PENDING',
+              start_at: '2026-10-20T10:00:00.000Z',
+              has_conflict: true,
+              conflict_details: { eventName: 'Confirmed Gala' },
+            },
+            {
+              id: 102,
+              event_name: 'Workshop B',
+              venue_name: 'Seminar Room',
+              status: 'PENDING',
+              start_at: '2026-10-20T14:00:00.000Z',
+              has_conflict: false,
+              conflict_details: null,
+            },
+          ],
+        };
+      }
+      throw new Error(`Unhandled API path: ${path}`);
+    });
+
+    render(<Venues />);
+
+    expect(await screen.findByText('⚠️ Conflict with Confirmed Gala')).toBeInTheDocument();
+    expect(screen.getByText('✓ No conflict')).toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCRUM-19 AC7
+   * Scenario: Venue Staff clicks Approve on a booking that triggers a conflict
+   * Setup:    POST /api/venues/bookings/101/decision rejects with BOOKING_CONFLICT
+   * Expected: ConflictModal opens showing the server conflict message
+   * Type:     negative
+   */
+  it('opens ConflictModal with server error message when approving a conflicting booking', async () => {
+    const user = userEvent.setup();
+    const conflictError = new Error('Cannot approve booking: venue has an overlapping confirmed booking');
+    conflictError.status = 409;
+    conflictError.code = 'BOOKING_CONFLICT';
+
+    api.mockImplementation(async (path, options = {}) => {
+      if (path === '/api/venues') return { venues: [] };
+      if (path === '/api/venues/bookings') {
+        return {
+          bookings: [
+            {
+              id: 101,
+              event_name: 'Workshop A',
+              venue_name: 'Grand Ballroom',
+              status: 'PENDING',
+              start_at: '2026-10-20T10:00:00.000Z',
+              has_conflict: true,
+              conflict_details: { eventName: 'Confirmed Gala' },
+            },
+          ],
+        };
+      }
+      if (path === '/api/venues/bookings/101/decision' && options.method === 'POST') {
+        throw conflictError;
+      }
+      throw new Error(`Unhandled API path: ${path}`);
+    });
+
+    render(<Venues />);
+
+    const approveButton = await screen.findByRole('button', { name: 'Approve' });
+    await user.click(approveButton);
+
+    expect(await screen.findByRole('heading', { name: 'Venue Booking Conflict' })).toBeInTheDocument();
+    expect(screen.getByText('Cannot approve booking: venue has an overlapping confirmed booking')).toBeInTheDocument();
+
+    // Closing the modal dismisses it
+    await user.click(screen.getByRole('button', { name: 'Got it' }));
+    expect(screen.queryByRole('heading', { name: 'Venue Booking Conflict' })).not.toBeInTheDocument();
+  });
+});

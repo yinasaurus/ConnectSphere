@@ -27,6 +27,7 @@ jest.mock('../src/config/db', () => ({
   insertOne: jest.fn(),
   insertMany: jest.fn(),
   updateById: jest.fn(),
+  writeAudit: jest.fn(),
 }));
 
 let mockUser;
@@ -42,11 +43,12 @@ jest.mock('../src/middleware/auth', () => {
   };
 });
 
-const { supabase, fetchOne, fetchMany, insertOne, updateById } = require('../src/config/db');
+const { supabase, fetchOne, fetchMany, insertOne, updateById, writeAudit } = require('../src/config/db');
 const venuesService = require('../src/services/venues.service');
 const { createApp } = require('../src/app');
 
 const STAFF = { id: 40, roles: [ROLES.VENUE_STAFF] };
+const COORDINATOR = { id: 21, roles: [ROLES.EVENT_COORDINATOR] };
 
 describe('SCRUM-19 Venue Booking Conflict Detection', () => {
   const app = createApp();
@@ -65,12 +67,94 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
     supabase.from.mockReturnValue(query);
     updateById.mockImplementation(async (_table, id, patch) => ({ id, ...patch }));
     insertOne.mockImplementation(async (_table, row) => ({ id: 999, ...row }));
+    writeAudit.mockResolvedValue();
+  });
+
+  describe('AC1: Booking request conflict checking', () => {
+    /*
+     * AC:       AC1 & AC3
+     * Scenario: Coordinator requests a booking that overlaps an existing confirmed booking
+     * Setup:    POST /api/venues/bookings with occupied window overlapping confirmed booking at same venue
+     * Expected: HTTP 409 BOOKING_CONFLICT returned, booking is not created
+     * Type:     negative
+     */
+    it('returns 409 BOOKING_CONFLICT when a booking request overlaps an existing confirmed booking', async () => {
+      mockUser = COORDINATOR;
+
+      const confirmedBooking = {
+        id: 1,
+        event_id: 10,
+        venue_id: 5,
+        status: BOOKING_STATUS.APPROVED,
+        start_at: '2026-10-20T10:00:00.000Z',
+        end_at: '2026-10-20T12:00:00.000Z',
+        setup_minutes: 30,
+        teardown_minutes: 45,
+      };
+
+      fetchMany.mockResolvedValueOnce([confirmedBooking]);
+
+      const res = await request(app)
+        .post('/api/venues/bookings')
+        .send({
+          eventId: 50,
+          venueId: 5,
+          startAt: '2026-10-20T11:30:00.000Z',
+          endAt: '2026-10-20T13:30:00.000Z',
+          setupMinutes: 30,
+          teardownMinutes: 30,
+        });
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe('BOOKING_CONFLICT');
+      expect(res.body.message).toMatch(/already has a confirmed booking/i);
+      expect(insertOne).not.toHaveBeenCalled();
+    });
+
+    /*
+     * AC:       AC1
+     * Scenario: Coordinator requests a booking for a free slot
+     * Setup:    POST /api/venues/bookings when no confirmed bookings overlap
+     * Expected: HTTP 201 Created, booking saved as PENDING
+     * Type:     normal
+     */
+    it('creates a pending booking when no confirmed bookings conflict', async () => {
+      mockUser = COORDINATOR;
+      fetchMany.mockResolvedValueOnce([]);
+
+      const res = await request(app)
+        .post('/api/venues/bookings')
+        .send({
+          eventId: 50,
+          venueId: 5,
+          startAt: '2026-10-20T14:00:00.000Z',
+          endAt: '2026-10-20T16:00:00.000Z',
+          setupMinutes: 30,
+          teardownMinutes: 30,
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.booking.status).toBe(BOOKING_STATUS.PENDING);
+      expect(insertOne).toHaveBeenCalledWith(
+        'venue_bookings',
+        expect.objectContaining({
+          event_id: 50,
+          venue_id: 5,
+          status: BOOKING_STATUS.PENDING,
+        })
+      );
+    });
   });
 
   describe('AC2: Occupied window computation', () => {
+    /*
+     * AC:       AC2
+     * Scenario: Compute occupied window given start, end, setup, and turnaround minutes
+     * Setup:    Event 10:00 to 12:00 with 30m setup and 45m turnaround
+     * Expected: Occupied window is 09:30 to 12:45
+     * Type:     normal
+     */
     it('computes occupied window from event start minus setup to event end plus turnaround', () => {
-      // User requirement example:
-      // event 10:00 to 12:00 with 30m setup and 45m turnaround occupies 09:30 to 12:45
       const { occupiedStart, occupiedEnd } = venuesService.computeOccupiedWindow(
         '2026-10-20T10:00:00.000Z',
         '2026-10-20T12:00:00.000Z',
@@ -83,8 +167,14 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
   });
 
   describe('AC3, AC4 & AC5: Overlapping occupied windows & boundary abutment', () => {
+    /*
+     * AC:       AC3 & AC5
+     * Scenario: New booking occupied window overlaps existing confirmed booking occupied window
+     * Setup:    Confirmed booking occupied 09:30-12:45; new request 13:00-15:00 with 30m setup (occupied 12:30-15:30)
+     * Expected: findConflict returns the conflicting confirmed booking
+     * Type:     normal
+     */
     it('AC3 & AC5: identifies a conflict when new occupied window overlaps an existing confirmed booking occupied window', async () => {
-      // Existing confirmed booking: 10:00 to 12:00 with 30m setup, 45m turnaround -> 09:30 to 12:45
       const confirmedBooking = {
         id: 1,
         venue_id: 10,
@@ -97,7 +187,6 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
 
       fetchMany.mockResolvedValueOnce([confirmedBooking]);
 
-      // New request: 13:00 to 15:00 with 30m setup -> occupied window starts at 12:30 (before 12:45)
       const conflict = await venuesService.findConflict(
         10,
         '2026-10-20T13:00:00.000Z',
@@ -110,8 +199,14 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
       expect(conflict.id).toBe(1);
     });
 
+    /*
+     * AC:       AC4
+     * Scenario: One occupied window ends exactly when the other begins (abutting boundaries)
+     * Setup:    Confirmed booking occupied 09:30-12:45; new request 13:00-15:00 with 15m setup (occupied 12:45-15:30)
+     * Expected: findConflict returns null (no conflict for abutting windows)
+     * Type:     boundary
+     */
     it('AC4: two bookings are not in conflict if one occupied window ends exactly when the other starts', async () => {
-      // Existing confirmed booking: 10:00 to 12:00 with 30m setup, 45m turnaround -> occupied 09:30 to 12:45
       const confirmedBooking = {
         id: 1,
         venue_id: 10,
@@ -124,7 +219,6 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
 
       fetchMany.mockResolvedValueOnce([confirmedBooking]);
 
-      // New request: event 13:00 to 15:00 with 15m setup -> occupied window starts at 12:45:00.000Z exactly
       const conflict = await venuesService.findConflict(
         10,
         '2026-10-20T13:00:00.000Z',
@@ -137,11 +231,17 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
     });
   });
 
-  describe('AC1 & AC6: Refusing booking approval when conflict exists with confirmed booking', () => {
+  describe('AC6: Refusing booking approval when conflict exists with confirmed booking', () => {
+    /*
+     * AC:       AC6
+     * Scenario: Venue Staff attempts to approve a pending booking that conflicts with a confirmed booking
+     * Setup:    POST /api/venues/bookings/:id/decision with approve: true on conflicting pending booking
+     * Expected: HTTP 409 BOOKING_CONFLICT returned, status not updated to APPROVED
+     * Type:     negative
+     */
     it('AC6: prevents Venue Staff from approving a booking that conflicts with a confirmed booking (409 Conflict)', async () => {
       mockUser = STAFF;
 
-      // The pending booking being reviewed
       const pendingBooking = {
         id: 5,
         event_id: 50,
@@ -153,7 +253,6 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
         teardown_minutes: 30,
       };
 
-      // Confirmed booking for the same venue overlapping (ends at 12:45, pending starts setup at 12:30)
       const confirmedBooking = {
         id: 1,
         event_id: 40,
@@ -165,9 +264,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
         teardown_minutes: 45,
       };
 
-      // 1. fetchOne loads the pending booking
       fetchOne.mockResolvedValueOnce(pendingBooking);
-      // 2. findConflict fetchMany returns existing confirmed booking
       fetchMany.mockResolvedValueOnce([confirmedBooking]);
 
       const res = await request(app)
@@ -180,6 +277,13 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
       expect(updateById).not.toHaveBeenCalled();
     });
 
+    /*
+     * AC:       AC6
+     * Scenario: Venue Staff approves a pending booking that does not conflict with any confirmed booking
+     * Setup:    POST /api/venues/bookings/:id/decision with approve: true on non-conflicting booking
+     * Expected: HTTP 200 OK, status updated to APPROVED
+     * Type:     normal
+     */
     it('allows approval of a pending booking when no conflict exists', async () => {
       mockUser = STAFF;
 
@@ -199,7 +303,6 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
         .mockResolvedValueOnce({ id: 50, name: 'AI Summit', coordinator_id: 21 })
         .mockResolvedValueOnce({ id: 10, name: 'Auditorium' });
 
-      // No overlapping bookings found
       fetchMany.mockResolvedValueOnce([]);
 
       const res = await request(app)
@@ -217,6 +320,13 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
   });
 
   describe('AC7: Informing Venue Staff about detected conflicts in booking list', () => {
+    /*
+     * AC:       AC7
+     * Scenario: Venue Staff fetches booking list containing both conflicting and non-conflicting pending requests
+     * Setup:    GET /api/venues/bookings returns list with confirmed booking and two pending requests
+     * Expected: Items annotated with has_conflict and conflict_details
+     * Type:     normal
+     */
     it('AC7: listBookings flags pending bookings that conflict with confirmed bookings', async () => {
       mockUser = STAFF;
 
@@ -277,17 +387,21 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
   });
 
   describe('AC8: Multi-booking events checked separately per venue', () => {
-    it('checks each booking separately against its own venue and allows non-conflicting venue booking to be approved', async () => {
+    /*
+     * AC:       AC8
+     * Scenario: Event has bookings on Venue 1 and Venue 2; Venue 1 has a conflict, Venue 2 is free
+     * Setup:    Seed conflict on Venue 1 and empty bookings on Venue 2
+     * Expected: Approving booking 102 (Venue 2) succeeds with 200, approving booking 101 (Venue 1) returns 409
+     * Type:     normal
+     */
+    it('AC8: checks each booking separately against its own venue — proves 102 approves and 101 fails with 409', async () => {
       mockUser = STAFF;
 
-      // Event 50 has two bookings: Booking 101 at Venue 1 and Booking 102 at Venue 2
-      // Venue 1 has a confirmed booking that conflicts
-      // Venue 2 is free
-
-      const bookingVenue2 = {
-        id: 102,
+      // Event 50 has two bookings: 101 at Venue 1 and 102 at Venue 2
+      const bookingVenue1 = {
+        id: 101,
         event_id: 50,
-        venue_id: 2, // Venue 2
+        venue_id: 1,
         status: BOOKING_STATUS.PENDING,
         start_at: '2026-10-20T10:00:00.000Z',
         end_at: '2026-10-20T12:00:00.000Z',
@@ -295,30 +409,68 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
         teardown_minutes: 30,
       };
 
+      const bookingVenue2 = {
+        id: 102,
+        event_id: 50,
+        venue_id: 2,
+        status: BOOKING_STATUS.PENDING,
+        start_at: '2026-10-20T10:00:00.000Z',
+        end_at: '2026-10-20T12:00:00.000Z',
+        setup_minutes: 30,
+        teardown_minutes: 30,
+      };
+
+      const venue1ConfirmedConflict = {
+        id: 99,
+        event_id: 40,
+        venue_id: 1,
+        status: BOOKING_STATUS.APPROVED,
+        start_at: '2026-10-20T10:00:00.000Z',
+        end_at: '2026-10-20T12:00:00.000Z',
+        setup_minutes: 30,
+        teardown_minutes: 30,
+      };
+
+      // Part A: Approving booking 102 on Venue 2 (which has no overlapping bookings) succeeds
       fetchOne
         .mockResolvedValueOnce(bookingVenue2)
         .mockResolvedValueOnce({ id: 50, name: 'Campus Fest', coordinator_id: 21 })
         .mockResolvedValueOnce({ id: 2, name: 'Seminar Room B' });
+      fetchMany.mockResolvedValueOnce([]); // Venue 2 free
 
-      // Venue 2 query returns no overlapping bookings
-      fetchMany.mockResolvedValueOnce([]);
-
-      const res = await request(app)
+      const res2 = await request(app)
         .post('/api/venues/bookings/102/decision')
         .send({ approve: true });
 
-      expect(res.status).toBe(200);
-      expect(res.body.booking.status).toBe(BOOKING_STATUS.APPROVED);
-      // Venue 2 was queried with venue_id = 2
+      expect(res2.status).toBe(200);
+      expect(res2.body.booking.status).toBe(BOOKING_STATUS.APPROVED);
       expect(query.eq).toHaveBeenCalledWith('venue_id', 2);
+
+      // Part B: Approving booking 101 on Venue 1 (which conflicts with booking 99) fails with 409
+      fetchOne.mockResolvedValueOnce(bookingVenue1);
+      fetchMany.mockResolvedValueOnce([venue1ConfirmedConflict]);
+
+      const res1 = await request(app)
+        .post('/api/venues/bookings/101/decision')
+        .send({ approve: true });
+
+      expect(res1.status).toBe(409);
+      expect(res1.body.error).toBe('BOOKING_CONFLICT');
+      expect(query.eq).toHaveBeenCalledWith('venue_id', 1);
     });
   });
 
   describe('AC9: Active vs Expired tentative holds', () => {
     const now = new Date('2026-10-20T08:00:00.000Z');
 
+    /*
+     * AC:       AC9
+     * Scenario: Active tentative hold occupies venue
+     * Setup:    Hold expires at 09:00:00 (future relative to 08:00:00)
+     * Expected: findConflict returns the active tentative hold
+     * Type:     normal
+     */
     it('identifies an ACTIVE tentative hold as occupying the venue (conflict detected)', async () => {
-      // Tentative hold expires in the future (09:00:00)
       const activeHold = {
         id: 7,
         venue_id: 10,
@@ -345,8 +497,14 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
       expect(conflict.id).toBe(7);
     });
 
+    /*
+     * AC:       AC9
+     * Scenario: Expired tentative hold does not occupy venue
+     * Setup:    Hold expired at 07:00:00 (past relative to 08:00:00)
+     * Expected: findConflict returns null
+     * Type:     boundary
+     */
     it('ignores an EXPIRED tentative hold (no conflict detected)', async () => {
-      // Tentative hold expired in the past (07:00:00 vs now 08:00:00)
       const expiredHold = {
         id: 8,
         venue_id: 10,
