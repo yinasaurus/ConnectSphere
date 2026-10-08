@@ -106,6 +106,11 @@ function mapEvent(row) {
   };
 }
 
+/**
+ * Purpose: decide whether this user may open the event at all.
+ * AC: SCRUM-71 AC1, AC6 — a Lead must be able to open an unassigned Submitted event in order to assign it.
+ * Inputs: session user, event row. Output: true/false. Failure: callers treat false as 404, not extra event details.
+ */
 function canViewEvent(user, row) {
   if (hasRole(user, ROLES.EVENT_COORDINATOR)
     || hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)
@@ -122,6 +127,11 @@ function canViewEvent(user, row) {
   return false;
 }
 
+/**
+ * Purpose: decide whether this user may see planning fields (people, history, comments).
+ * AC: SCRUM-71 AC1 — Lead is a planning reader so they can assign from the event page.
+ * Inputs: session user. Output: true if any planning role is held.
+ */
 function canViewPlanning(user) {
   return [
     ROLES.EVENT_ORGANISER,
@@ -149,6 +159,11 @@ async function assertPlanningAccess(user, eventId) {
   return getEvent(user, eventId);
 }
 
+/**
+ * Purpose: constrain an events list query to rows this user is allowed to see.
+ * AC: SCRUM-71 AC1 — Lead sees all events, same as other internal staff, so unassigned Submitted ones appear.
+ * Inputs: supabase query, session user. Output: the same query or a filter. Failure: unknown roles match no rows (id = -1).
+ */
 function applyVisibility(query, user) {
   if (hasRole(user, ROLES.EVENT_COORDINATOR)
     || hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)
