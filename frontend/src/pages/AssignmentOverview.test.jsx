@@ -29,6 +29,26 @@ describe('SCRUM-54 assignment overview page', () => {
 
   /*
    * AC: SCRUM-54 AC3
+   * Scenario: A Lead opens the overview for an assignment whose coordinator name is missing.
+   * Setup: coordinatorName is null; the event name is still present.
+   * Expected: The row is shown with an em dash instead of a name, not a crash.
+   * Type: boundary
+   */
+  it('shows an em dash when an assignment has no coordinator name', async () => {
+    api.mockResolvedValue({
+      assignments: [{ eventId: 3, eventName: 'Workshop', coordinatorName: null, status: 'UNDER_REVIEW' }],
+    });
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <AssignmentOverview />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('Workshop')).toBeInTheDocument();
+    expect(screen.getByText('—')).toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-54 AC3
    * Scenario: A Lead opens the overview of coordinator assignments.
    * Setup: One assignment for Workshop to Chloe Lim.
    * Expected: Event name and coordinator name are listed.
