@@ -48,11 +48,12 @@ Login looks up the `users` table in Supabase and issues an httpOnly JWT cookie. 
 
 1. Organiser saves a draft and submits it.
 2. A coordinator is auto-assigned (least number of active events).
-3. Coordinator approves into **Planning**, requests a venue, or rejects with a reason (rejection is not final — resubmit is allowed).
+3. Coordinator approves (**Approved**), starts planning (**Planning**) and requests a venue, or rejects with a required reason (rejection is not final — resubmit is allowed).
 4. Venue staff approve/reject the booking, optionally giving a reason and a suggested alternative. The event's assigned Coordinator gets an in-app notice naming the event and venue (with the reason and alternative on a rejection). Confirmed bookings block overlapping windows, including setup/teardown.
-5. Coordinator can confirm only after an approved venue booking.
-6. Attendees can register / withdraw once the event is confirmed.
-7. In-app notifications and status history are written along the way.
+5. Venue staff set each venue's setup and turnaround times in minutes ("Teardown" on the Update venue form). Negative or non-numeric values are rejected and the saved values stay.
+6. Coordinator can confirm only after an approved venue booking. Throughout Planning and Confirmed, internal staff and the Organiser can open the event to see its attendance, date/time, venue (needs and booking) and equipment (notes and requests).
+7. Attendees can register / withdraw once the event is confirmed.
+8. In-app notifications and status history are written along the way.
 
 ## Project layout
 

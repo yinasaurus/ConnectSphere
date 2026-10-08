@@ -386,7 +386,21 @@ async function listBookings(filters = {}) {
     }
 
     return {
-      ...row,
+      id: row.id,
+      event_id: row.event_id,
+      venue_id: row.venue_id,
+      requested_by: row.requested_by,
+      decided_by: row.decided_by,
+      status: row.status,
+      start_at: row.start_at,
+      end_at: row.end_at,
+      setup_minutes: row.setup_minutes,
+      teardown_minutes: row.teardown_minutes,
+      notes: row.notes,
+      decision_reason: row.decision_reason,
+      alternative_suggestion: row.alternative_suggestion,
+      decided_at: row.decided_at,
+      created_at: row.created_at,
       venue_name: row.venues?.name,
       event_name: row.events?.name,
       event_start_at: row.events?.start_at,
@@ -444,12 +458,12 @@ async function requestBooking(user, payload) {
  * Purpose: Venue Staff approve or reject a venue booking request. The decision is saved
  * first, then the event's assigned Coordinator is notified so they can proceed or arrange
  * an alternative.
- * AC: SCRUM-19 AC6 (a venue with a conflicting confirmed booking cannot be incorrectly approved),
- *     SCRUM-78 AC1-AC5 (the notice), AC6 (no notice unless the decision was saved).
+ * AC: SCRUM-19 AC6 (cannot approve over a confirmed booking), SCRUM-18 AC4/AC5/AC9
+ *     (PENDING only; each booking decided on its own), SCRUM-78 AC1-AC5 (the notice).
  * Inputs: user (must have VENUE_STAFF), booking id, and decision { approve, reason,
  * alternativeSuggestion }. A truthy `approve` means APPROVED; anything else means REJECTED.
- * Output: the updated booking row. Throws 403 if the user is not Venue Staff, 404 if the
- * booking doesn't exist, and 409 if approving a conflicting booking.
+ * Output: the updated booking row. Throws 403 if not Venue Staff, 404 if missing,
+ * 409 ALREADY_DECIDED if not PENDING, 409 BOOKING_CONFLICT if approving over a confirmed window.
  */
 async function decideBooking(user, id, decision) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
@@ -459,8 +473,16 @@ async function decideBooking(user, id, decision) {
   const booking = await fetchOne(supabase.from('venue_bookings').select('*').eq('id', id));
   if (!booking) throw httpError(404, 'Booking not found', 'NOT_FOUND');
 
-  // SCRUM-19 AC6: A venue with a conflicting confirmed booking cannot be incorrectly approved
-  // for another event during the same period.
+  // SCRUM-18 AC4: only PENDING bookings can be decided.
+  if (booking.status !== BOOKING_STATUS.PENDING) {
+    throw httpError(
+      409,
+      `This booking has already been ${booking.status.toLowerCase()} and cannot be changed`,
+      'ALREADY_DECIDED'
+    );
+  }
+
+  // SCRUM-19 AC6: cannot approve over a confirmed booking or active hold at this venue.
   if (decision.approve) {
     const conflict = await findConflict(
       booking.venue_id,

@@ -234,6 +234,7 @@ describe('SCUM-16 (Event Clarification & Review Panel)', () => {
       if (path === '/api/comments/5') return Promise.resolve({ comments: [] });
       if (path === '/api/venues') return Promise.resolve({ venues: [] });
       if (path === '/api/events/5/venue-bookings') return Promise.resolve({ bookings: [] });
+      if (path === '/api/events/5/equipment-requests') return Promise.resolve({ requests: [] });
       throw new Error(`Unhandled api: ${path}`);
     });
 
@@ -291,6 +292,7 @@ describe('SCUM-16 (Event Clarification & Review Panel)', () => {
       if (path === '/api/comments/5') return Promise.resolve({ comments: [] });
       if (path === '/api/venues') return Promise.resolve({ venues: [] });
       if (path === '/api/events/5/venue-bookings') return Promise.resolve({ bookings: [] });
+      if (path === '/api/events/5/equipment-requests') return Promise.resolve({ requests: [] });
       throw new Error(`Unhandled api: ${path}`);
     });
 
@@ -321,11 +323,13 @@ beforeEach(() => {
 });
 
 /*
- * AC:       SCRUM-26 AC8 (display of one existing request only)
- * Scenario: An Event Organiser views their event page containing a previously submitted booking.
- * Setup:    The event-scoped booking endpoint returns an Approved request for Hall.
- * Expected: Displays this event's request and status without retrieving the global booking
- *           queue; this test does not cover multiple requests.
+ * AC:       SCRUM-26 AC8 (display of one existing request only); SCRUM-39 AC1 + AC2 (role
+ *           access to planning data, including the event's equipment requests)
+ * Scenario: The event's own Organiser opens a Planning event.
+ * Setup:    Organiser user 1; event 3 owned by user 1; one APPROVED booking at "Hall"; no
+ *           equipment requests. Any other path fails, as the API would refuse it.
+ * Expected: The event and its booking ("Hall: APPROVED") are shown, and the page never asks
+ *           for the global bookings queue, which Organisers aren't allowed to see.
  * Type:     normal
  */
 it('loads an organiser event and its booking without requesting the restricted global queue', async () => {
@@ -335,6 +339,8 @@ it('loads an organiser event and its booking without requesting the restricted g
     if (path === '/api/comments/3') return { comments: [] };
     if (path === '/api/venues') return { venues: [] };
     if (path === '/api/events/3/venue-bookings') return { bookings: [{ id: 7, venue_name: 'Hall', status: 'APPROVED' }] };
+    // SCRUM-39: the page now also loads the event's equipment requests for planning roles.
+    if (path === '/api/events/3/equipment-requests') return { requests: [] };
     throw new Error('You do not have access to this action');
   });
   render(
@@ -420,7 +426,7 @@ it.each(['APPROVED', 'PLANNING'])(
 
 // Fakes the API for event 3, owned by organiser 1 and assigned to `coordinatorId`.
 // By default it's under review; `decisionError` makes the decision endpoint fail.
-function mockEvent({ coordinatorId, status = 'UNDER_REVIEW', rejectionReason = null, decisionError = null }) {
+function mockEvent({ coordinatorId, status = 'UNDER_REVIEW', rejectionReason = null, decisionError = null, bookings = [] }) {
   api.mockImplementation(async (path) => {
     if (path === '/api/events/3') {
       return { event: { id: 3, organiserId: 1, coordinatorId, name: 'Review me', status, rejectionReason } };
@@ -429,10 +435,11 @@ function mockEvent({ coordinatorId, status = 'UNDER_REVIEW', rejectionReason = n
       if (decisionError) throw new Error(decisionError);
       return { event: {} };
     }
+    if (path === '/api/events/3/review') return { event: {} };
     if (path === '/api/events/3/history') return { history: [] };
     if (path === '/api/comments/3') return { comments: [] };
     if (path === '/api/venues') return { venues: [] };
-    if (path === '/api/events/3/venue-bookings') return { bookings: [] };
+    if (path === '/api/events/3/venue-bookings') return { bookings };
     throw new Error(`Unexpected ${path}`);
   });
 }
@@ -514,12 +521,50 @@ it('US17-F16: the organiser sees the rejection reason on a rejected event', asyn
 });
 
 /*
- * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility)
+ * SCRUM-64: a Submitted request has no reviewable status until its assigned
+ * coordinator opens it. These check the button appears only for that coordinator
+ * and wires to the right endpoint.
+ */
+
+// AC1 + AC6 · The assigned coordinator sees an "Open for review" button on a
+// Submitted request, and it calls the review endpoint.
+it('US64-F01: the assigned coordinator opens a submitted request for review', async () => {
+  useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
+  mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
+  renderEvent();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Open for review' }));
+  expect(api).toHaveBeenCalledWith('/api/events/3/review', { method: 'POST' });
+});
+
+// AC3 · A coordinator who isn't assigned to this request (id 9) never sees the button,
+// even though they can still view the event for planning purposes.
+it('US64-F02: an unrelated coordinator does not see the Open for review button', async () => {
+  useAuth.mockReturnValue({ user: { id: 9 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
+  mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
+  renderEvent();
+  expect(await screen.findByText('Review me')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Open for review' })).not.toBeInTheDocument();
+});
+
+// AC6 · The organiser never sees the coordinator-only button on their own request.
+it('US64-F03: the organiser does not see the Open for review button', async () => {
+  mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
+  renderEvent();
+  expect(await screen.findByText('Review me')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Open for review' })).not.toBeInTheDocument();
+});
+
+/*
+ * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility); SCRUM-39 AC1
+ *           (agreed decision: Attendees keep the public view, so equipment requests are
+ *           never requested either)
  * Scenario: An attendee requests an event that has venue booking information.
  * Setup:    The attendee can access only a confirmed public event and is not a
  *           Coordinator or Venue Staff member.
  * Expected: The event page shows its public event and registration information, hides
- *           staff-only panels, and does not request comments or event status history.
+ *           staff-only panels, and does not request comments, event status history or
+ *           equipment requests.
  * Type:     boundary
  */
 it('loads an attendee event without requesting restricted planning data', async () => {
@@ -540,6 +585,115 @@ it('loads an attendee event without requesting restricted planning data', async 
   expect(screen.queryByText('Status history')).not.toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith('/api/comments/3');
   expect(api).not.toHaveBeenCalledWith('/api/events/3/history');
+  // SCRUM-39: attendees don't get planning details, so equipment is never requested.
+  expect(api).not.toHaveBeenCalledWith('/api/events/3/equipment-requests');
+});
+
+/*
+ * AC:       SCRUM-18 AC7 & AC6
+ * Scenario: Event Coordinator views an event with a rejected venue booking
+ * Setup:    Signed in as Event Coordinator; event has a REJECTED booking with decision reason and alternative suggestion
+ * Expected: The rejected booking displays its status, the rejection reason, and the suggested alternative on the event page
+ * Type:     normal
+ */
+it('US18-F01 (AC7): displays rejection reason and suggested alternative for rejected booking to coordinator', async () => {
+  useAuth.mockReturnValue({
+    user: { id: 2 },
+    hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
+  });
+  mockEvent({
+    coordinatorId: 2,
+    status: 'PLANNING',
+    bookings: [
+      {
+        id: 5,
+        venue_name: 'Helix Hall',
+        status: 'REJECTED',
+        decision_reason: 'Air conditioning malfunction',
+        alternative_suggestion: 'Seminar Room 3',
+      },
+    ],
+  });
+  renderEvent();
+  expect(await screen.findByText('Helix Hall')).toBeInTheDocument();
+  expect(screen.getByText('Reason: Air conditioning malfunction')).toBeInTheDocument();
+  expect(screen.getByText('Suggested alternative: Seminar Room 3')).toBeInTheDocument();
+});
+
+/*
+ * AC:       SCRUM-18 AC8
+ * Scenario: Event Coordinator views an event with an approved venue booking
+ * Setup:    Signed in as Event Coordinator; event has an APPROVED booking
+ * Expected: The approved booking displays the 'Confirmed venue booking' label
+ * Type:     normal
+ */
+it('US18-F02 (AC8): displays confirmed venue booking label for approved booking', async () => {
+  useAuth.mockReturnValue({
+    user: { id: 2 },
+    hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
+  });
+  mockEvent({
+    coordinatorId: 2,
+    status: 'PLANNING',
+    bookings: [
+      {
+        id: 6,
+        venue_name: 'Innovation Hall',
+        status: 'APPROVED',
+      },
+    ],
+  });
+  renderEvent();
+  expect(await screen.findByText('Innovation Hall')).toBeInTheDocument();
+  expect(screen.getByText('✓ Confirmed venue booking')).toBeInTheDocument();
+});
+
+/*
+ * AC:       SCRUM-18 AC2
+ * Scenario: Venue Staff views pending venue booking card on Event Detail page
+ * Setup:    Signed in as Venue Staff; booking has start_at and end_at, and event has startAt and endAt
+ * Expected: The card displays event name, venue name, booking window with date and time, and event date
+ * Type:     normal
+ */
+it('US18-F03 (AC2): displays event name, venue name, booking window, and event date on pending card for Venue Staff', async () => {
+  useAuth.mockReturnValue({
+    user: { id: 40 },
+    hasRole: (...roles) => roles.includes('VENUE_STAFF'),
+  });
+  api.mockImplementation(async (path) => {
+    if (path === '/api/events/3') {
+      return {
+        event: {
+          id: 3,
+          name: 'Annual Tech Conference',
+          status: 'PLANNING',
+          startAt: '2026-11-20T08:00:00.000Z',
+          endAt: '2026-11-20T18:00:00.000Z',
+        },
+      };
+    }
+    if (path === '/api/events/3/history') return { history: [] };
+    if (path === '/api/comments/3') return { comments: [] };
+    if (path === '/api/venues') return { venues: [] };
+    if (path === '/api/events/3/venue-bookings') {
+      return {
+        bookings: [
+          {
+            id: 15,
+            venue_name: 'Grand Auditorium',
+            status: 'PENDING',
+            start_at: '2026-11-20T09:00:00.000Z',
+            end_at: '2026-11-20T12:00:00.000Z',
+          },
+        ],
+      };
+    }
+    throw new Error(`Unexpected ${path}`);
+  });
+  renderEvent();
+  expect((await screen.findAllByText(/Grand Auditorium/)).length).toBeGreaterThan(0);
+  expect(screen.getByText(/Booking window:/i)).toBeInTheDocument();
+  expect(screen.getByText(/Event date:/i)).toBeInTheDocument();
 });
 
 describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () => {

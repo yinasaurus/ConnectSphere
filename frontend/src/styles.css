@@ -272,7 +272,8 @@ input.field-error, select.field-error, textarea.field-error {
 .badge.SUBMITTED, .badge.UNDER_REVIEW { background: #d9e6f5; color: var(--info); }
 .badge.ACTION_REQUIRED { background: #fef3c7; color: #92400e; }
 .badge.CLARIFICATION_PROVIDED { background: #e0f2fe; color: #075985; }
-.badge.PLANNING { background: #f7e7c6; color: var(--warn); }
+.badge.APPROVED, .badge.PLANNING { background: #f7e7c6; color: var(--warn); }
+.badge.AWAITING_SAFETY_CHECK, .badge.PREPARATION { background: #e2eedc; color: var(--ok); }
 .badge.CONFIRMED { background: #d8eee3; color: var(--ok); }
 .badge.COMPLETED { background: #e7e4f7; }
 .badge.CANCELLED, .badge.REJECTED { background: #f7dcdc; color: var(--bad); }

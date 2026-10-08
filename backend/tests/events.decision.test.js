@@ -55,10 +55,12 @@ beforeEach(() => {
 });
 
 describe('SCRUM-17 approve or reject event request (service rules)', () => {
-  // AC3 · Happy path: the core approve transition UNDER_REVIEW -> PLANNING.
-  it('US17-B01: approving an event under review moves it to PLANNING', async () => {
+  // SCRUM-5 (W7 #6): approving now lands on APPROVED, not PLANNING directly — the
+  // coordinator starts planning as a separate step (APPROVED -> PLANNING).
+  // AC3 · Happy path: the core approve transition UNDER_REVIEW -> APPROVED.
+  it('US17-B01: approving an event under review moves it to APPROVED', async () => {
     await service.decideEvent(coordinator, 3, 'APPROVE');
-    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'PLANNING' }));
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'APPROVED' }));
   });
 
   // AC3 + C1 + C2 · Happy path: the approval comment is trimmed, saved to status history,
@@ -66,7 +68,7 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   it('US17-B02: an optional approval comment is recorded in history and sent to the organiser', async () => {
     await service.decideEvent(coordinator, 3, 'APPROVE', '  Looks good, proceed  ');
     expect(db.insertOne).toHaveBeenCalledWith('event_status_history', expect.objectContaining({
-      from_status: 'UNDER_REVIEW', to_status: 'PLANNING', note: 'Looks good, proceed',
+      from_status: 'UNDER_REVIEW', to_status: 'APPROVED', note: 'Looks good, proceed',
     }));
     expect(audit.notifyUser).toHaveBeenCalledWith(
       1, 'EVENT_STATUS_CHANGED', 'Event request approved',
@@ -127,8 +129,12 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   });
 
   // AC1 · Negative: every status other than UNDER_REVIEW is refused with 409 Conflict,
-  // including PLANNING (can't approve twice) and REJECTED (can't reject twice).
-  it.each(['DRAFT', 'PLANNING', 'CONFIRMED', 'REJECTED', 'COMPLETED', 'CANCELLED'])(
+  // including SUBMITTED (approving requires review first), PLANNING (can't approve
+  // twice) and REJECTED (can't reject twice).
+  it.each([
+    'DRAFT', 'SUBMITTED', 'PLANNING', 'AWAITING_SAFETY_CHECK', 'PREPARATION',
+    'CONFIRMED', 'REJECTED', 'COMPLETED', 'CANCELLED',
+  ])(
     'US17-B07: a decision on an event in %s is refused with 409',
     async (status) => {
       event.status = status;
@@ -136,6 +142,24 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
       expect(db.updateById).not.toHaveBeenCalled();
     }
   );
+
+  // SCRUM-5 AC4: a coordinator can reject a request that's still sitting in the
+  // unopened Submitted queue, not just once it's Under Review.
+  it('US17-B17: a request can be rejected directly from Submitted (before being opened)', async () => {
+    event.status = 'SUBMITTED';
+    await service.decideEvent(coordinator, 3, 'REJECT', 'Attendance numbers are missing');
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
+      status: 'REJECTED', rejection_reason: 'Attendance numbers are missing',
+    }));
+  });
+
+  // SCRUM-5 AC2: approving is specific to the reviewed request — it cannot be approved
+  // while still sitting unopened in Submitted.
+  it('US17-B18: a request cannot be approved while still Submitted (not yet under review)', async () => {
+    event.status = 'SUBMITTED';
+    await expect(service.decideEvent(coordinator, 3, 'APPROVE')).rejects.toMatchObject({ status: 409 });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
 
   // C3 · Security: an organiser must not be able to approve their own request.
   it('US17-B08: the organiser cannot approve their own request', async () => {
@@ -175,11 +199,14 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   // changes are made; rejection is not necessarily final." After a rejection, the organiser
   // can submit again: the event goes back under review and the old reason is cleared.
   it('US17-B13: a rejected request can be resubmitted by the organiser', async () => {
+    // SCRUM-64: submission now rests at SUBMITTED; the assigned coordinator opens it
+    // for review from there (same as a first-time submission), rather than landing
+    // back at UNDER_REVIEW directly.
     event.status = 'REJECTED';
     event.rejection_reason = 'Attendance numbers are missing';
     await service.submitEvent(organiser, 3);
     expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
-      status: 'UNDER_REVIEW', rejection_reason: null,
+      status: 'SUBMITTED', rejection_reason: null,
     }));
   });
 
@@ -242,7 +269,7 @@ describe('SCRUM-17 POST /api/events/:id/decision (route)', () => {
   it('US17-R01: an assigned coordinator can approve through the API', async () => {
     const res = await asRole(ROLES.EVENT_COORDINATOR).send({ decision: 'APPROVE' });
     expect(res.status).toBe(200);
-    expect(db.updateById).toHaveBeenCalledWith('events', '3', expect.objectContaining({ status: 'PLANNING' }));
+    expect(db.updateById).toHaveBeenCalledWith('events', '3', expect.objectContaining({ status: 'APPROVED' }));
   });
 
   // AC2 · Negative: same data as manual test case IS212-US17-TC1 ("Too short", 9 characters).
