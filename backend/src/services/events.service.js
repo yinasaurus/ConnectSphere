@@ -106,10 +106,25 @@ function mapEvent(row) {
   };
 }
 
+/**
+ * Purpose: true for internal staff who may read every event, including ones they
+ * are not assigned to. Coordinators may view (not change) other people's events.
+ * AC: SCRUM-54 AC6 (Coordinator view of unassigned / other events);
+ *     Lead and Safety Officer need the same read access to use AC3 and AC4.
+ * Business rule: W4 — Coordinators can view other events but not edit them.
+ */
+function isInternalEventReader(user) {
+  return [
+    ROLES.EVENT_COORDINATOR,
+    ROLES.EVENT_COORDINATOR_LEAD,
+    ROLES.SAFETY_OFFICER,
+    ROLES.VENUE_STAFF,
+    ROLES.TECHNICAL_SUPPORT,
+  ].some((role) => hasRole(user, role));
+}
+
 function canViewEvent(user, row) {
-  if (hasRole(user, ROLES.EVENT_COORDINATOR)
-    || hasRole(user, ROLES.VENUE_STAFF)
-    || hasRole(user, ROLES.TECHNICAL_SUPPORT)) {
+  if (isInternalEventReader(user)) {
     return true;
   }
   if (hasRole(user, ROLES.EVENT_ORGANISER) && user.organisationId) {
@@ -122,8 +137,14 @@ function canViewEvent(user, row) {
 }
 
 function canViewPlanning(user) {
-  return [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT]
-    .some((role) => hasRole(user, role));
+  return [
+    ROLES.EVENT_ORGANISER,
+    ROLES.EVENT_COORDINATOR,
+    ROLES.EVENT_COORDINATOR_LEAD,
+    ROLES.SAFETY_OFFICER,
+    ROLES.VENUE_STAFF,
+    ROLES.TECHNICAL_SUPPORT,
+  ].some((role) => hasRole(user, role));
 }
 
 function visibleEvent(user, row) {
@@ -144,9 +165,7 @@ async function assertPlanningAccess(user, eventId) {
 }
 
 function applyVisibility(query, user) {
-  if (hasRole(user, ROLES.EVENT_COORDINATOR)
-    || hasRole(user, ROLES.VENUE_STAFF)
-    || hasRole(user, ROLES.TECHNICAL_SUPPORT)) {
+  if (isInternalEventReader(user)) {
     return query;
   }
   if (hasRole(user, ROLES.EVENT_ORGANISER) && user.organisationId) {
@@ -175,6 +194,14 @@ async function listEvents(user, filters = {}) {
   return rows.filter((row) => canViewEvent(user, row)).map((row) => visibleEvent(user, row));
 }
 
+/**
+ * Purpose: return one event the caller is allowed to view, including events a
+ * Coordinator is not assigned to (view only).
+ * AC: SCRUM-54 AC6
+ * Business rule: W4 — Coordinators can view other events but not edit them.
+ * Inputs: user, event id. Output: the visible event DTO.
+ * Failure: 404 when missing or the role cannot view it (no extra fields leaked).
+ */
 async function getEvent(user, id) {
   const row = await fetchOne(
     supabase.from('events').select(EVENT_SELECT).eq('id', id)
@@ -252,6 +279,15 @@ async function createEvent(user, payload) {
   return getEvent(user, created.id);
 }
 
+/**
+ * Purpose: apply organiser/coordinator edits. A Coordinator who is not assigned
+ * to the event is refused and the row is left unchanged.
+ * AC: SCRUM-54 AC5, AC6, AC7
+ * Business rule: W7 #5 / W4 — Coordinators manage only their assigned events;
+ * they may still view others.
+ * Inputs: user, event id, patch. Output: the updated visible event.
+ * Failure: 403 FORBIDDEN with no event body when the coordinator is not assigned.
+ */
 async function updateEvent(user, id, payload) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
@@ -394,6 +430,12 @@ const DECISION_TARGET_STATUS = {
   [EVENT_DECISION.REJECT]: EVENT_STATUS.REJECTED,
 };
 
+/**
+ * Purpose: approve or reject an event under review by delegating to changeStatus.
+ * AC: SCRUM-54 AC5 — a Coordinator who is not assigned is refused (via changeStatus).
+ * Inputs: user, event id, APPROVE|REJECT, optional reason.
+ * Output: the updated event. Failure: 403 if not the assigned coordinator.
+ */
 async function decideEvent(user, id, decision, reason) {
   const nextStatus = DECISION_TARGET_STATUS[decision];
   if (!nextStatus) throw httpError(400, 'Decision must be APPROVE or REJECT', 'VALIDATION_ERROR');
@@ -414,6 +456,16 @@ function statusNotification(name, fromStatus, nextStatus, note) {
   };
 }
 
+/**
+ * Purpose: approve, reject, confirm, or otherwise move an event's status.
+ * Only the assigned Event Coordinator may do this; anyone else is refused and
+ * the event is unchanged.
+ * AC: SCRUM-54 AC5, AC7
+ * Business rule: W7 #5 — Coordinators manage only their assigned events.
+ * Inputs: user, event id, next status, optional reason.
+ * Output: the updated visible event.
+ * Failure: 403 FORBIDDEN with no event body when the caller is not assigned.
+ */
 async function changeStatus(user, id, nextStatus, reason, { expectedStatus } = {}) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only coordinators can change event status', 'FORBIDDEN');
