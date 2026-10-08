@@ -1,17 +1,319 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { AuthProvider, useAuth } from '../auth';
+import { api } from '../api';
 import EventDetail from './EventDetail';
 import VenueBooking from './VenueBooking';
 import Layout from '../components/Layout';
 import ProtectedRoute from '../components/ProtectedRoute';
-import { api } from '../api';
-import { useAuth } from '../auth';
 
-jest.mock('../api', () => ({ api: jest.fn() }));
-jest.mock('../auth', () => ({
-  useAuth: jest.fn(),
+jest.mock('../api', () => ({
+  api: jest.fn(),
 }));
+
+jest.mock('../auth', () => {
+  const original = jest.requireActual('../auth');
+  return {
+    ...original,
+    useAuth: jest.fn(),
+  };
+});
+
+describe('SCUM-16 (Event Clarification & Review Panel)', () => {
+  const coordinatorUser = {
+    id: 10,
+    fullName: 'Chloe Lim',
+    email: 'coordinator@connectsphere.sg',
+    roles: ['EVENT_COORDINATOR'],
+    organisationId: null,
+  };
+
+  const organiserUser = {
+    id: 20,
+    fullName: 'Aisha Rahman',
+    email: 'organiser@acme.example',
+    roles: ['EVENT_ORGANISER'],
+    organisationId: 1,
+  };
+
+  beforeEach(() => {
+    api.mockReset();
+  });
+
+  /*
+   * AC:       AC1 & AC2 (UI: Request Clarification)
+   * Scenario: Coordinator opens review panel and submits clarification request
+   * Setup:    Event in UNDER_REVIEW status with coordinator id 10
+   * Expected: Review remarks are sent via POST /api/events/5/clarification
+   * Type:     normal
+   */
+  it('US16-UI01 (AC1+AC2): allows coordinator to view review panel and request clarification with remarks', async () => {
+    const user = userEvent.setup();
+    let sentRemarks = null;
+
+    useAuth.mockReturnValue({
+      user: coordinatorUser,
+      hasRole: (...roles) => roles.some((r) => coordinatorUser.roles.includes(r)),
+    });
+
+    const eventData = {
+      id: 5,
+      name: 'Global AI Summit',
+      purpose: 'Tech showcase',
+      description: 'Annual gathering',
+      status: 'UNDER_REVIEW',
+      subState: 'IN_REVIEW',
+      reviewRemarks: null,
+      coordinatorId: 10,
+      organiserId: 20,
+      organisationName: 'Acme Corp',
+      coordinatorName: 'Chloe Lim',
+      organiserName: 'Aisha Rahman',
+    };
+
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/api/auth/me') return Promise.resolve({ user: coordinatorUser });
+      if (path === '/api/events/5') return Promise.resolve({ event: eventData });
+      if (path === '/api/events/5/history') return Promise.resolve({ history: [] });
+      if (path === '/api/comments/5') return Promise.resolve({ comments: [] });
+      if (path === '/api/venues') return Promise.resolve({ venues: [] });
+      if (path === '/api/venues/bookings' || path === '/api/events/5/venue-bookings') return Promise.resolve({ bookings: [] });
+      if (path === '/api/events/5/clarification' && options.method === 'POST') {
+        sentRemarks = options.body.remarks;
+        return Promise.resolve({
+          event: { ...eventData, subState: 'ACTION_REQUIRED', reviewRemarks: sentRemarks },
+        });
+      }
+      return Promise.reject(new Error(`Unhandled api: ${path}`));
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/app/events/5']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/app/events/:id" element={<EventDetail />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    // Wait for event to load
+    expect(await screen.findByText('Global AI Summit')).toBeInTheDocument();
+    expect(screen.getByText(/coordinator review actions/i)).toBeInTheDocument();
+
+    // Click "Request Clarification / Amendments"
+    const reqBtn = screen.getByRole('button', { name: /request clarification \/ amendments/i });
+    await user.click(reqBtn);
+
+    // Enter review remarks
+    const textarea = screen.getByPlaceholderText(/state incomplete details or amendments needed/i);
+    await user.type(textarea, 'Please provide stage layout preference and catering headcount.');
+
+    // Click "Send Clarification Request"
+    const sendBtn = screen.getByRole('button', { name: /send clarification request/i });
+    await user.click(sendBtn);
+
+    await waitFor(() => {
+      expect(sentRemarks).toBe('Please provide stage layout preference and catering headcount.');
+    });
+  });
+
+  /*
+   * AC:       AC3 & AC4 (UI: Organiser Action Required & Respond)
+   * Scenario: Organiser opens event page in ACTION_REQUIRED sub-state and submits response
+   * Setup:    Event subState is ACTION_REQUIRED
+   * Expected: Organiser sees attention card, review remarks, edit link, and submits response
+   * Type:     normal
+   */
+  it('US16-UI02 (AC3+AC4): displays attention card to organizer when ACTION_REQUIRED and allows submitting response', async () => {
+    const user = userEvent.setup();
+    let sentResponse = null;
+
+    useAuth.mockReturnValue({
+      user: organiserUser,
+      hasRole: (...roles) => roles.some((r) => organiserUser.roles.includes(r)),
+    });
+
+    const eventNeedingAttention = {
+      id: 5,
+      name: 'Global AI Summit',
+      purpose: 'Tech showcase',
+      description: 'Annual gathering',
+      status: 'UNDER_REVIEW',
+      subState: 'ACTION_REQUIRED',
+      reviewRemarks: 'Please clarify attendance numbers and seating layout.',
+      coordinatorId: 10,
+      organiserId: 20,
+      organisationName: 'Acme Corp',
+      coordinatorName: 'Chloe Lim',
+      organiserName: 'Aisha Rahman',
+    };
+
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/api/auth/me') return Promise.resolve({ user: organiserUser });
+      if (path === '/api/events/5') return Promise.resolve({ event: eventNeedingAttention });
+      if (path === '/api/events/5/history') return Promise.resolve({ history: [] });
+      if (path === '/api/comments/5') return Promise.resolve({ comments: [] });
+      if (path === '/api/venues') return Promise.resolve({ venues: [] });
+      if (path === '/api/venues/bookings' || path === '/api/events/5/venue-bookings') return Promise.resolve({ bookings: [] });
+      if (path === '/api/events/5/clarification/respond' && options.method === 'POST') {
+        sentResponse = options.body.response;
+        return Promise.resolve({
+          event: { ...eventNeedingAttention, subState: 'CLARIFICATION_PROVIDED', clarificationResponse: sentResponse },
+        });
+      }
+      return Promise.reject(new Error(`Unhandled api: ${path}`));
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/app/events/5']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/app/events/:id" element={<EventDetail />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    // Verify organizer sees the Action Required attention card
+    expect(await screen.findByText(/action required: clarification requested/i)).toBeInTheDocument();
+    expect(screen.getByText('Please clarify attendance numbers and seating layout.')).toBeInTheDocument();
+
+    // Verify option to edit & amend details is present
+    expect(screen.getByRole('link', { name: /edit & amend details/i })).toHaveAttribute(
+      'href',
+      '/app/events/5/edit'
+    );
+
+    // Click "Send Clarification Response"
+    const openFormBtn = screen.getByRole('button', { name: /send clarification response/i });
+    await user.click(openFormBtn);
+
+    // Type response notes
+    const responseInput = screen.getByPlaceholderText(/describe the changes made or answer/i);
+    await user.type(responseInput, 'Attendance adjusted to 150 with banquet layout.');
+
+    // Submit response
+    const submitBtn = screen.getByRole('button', { name: /submit response/i });
+    await user.click(submitBtn);
+
+    await waitFor(() => {
+      expect(sentResponse).toBe('Attendance adjusted to 150 with banquet layout.');
+    });
+  });
+
+  /*
+   * AC:       AC5 (UI: Clarification Provided card & Coordinator View)
+   * Scenario: Event subState is CLARIFICATION_PROVIDED
+   * Setup:    Organiser and Coordinator view event page after clarification submitted
+   * Expected: Displays Clarification Provided card to organiser and response text to coordinator
+   * Type:     normal
+   */
+  it('US16-UI03 (AC5): displays Clarification Provided banner and shows response notes to coordinator', async () => {
+    useAuth.mockReturnValue({
+      user: organiserUser,
+      hasRole: (...roles) => roles.some((r) => organiserUser.roles.includes(r)),
+    });
+
+    const eventClarified = {
+      id: 5,
+      name: 'Global AI Summit',
+      status: 'UNDER_REVIEW',
+      subState: 'CLARIFICATION_PROVIDED',
+      reviewRemarks: 'Please clarify attendance numbers.',
+      clarificationResponse: 'Attendance adjusted to 150 banquet style.',
+      coordinatorId: 10,
+      organiserId: 20,
+    };
+
+    api.mockImplementation((path) => {
+      if (path === '/api/auth/me') return Promise.resolve({ user: organiserUser });
+      if (path === '/api/events/5') return Promise.resolve({ event: eventClarified });
+      if (path === '/api/events/5/history') return Promise.resolve({ history: [] });
+      if (path === '/api/comments/5') return Promise.resolve({ comments: [] });
+      if (path === '/api/venues') return Promise.resolve({ venues: [] });
+      if (path === '/api/events/5/venue-bookings') return Promise.resolve({ bookings: [] });
+      throw new Error(`Unhandled api: ${path}`);
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/app/events/5']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/app/events/:id" element={<EventDetail />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Clarification Provided')).toBeInTheDocument();
+    expect(screen.getByText(/attendance adjusted to 150 banquet style/i)).toBeInTheDocument();
+  });
+
+  /*
+   * AC:       AC5 (UI: clarification history)
+   * Scenario: Coordinator opens an event that has had two clarification rounds
+   * Setup:    Status history includes every request and response note, newest first
+   * Expected: Status history and the coordinator panel show all four notes, not only the latest
+   * Type:     normal
+   */
+  it('US16-UI04 (AC5): coordinator sees every clarification request and response in history', async () => {
+    useAuth.mockReturnValue({
+      user: coordinatorUser,
+      hasRole: (...roles) => roles.some((r) => coordinatorUser.roles.includes(r)),
+    });
+
+    const eventClarified = {
+      id: 5,
+      name: 'Global AI Summit',
+      status: 'UNDER_REVIEW',
+      subState: 'CLARIFICATION_PROVIDED',
+      reviewRemarks: 'Round 2 Question',
+      clarificationResponse: 'Round 2 Answer',
+      coordinatorId: 10,
+      organiserId: 20,
+    };
+
+    api.mockImplementation((path) => {
+      if (path === '/api/auth/me') return Promise.resolve({ user: coordinatorUser });
+      if (path === '/api/events/5') return Promise.resolve({ event: eventClarified });
+      if (path === '/api/events/5/history') {
+        return Promise.resolve({
+          history: [
+            { id: 4, from_status: 'UNDER_REVIEW', to_status: 'UNDER_REVIEW', actor_name: 'Aisha Rahman', note: 'Clarification responded: Round 2 Answer' },
+            { id: 3, from_status: 'UNDER_REVIEW', to_status: 'UNDER_REVIEW', actor_name: 'Chloe Lim', note: 'Clarification requested: Round 2 Question' },
+            { id: 2, from_status: 'UNDER_REVIEW', to_status: 'UNDER_REVIEW', actor_name: 'Aisha Rahman', note: 'Clarification responded: Round 1 Answer' },
+            { id: 1, from_status: 'UNDER_REVIEW', to_status: 'UNDER_REVIEW', actor_name: 'Chloe Lim', note: 'Clarification requested: Round 1 Question' },
+          ],
+        });
+      }
+      if (path === '/api/comments/5') return Promise.resolve({ comments: [] });
+      if (path === '/api/venues') return Promise.resolve({ venues: [] });
+      if (path === '/api/events/5/venue-bookings') return Promise.resolve({ bookings: [] });
+      throw new Error(`Unhandled api: ${path}`);
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/app/events/5']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/app/events/:id" element={<EventDetail />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Global AI Summit')).toBeInTheDocument();
+    expect(screen.getByText('Clarification history')).toBeInTheDocument();
+    expect(screen.getAllByText(/Clarification requested: Round 1 Question/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Clarification responded: Round 1 Answer/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Clarification requested: Round 2 Question/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Clarification responded: Round 2 Answer/).length).toBeGreaterThan(0);
+  });
+});
+
+describe('EventDetail SCRUM-17 & Base tests', () => {
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -238,4 +540,5 @@ it('loads an attendee event without requesting restricted planning data', async 
   expect(screen.queryByText('Status history')).not.toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith('/api/comments/3');
   expect(api).not.toHaveBeenCalledWith('/api/events/3/history');
+});
 });

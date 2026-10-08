@@ -70,6 +70,7 @@ export default function Venues() {
   const [searchResults, setSearchResults] = useState(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
+  const [selectedVenue, setSelectedVenue] = useState(null);
 
   async function reload() {
     const [venueRes, bookingRes] = await Promise.all([
@@ -171,6 +172,7 @@ export default function Venues() {
 
     setSearching(true);
     setSearchError('');
+    setSelectedVenue(null);
     try {
       const params = new URLSearchParams();
       if (searchForm.startAt && searchForm.endAt) {
@@ -197,6 +199,7 @@ export default function Venues() {
     setSearchForm(EMPTY_SEARCH);
     setSearchResults(null);
     setSearchError('');
+    setSelectedVenue(null);
   }
 
   return (
@@ -292,19 +295,55 @@ export default function Venues() {
             {searchResults.length === 0 ? (
               <p className="muted">No venues match your selected filters.</p>
             ) : (
-              <div className="cards">
-                {searchResults.map((venue) => (
-                  <div className="card" key={venue.id}>
-                    <h3>{venue.name}</h3>
-                    <p className="muted">{venue.location}</p>
-                    <p>Capacity {venue.capacity}</p>
-                    <p>{venue.accessibility}</p>
-                    <div className="roles">
-                      {(venue.layouts || []).map((layout) => <span className="pill" key={layout}>{layout}</span>)}
+              <>
+                {selectedVenue && (
+                  <div className="card" style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                      <h3>{selectedVenue.name}</h3>
+                      <button className="btn ghost" type="button" onClick={() => setSelectedVenue(null)}>
+                        Close
+                      </button>
                     </div>
+                    <p className="muted">{selectedVenue.location}</p>
+                    <p>Capacity {selectedVenue.capacity}</p>
+                    <p>Facilities: {selectedVenue.facilities || 'None listed'}</p>
+                    <p>Accessibility: {selectedVenue.accessibility || 'None listed'}</p>
+                    {selectedVenue.operatingHours && <p>Operating hours: {selectedVenue.operatingHours}</p>}
+                    <p>
+                      Setup time: {selectedVenue.setupMinutes} min · Turnaround time: {selectedVenue.teardownMinutes} min
+                    </p>
+                    {selectedVenue.layouts?.length > 0 && (
+                      <div className="roles">
+                        {selectedVenue.layouts.map((layout) => <span className="pill" key={layout}>{layout}</span>)}
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
+                )}
+                <div className="cards">
+                  {searchResults.map((venue) => (
+                    <div className="card" key={venue.id}>
+                      <h3>{venue.name}</h3>
+                      <p className="muted">{venue.location}</p>
+                      <p>Capacity {venue.capacity}</p>
+                      <p>Facilities: {venue.facilities || 'None listed'}</p>
+                      <p>Accessibility: {venue.accessibility || 'None listed'}</p>
+                      {venue.layouts?.length > 0 && (
+                        <div className="roles">
+                          {venue.layouts.map((layout) => <span className="pill" key={layout}>{layout}</span>)}
+                        </div>
+                      )}
+                      <button
+                        className="btn ghost"
+                        type="button"
+                        style={{ marginTop: 8 }}
+                        onClick={() => setSelectedVenue(venue)}
+                      >
+                        View details
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}
