@@ -71,6 +71,8 @@ export default function Venues() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [selectedVenue, setSelectedVenue] = useState(null);
+  // Numbers each search so a slow, older response can't overwrite a newer search or a Clear.
+  const latestSearchId = useRef(0);
 
   async function reload() {
     const [venueRes, bookingRes] = await Promise.all([
@@ -170,6 +172,7 @@ export default function Venues() {
       return;
     }
 
+    const searchId = ++latestSearchId.current;
     setSearching(true);
     setSearchError('');
     setSelectedVenue(null);
@@ -186,16 +189,20 @@ export default function Venues() {
       if (searchForm.facilities) params.set('facilities', searchForm.facilities);
 
       const res = await api(`/api/venues/search?${params.toString()}`);
+      if (searchId !== latestSearchId.current) return;
       setSearchResults(res.venues || []);
     } catch (err) {
+      if (searchId !== latestSearchId.current) return;
       setSearchResults(null);
       setSearchError(err.message);
     } finally {
-      setSearching(false);
+      if (searchId === latestSearchId.current) setSearching(false);
     }
   }
 
   function clearSearch() {
+    latestSearchId.current += 1;
+    setSearching(false);
     setSearchForm(EMPTY_SEARCH);
     setSearchResults(null);
     setSearchError('');
