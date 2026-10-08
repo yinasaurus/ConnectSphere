@@ -170,6 +170,7 @@ create table if not exists venue_bookings (
   decision_reason text,
   alternative_suggestion text,
   decided_at timestamptz,
+  expires_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

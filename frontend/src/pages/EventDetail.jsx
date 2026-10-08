@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import ConflictModal from '../components/ConflictModal';
 import EventDecisionPanel from '../components/EventDecisionPanel';
 import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
@@ -79,6 +80,7 @@ export default function EventDetail() {
   const [clarificationNotes, setClarificationNotes] = useState('');
   const [showRespondForm, setShowRespondForm] = useState(false);
   const [clarificationReply, setClarificationReply] = useState('');
+  const [conflictModalMsg, setConflictModalMsg] = useState('');
 
   // Loads the event, its venue bookings and, for planning roles only, history, comments,
   // venues and equipment requests; other roles never request planning data they aren't
@@ -119,12 +121,17 @@ export default function EventDetail() {
     setError('');
     setCoordinatorError('');
     setMessage('');
+    setConflictModalMsg('');
     try {
       await action();
       setMessage('Updated.');
       await reload();
     } catch (err) {
-      showError(err.message);
+      if (err.code === 'BOOKING_CONFLICT') {
+        setConflictModalMsg(err.message);
+      } else {
+        showError(err.message);
+      }
     }
   }
 
@@ -550,6 +557,11 @@ export default function EventDetail() {
           </div>}
         </div>
       </div>
+      <ConflictModal
+        isOpen={Boolean(conflictModalMsg)}
+        onClose={() => setConflictModalMsg('')}
+        message={conflictModalMsg}
+      />
     </>
   );
 }

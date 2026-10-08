@@ -83,6 +83,8 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
     query = {
       select: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
+      // decideBooking calls findConflict, which chains .in('status', ...)
+      in: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
     };
     supabase.from.mockReturnValue(query);

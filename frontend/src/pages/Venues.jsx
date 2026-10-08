@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import ConflictModal from '../components/ConflictModal';
 import { LAYOUTS, ROLES } from '../constants';
 
 const emptyForm = {
@@ -90,7 +91,7 @@ function PendingBookingCard({ booking, onDecide }) {
       setReason('');
       setAlternative('');
     } catch (err) {
-      setLocalError(err.message);
+      if (err.code !== 'BOOKING_CONFLICT') setLocalError(err.message);
     } finally {
       setDeciding(false);
     }
@@ -120,6 +121,13 @@ function PendingBookingCard({ booking, onDecide }) {
           <div className="muted" style={{ fontSize: '0.85rem', marginBottom: 6 }}>
             {booking.venue_name || `Venue #${booking.venue_id}`}
           </div>
+          {booking.has_conflict ? (
+            <p style={{ color: '#b91c1c', fontWeight: 600, fontSize: '0.85rem', margin: '4px 0' }}>
+              ⚠️ Conflict with {booking.conflict_details?.eventName || 'confirmed booking'}
+            </p>
+          ) : (
+            <p style={{ color: '#15803d', fontSize: '0.85rem', margin: '4px 0' }}>✓ No conflict</p>
+          )}
           <p style={{ margin: '3px 0', fontSize: '0.88rem' }}>
             <strong>Booking window:</strong> {bookingWindow}
           </p>
@@ -241,6 +249,7 @@ export default function Venues() {
   const [error, setError] = useState('');
   const [updateError, setUpdateError] = useState('');
   const [saveToast, setSaveToast] = useState('');
+  const [conflictModalMsg, setConflictModalMsg] = useState('');
   const [saving, setSaving] = useState(false);
   const updateCardRef = useRef(null);
 
@@ -390,11 +399,18 @@ export default function Venues() {
    * booking on the same event (AC9 — each is decided independently).
    */
   async function handleDecide(bookingId, approve, reason, alternativeSuggestion) {
-    await api(`/api/venues/bookings/${bookingId}/decision`, {
-      method: 'POST',
-      body: { approve, reason, alternativeSuggestion },
-    });
-    await reload();
+    try {
+      await api(`/api/venues/bookings/${bookingId}/decision`, {
+        method: 'POST',
+        body: { approve, reason, alternativeSuggestion },
+      });
+      await reload();
+    } catch (err) {
+      if (err.code === 'BOOKING_CONFLICT') {
+        setConflictModalMsg(err.message);
+      }
+      throw err;
+    }
   }
 
   return (
@@ -611,7 +627,6 @@ export default function Venues() {
       */}
       <div className="card" style={{ marginTop: 18 }}>
         <h3>Booking requests</h3>
-
         {isVenueStaff && pendingBookings.length > 0 && (
           <div style={{ marginBottom: 24 }}>
             <h4 style={{ marginBottom: 10 }}>
@@ -730,6 +745,11 @@ export default function Venues() {
           )}
         </div>
       )}
+      <ConflictModal
+        isOpen={Boolean(conflictModalMsg)}
+        onClose={() => setConflictModalMsg('')}
+        message={conflictModalMsg}
+      />
     </>
   );
 }
