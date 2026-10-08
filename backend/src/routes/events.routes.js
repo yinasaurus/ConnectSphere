@@ -5,6 +5,7 @@ const { validateBody } = require('../middleware/validate');
 const { eventDecisionSchema } = require('../validators/events.validators');
 const controller = require('../controllers/events.controller');
 const registrations = require('../controllers/registrations.controller');
+const access = require('../controllers/access.controller');
 
 const router = express.Router();
 
@@ -12,7 +13,17 @@ router.use(requireAuth);
 
 router.get('/', controller.list);
 router.post('/', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.create);
+// Registered before /:id so "unassigned-queue" is not treated as an event id.
+// AC: SCRUM-54 AC3 — only a Lead may open the unassigned queue.
+router.get(
+  '/unassigned-queue',
+  requireRole(ROLES.EVENT_COORDINATOR_LEAD),
+  access.unassignedQueue
+);
 router.get('/:id', controller.get);
+// AC: SCRUM-54 AC4 — only a Safety Officer may open or record a safety check.
+router.get('/:id/safety-check', requireRole(ROLES.SAFETY_OFFICER), access.openSafetyCheck);
+router.post('/:id/safety-check', requireRole(ROLES.SAFETY_OFFICER), access.recordSafetyCheck);
 router.get('/:id/venue-bookings', controller.venueBookings);
 router.patch('/:id', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.update);
 router.post('/:id/submit', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.submit);
