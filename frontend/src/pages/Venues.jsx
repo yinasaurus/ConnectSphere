@@ -406,7 +406,7 @@ export default function Venues() {
       });
       await reload();
     } catch (err) {
-      if (err.code === 'BOOKING_CONFLICT' || err.status === 409) {
+      if (err.code === 'BOOKING_CONFLICT') {
         setConflictModalMsg(err.message);
       }
       throw err;

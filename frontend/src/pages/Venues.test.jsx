@@ -775,6 +775,9 @@ describe('SCRUM-19 AC7: Conflict indicators and conflict modal in Venues page', 
     // Closing the modal dismisses it
     await user.click(screen.getByRole('button', { name: 'Got it' }));
     expect(screen.queryByRole('heading', { name: 'Venue Booking Conflict' })).not.toBeInTheDocument();
+  });
+});
+
 describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
   const pending1 = {
     id: 101,

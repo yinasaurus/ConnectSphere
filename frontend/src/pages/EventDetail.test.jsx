@@ -697,10 +697,42 @@ it('US18-F03 (AC2): displays event name, venue name, booking window, and event d
 });
 
 describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () => {
+  const approvedBooking = {
+    id: 7,
+    venue_name: 'Hall',
+    status: 'APPROVED',
+  };
+
+  function mockPlanningEvent(statusErr) {
+    api.mockImplementation(async (path, options = {}) => {
+      if (path === '/api/events/3') {
+        return {
+          event: {
+            id: 3,
+            name: 'Planning Phase Event',
+            status: 'PLANNING',
+            coordinatorId: 10,
+            organiserId: 1,
+          },
+        };
+      }
+      if (path === '/api/events/3/history') return { history: [] };
+      if (path === '/api/comments/3') return { comments: [] };
+      if (path === '/api/venues') return { venues: [] };
+      if (path === '/api/events/3/venue-bookings') return { bookings: [approvedBooking] };
+      if (path === '/api/events/3/equipment-requests') return { requests: [] };
+      if (path === '/api/events/3/status' && options.method === 'POST') {
+        throw statusErr;
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+  }
+
   /*
    * AC:       SCRUM-19 AC7
    * Scenario: Coordinator action triggers BOOKING_CONFLICT
-   * Setup:    Event in PLANNING status; Coordinator clicks "Confirm event"; API returns error with code BOOKING_CONFLICT
+   * Setup:    Event in PLANNING with an approved venue; Coordinator clicks "Send to safety check";
+   *           API returns error with code BOOKING_CONFLICT
    * Expected: ConflictModal opens displaying the conflict message
    * Type:     negative
    */
@@ -714,28 +746,7 @@ describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () =>
     const conflictErr = new Error('Cannot confirm: venue booking has an overlapping conflict');
     conflictErr.status = 409;
     conflictErr.code = 'BOOKING_CONFLICT';
-
-    api.mockImplementation(async (path, options = {}) => {
-      if (path === '/api/events/3') {
-        return {
-          event: {
-            id: 3,
-            name: 'Planning Phase Event',
-            status: 'PLANNING',
-            coordinatorId: 10,
-            organiserId: 1,
-          },
-        };
-      }
-      if (path === '/api/events/3/history') return { history: [] };
-      if (path === '/api/comments/3') return { comments: [] };
-      if (path === '/api/venues') return { venues: [] };
-      if (path === '/api/events/3/venue-bookings') return { bookings: [] };
-      if (path === '/api/events/3/status' && options.method === 'POST') {
-        throw conflictErr;
-      }
-      throw new Error(`Unexpected path: ${path}`);
-    });
+    mockPlanningEvent(conflictErr);
 
     render(
       <MemoryRouter initialEntries={['/app/events/3']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -743,8 +754,8 @@ describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () =>
       </MemoryRouter>
     );
 
-    const confirmBtn = await screen.findByRole('button', { name: 'Confirm event' });
-    await user.click(confirmBtn);
+    const safetyBtn = await screen.findByRole('button', { name: 'Send to safety check' });
+    await user.click(safetyBtn);
 
     expect(await screen.findByRole('heading', { name: 'Venue Booking Conflict' })).toBeInTheDocument();
     expect(screen.getByText('Cannot confirm: venue booking has an overlapping conflict')).toBeInTheDocument();
@@ -753,7 +764,8 @@ describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () =>
   /*
    * AC:       SCRUM-19 AC7
    * Scenario: Coordinator action triggers a non-conflict 409 (e.g. EDIT_LOCKED)
-   * Setup:    Event in PLANNING status; Coordinator clicks "Confirm event"; API returns error with code EDIT_LOCKED
+   * Setup:    Event in PLANNING with an approved venue; Coordinator clicks "Send to safety check";
+   *           API returns error with code EDIT_LOCKED
    * Expected: ConflictModal is NOT opened; standard inline alert displays error
    * Type:     negative
    */
@@ -767,28 +779,7 @@ describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () =>
     const nonConflictErr = new Error('Event cannot be confirmed because edits are locked');
     nonConflictErr.status = 409;
     nonConflictErr.code = 'EDIT_LOCKED';
-
-    api.mockImplementation(async (path, options = {}) => {
-      if (path === '/api/events/3') {
-        return {
-          event: {
-            id: 3,
-            name: 'Planning Phase Event',
-            status: 'PLANNING',
-            coordinatorId: 10,
-            organiserId: 1,
-          },
-        };
-      }
-      if (path === '/api/events/3/history') return { history: [] };
-      if (path === '/api/comments/3') return { comments: [] };
-      if (path === '/api/venues') return { venues: [] };
-      if (path === '/api/events/3/venue-bookings') return { bookings: [] };
-      if (path === '/api/events/3/status' && options.method === 'POST') {
-        throw nonConflictErr;
-      }
-      throw new Error(`Unexpected path: ${path}`);
-    });
+    mockPlanningEvent(nonConflictErr);
 
     render(
       <MemoryRouter initialEntries={['/app/events/3']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -796,8 +787,8 @@ describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () =>
       </MemoryRouter>
     );
 
-    const confirmBtn = await screen.findByRole('button', { name: 'Confirm event' });
-    await user.click(confirmBtn);
+    const safetyBtn = await screen.findByRole('button', { name: 'Send to safety check' });
+    await user.click(safetyBtn);
 
     // Standard inline error alert appears
     expect(await screen.findByText('Event cannot be confirmed because edits are locked')).toBeInTheDocument();
