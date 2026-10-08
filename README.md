@@ -37,6 +37,7 @@ All demo passwords: `Password123!`
 | organiser@apex.example | Event Organiser (Apex) — cannot see Acme events |
 | coordinator@connectsphere.sg | Event Coordinator |
 | coordinator2@connectsphere.sg | Event Coordinator (for load-balanced assignment) |
+| lead@connectsphere.sg | Event Coordinator Lead |
 | venue@connectsphere.sg | Venue Staff |
 | tech@connectsphere.sg | Technical Support |
 | hybrid@connectsphere.sg | Coordinator **and** Venue Staff |
@@ -47,7 +48,7 @@ Login looks up the `users` table in Supabase and issues an httpOnly JWT cookie. 
 ## What you can already click through
 
 1. Organiser saves a draft and submits it.
-2. The request is placed in the unassigned queue with status **Submitted** (no Coordinator is assigned automatically). The Event Coordinator Lead assigns a Coordinator later.
+2. The request is placed in the unassigned queue with status **Submitted** (no Coordinator is assigned automatically). The Event Coordinator Lead (`lead@connectsphere.sg`) can open **Unassigned queue** to see event name, organiser, date/time, attendance, and venue/equipment needs, then open the full request. Assigning a Coordinator is a later story.
 3. Coordinator approves into **Planning**, requests a venue, or rejects with a reason (rejection is not final — resubmit is allowed).
 4. Venue staff approve/reject the booking, optionally giving a reason and a suggested alternative. The event's assigned Coordinator gets an in-app notice naming the event and venue (with the reason and alternative on a rejection). Confirmed bookings block overlapping windows, including setup/teardown.
 5. Coordinator can confirm only after an approved venue booking.

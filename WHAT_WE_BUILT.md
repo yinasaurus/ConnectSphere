@@ -67,6 +67,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Organiser cannot edit after submit; changes go through the coordinator | `events.service` update guard |
 | Confirmed fields are locked (date/time/attendance/venue/equipment) | `SIGNIFICANT_FIELDS` |
 | Submitted requests go to an **unassigned queue** (no auto-assign); the Lead assigns a Coordinator later (SCRUM-28 / W7 #5) | `submitEvent` → `SUBMITTED`, `coordinator_id` null |
+| Lead views every Submitted unassigned request (name, organiser, date/time, attendance, venue/equipment) and can open full details (SCRUM-65 / W7 #5) | `GET /api/events/unassigned-queue` → `UnassignedQueue` |
 | Coordinators can **view** other events but only **edit** assigned ones | list vs update |
 | Reassignment: current coordinator requests, new coordinator accepts | `/reassign` endpoints |
 | Approve / reject (SCRUM-17): only the **assigned** coordinator decides, nobody while unassigned; reject needs a reason of 10–1000 characters; organiser is notified with the reason; reason kept on the event, in status history and in the audit log | `POST /api/events/:id/decision` → `decideEvent` |
@@ -115,16 +116,17 @@ Once the customer names Release 1, likely extensions:
 2. New rule? Service function + status machine if it is a lifecycle change
 3. New endpoint? Route → controller → service. Return JSON `{ resource }`
 4. New screen? Page under `frontend/src/pages`, link it in `Layout.jsx` if a role should see it
-5. Check the other roles. Organiser, coordinator, venue, tech, attendee all have different visibility
+5. Check the other roles. Organiser, coordinator, Lead, venue, tech, attendee all have different visibility
 
 ## Demo path (5 minutes)
 
 1. Sign in as **Aisha** (`organiser@acme.example`)
-2. Create an event, submit it — Chloe should be assigned
-3. Sign in as **Chloe** — approve for planning, send a venue booking
-4. Sign in as **Elena** — approve the venue
-5. Back to Chloe — confirm
-6. Sign in as **Hari** — register
+2. Create an event and submit it — it stays **Submitted** with no Coordinator
+3. Sign in as **Ivy** (`lead@connectsphere.sg`) — open **Unassigned queue**, read the basic fields, then open the request
+4. Assigning a Coordinator is a later story; after that, sign in as **Chloe** — approve for planning, send a venue booking
+5. Sign in as **Elena** — approve the venue
+6. Back to Chloe — confirm
+7. Sign in as **Hari** — register
 
 Acme vs Apex organisers are seeded so you can show that client data is isolated.
 
