@@ -2,7 +2,8 @@
  * SCRUM-5: Progressing Event Statuses (service and route tests)
  *
  * Acceptance criteria covered:
- *   AC1  Submitting records Draft -> Submitted -> Under Review.
+ *   AC1  Submitting records Draft -> Submitted; the assigned coordinator then opens it
+ *        for review (SCRUM-64, already shipped) to reach Under Review.
  *   AC2  Approving moves Under Review -> Approved.
  *   AC3  Starting planning moves Approved -> Planning.
  *   AC4  Rejecting from Submitted / Under Review requires and records a reason.
@@ -80,30 +81,38 @@ beforeEach(() => {
 });
 
 describe('SCRUM-5 status progression (service rules)', () => {
-  // AC1 · Submitting records Submitted, then Under Review once the coordinator is assigned.
-  it('US5-S01: submitting a draft records DRAFT -> SUBMITTED -> UNDER_REVIEW', async () => {
+  // AC1 · Submitting records Draft -> Submitted. SCRUM-64 (already shipped) is the
+  // coordinator's separate step from there to Under Review — see US5-S01b below.
+  it('US5-S01: submitting a draft records DRAFT -> SUBMITTED', async () => {
     await service.submitEvent(organiser, 3);
-    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'UNDER_REVIEW' }));
-    expect(historyRows()).toEqual([['DRAFT', 'SUBMITTED'], ['SUBMITTED', 'UNDER_REVIEW']]);
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'SUBMITTED' }));
+    expect(historyRows()).toEqual([['DRAFT', 'SUBMITTED']]);
   });
 
-  // Submitting again while already under review is outside the matrix: 400, no write.
-  it('US5-S02: submitting an event that is already under review fails with 400', async () => {
+  // AC1 · The assigned coordinator then opens it for review (SCRUM-64) to reach Under Review.
+  it('US5-S01b: the assigned coordinator opening the request completes SUBMITTED -> UNDER_REVIEW', async () => {
+    event.status = 'SUBMITTED';
+    await service.openForReview(coordinator, 3);
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'UNDER_REVIEW' }));
+  });
+
+  // Submitting again while already under review is outside the matrix: 409, no write.
+  it('US5-S02: submitting an event that is already under review fails with 409', async () => {
     event.status = 'UNDER_REVIEW';
-    await expect(service.submitEvent(organiser, 3)).rejects.toMatchObject({ status: 400 });
+    await expect(service.submitEvent(organiser, 3)).rejects.toMatchObject({ status: 409 });
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
-  // AC1 · A rejected request can be resubmitted (Week 4 Q&A); it goes back through Submitted
-  // and the old rejection reason is cleared.
-  it('US5-S03: resubmitting a rejected request records REJECTED -> SUBMITTED -> UNDER_REVIEW', async () => {
+  // AC1 · A rejected request can be resubmitted (Week 4 Q&A); it goes back to Submitted
+  // (the same re-open step as a first-time submission) and the old rejection reason is cleared.
+  it('US5-S03: resubmitting a rejected request records REJECTED -> SUBMITTED', async () => {
     event.status = 'REJECTED';
     event.rejection_reason = 'Missing budget';
     await service.submitEvent(organiser, 3);
     expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
-      status: 'UNDER_REVIEW', rejection_reason: null,
+      status: 'SUBMITTED', rejection_reason: null,
     }));
-    expect(historyRows()).toEqual([['REJECTED', 'SUBMITTED'], ['SUBMITTED', 'UNDER_REVIEW']]);
+    expect(historyRows()).toEqual([['REJECTED', 'SUBMITTED']]);
   });
 
   // AC2 · The coordinator approving the initial request sets Approved.
@@ -135,10 +144,12 @@ describe('SCRUM-5 status progression (service rules)', () => {
   });
 
   // AC4 · "recording the reason": a rejection with no reason (missing or blank) is refused.
+  // Kept at the pre-existing 10-character minimum (MIN_REJECTION_REASON_LENGTH) rather than
+  // "any non-empty reason" — that rule already shipped with SCRUM-17 and has its own tests.
   it.each([undefined, '   '])('US5-S10: rejecting without a reason (%p) fails with 400 and changes nothing', async (reason) => {
     event.status = 'UNDER_REVIEW';
     await expect(service.changeStatus(coordinator, 3, 'REJECTED', reason)).rejects.toMatchObject({
-      status: 400, code: 'VALIDATION_ERROR', message: 'A reason is required to reject an event',
+      status: 400, code: 'VALIDATION_ERROR', message: 'Rejection reason must be at least 10 characters',
     });
     expect(db.updateById).not.toHaveBeenCalled();
   });
@@ -182,11 +193,13 @@ describe('SCRUM-5 status progression (service rules)', () => {
   });
 
   // Confirming still requires an APPROVED venue booking; a PENDING one is not enough.
+  // Code kept as NOT_READY_TO_CONFIRM — the pre-existing, already-shipped check
+  // (isReadyToConfirm) rather than a new generic VENUE_NOT_APPROVED map.
   it('US5-S06: PREPARATION -> CONFIRMED is refused when the only booking is still pending', async () => {
     event.status = 'PREPARATION';
     tables.venue_bookings[0].status = 'PENDING';
     await expect(service.changeStatus(coordinator, 3, 'CONFIRMED')).rejects.toMatchObject({
-      status: 409, code: 'VENUE_NOT_APPROVED', message: 'A venue booking must be approved before confirmation',
+      status: 409, code: 'NOT_READY_TO_CONFIRM', message: 'A venue booking must be approved before confirmation',
     });
     expect(db.updateById).not.toHaveBeenCalled();
   });
@@ -200,7 +213,7 @@ describe('SCRUM-5 status progression (service rules)', () => {
   // Cancelled is final: nothing can bring a cancelled event back.
   it('US5-S07: a cancelled event cannot be moved back into planning', async () => {
     event.status = 'CANCELLED';
-    await expect(service.changeStatus(coordinator, 3, 'PLANNING')).rejects.toMatchObject({ status: 400 });
+    await expect(service.changeStatus(coordinator, 3, 'PLANNING')).rejects.toMatchObject({ status: 409 });
     expect(db.updateById).not.toHaveBeenCalled();
   });
 });
@@ -218,12 +231,13 @@ describe('SCRUM-5 POST /api/events/:id/status (route)', () => {
       .set('Cookie', `${env.sessionCookieName}=${token}`);
   }
 
-  // End to end through Express: an invalid jump comes back as HTTP 400 with the
-  // INVALID_STATUS_TRANSITION code and a readable message.
-  it('US5-R01: an invalid transition returns HTTP 400', async () => {
+  // End to end through Express: an invalid jump comes back as HTTP 409 (kept from the
+  // pre-existing convention, see statusMachine.test.js) with the INVALID_STATUS_TRANSITION
+  // code and a readable message.
+  it('US5-R01: an invalid transition returns HTTP 409', async () => {
     event.status = 'DRAFT';
     const res = await asCoordinator().send({ status: 'CONFIRMED' });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
     expect(res.body).toMatchObject({
       error: 'INVALID_STATUS_TRANSITION', message: 'Cannot move event from DRAFT to CONFIRMED',
     });

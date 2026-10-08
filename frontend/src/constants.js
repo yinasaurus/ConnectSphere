@@ -28,6 +28,20 @@ export const STATUS_LABELS = {
   REJECTED: 'Rejected',
 };
 
+export const SUB_STATES = {
+  IN_REVIEW: 'IN_REVIEW',
+  ACTION_REQUIRED: 'ACTION_REQUIRED',
+  CLARIFICATION_PROVIDED: 'CLARIFICATION_PROVIDED',
+};
+
+export const SUB_STATE_LABELS = {
+  IN_REVIEW: 'In review',
+  ACTION_REQUIRED: 'Clarification requested',
+  CLARIFICATION_PROVIDED: 'Clarification provided',
+};
+
+export const MIN_REJECTION_REASON_LENGTH = 10;
+
 // SCRUM-5 AC5: how often dashboards and the event page re-fetch so status changes appear without a reload.
 export const LIVE_REFRESH_MS = 10000;
 

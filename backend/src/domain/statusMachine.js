@@ -1,4 +1,4 @@
-const { EVENT_STATUS } = require('../constants/statuses');
+const { EVENT_STATUS, EVENT_SUB_STATE } = require('../constants/statuses');
 const { httpError } = require('../middleware/errorHandler');
 
 const {
@@ -28,18 +28,44 @@ const ALLOWED = {
   [CANCELLED]: [],
 };
 
+const ALLOWED_SUB_STATES = {
+  [EVENT_SUB_STATE.IN_REVIEW]: [EVENT_SUB_STATE.ACTION_REQUIRED],
+  [EVENT_SUB_STATE.ACTION_REQUIRED]: [EVENT_SUB_STATE.CLARIFICATION_PROVIDED],
+  [EVENT_SUB_STATE.CLARIFICATION_PROVIDED]: [EVENT_SUB_STATE.ACTION_REQUIRED],
+};
+
+// Kept at 409 (Conflict), not 400: SCRUM-64 already shipped on this exact status
+// code for an invalid transition (e.g. a Draft request can't be opened for review),
+// and that test is already merged into main.
 function assertTransition(from, to) {
   if (!Object.values(EVENT_STATUS).includes(to)) {
-    throw httpError(400, `Unknown event status: ${to}`, 'INVALID_STATUS_TRANSITION');
+    throw httpError(409, `Unknown event status: ${to}`, 'INVALID_STATUS_TRANSITION');
   }
   const allowed = ALLOWED[from] || [];
   if (!allowed.includes(to)) {
     throw httpError(
-      400,
+      409,
       `Cannot move event from ${from} to ${to}`,
       'INVALID_STATUS_TRANSITION'
     );
   }
 }
 
-module.exports = { assertTransition, ALLOWED_TRANSITIONS: ALLOWED };
+function assertSubStateTransition(from, to) {
+  const effectiveFrom = from || EVENT_SUB_STATE.IN_REVIEW;
+  const allowed = ALLOWED_SUB_STATES[effectiveFrom] || [];
+  if (!allowed.includes(to)) {
+    throw httpError(
+      409,
+      `Cannot move event sub-state from ${effectiveFrom} to ${to}`,
+      'INVALID_SUB_STATE_TRANSITION'
+    );
+  }
+}
+
+module.exports = {
+  assertTransition,
+  assertSubStateTransition,
+  ALLOWED_TRANSITIONS: ALLOWED,
+  ALLOWED_SUB_STATES,
+};

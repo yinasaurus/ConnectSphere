@@ -29,6 +29,7 @@ function mockEvent(status, bookings = [], statusError = null) {
       if (statusError) throw new Error(statusError);
       return { event: {} };
     }
+    if (path === '/api/events/3/decision') return { event: {} };
     if (path === '/api/events/3/history') return { history: [] };
     if (path === '/api/comments/3') return { comments: [] };
     if (path === '/api/venues') return { venues: [] };
@@ -48,7 +49,9 @@ async function renderAsCoordinator() {
       <Routes><Route path="/app/events/:id" element={<EventDetail />} /></Routes>
     </MemoryRouter>
   );
-  await screen.findByText('Coordinator actions');
+  // Waiting on the event name rather than the header text, since the header reads
+  // "Coordinator review actions" under Under Review and "Coordinator actions" otherwise.
+  await screen.findByText('Status event');
   return userEvent.setup();
 }
 
@@ -57,11 +60,15 @@ function visibleStepButtons() {
 }
 
 beforeEach(() => jest.clearAllMocks());
+// Safety net: if a fake-timer test fails before reaching its own cleanup, real timers
+// must still be restored so later tests' async waitFor/findBy calls don't hang.
+afterEach(() => jest.useRealTimers());
 
-// AC2 / AC3 / AC6 / SCRUM-73 · each status offers exactly its next step, which sends that status.
-// Planning has an approved booking, because the safety check button waits for one (US5-F09).
+// AC3 / AC6 / SCRUM-73 · each status (other than Under Review, which goes through the
+// Approve/Reject decision panel — see below) offers exactly its next step, which sends
+// that status. Planning has an approved booking, because the safety check button waits
+// for one (US5-F09).
 it.each([
-  ['UNDER_REVIEW', 'Approve', 'APPROVED', []],
   ['APPROVED', 'Start planning', 'PLANNING', []],
   ['PLANNING', 'Send to safety check', 'AWAITING_SAFETY_CHECK', [APPROVED_BOOKING]],
   ['PREPARATION', 'Confirm event', 'CONFIRMED', []],
@@ -70,18 +77,30 @@ it.each([
   const user = await renderAsCoordinator();
   await user.click(screen.getByRole('button', { name: button }));
   expect(api).toHaveBeenCalledWith('/api/events/3/status', { method: 'POST', body: { status: next } });
-  expect(visibleStepButtons().filter((name) => name !== 'Reject / return')).toEqual([button]);
+  expect(visibleStepButtons()).toEqual([button]);
 });
 
-// AC4 · Rejecting sends the reason the coordinator typed, not a made-up default.
-it('US5-F03: "Reject / return" sends the typed reason', async () => {
+// AC2 · Under Review offers Approve through the existing decision panel (SCRUM-17),
+// sending APPROVED via the decision endpoint rather than the generic status one.
+it('US5-F02b: UNDER_REVIEW offers "Approve", which sends APPROVED via the decision endpoint', async () => {
   mockEvent('UNDER_REVIEW');
   const user = await renderAsCoordinator();
-  // The first text box is the coordinator's "Reason / note"; the second is the discussion box.
-  await user.type(screen.getAllByRole('textbox')[0], 'Budget not approved');
-  await user.click(screen.getByRole('button', { name: 'Reject / return' }));
-  expect(api).toHaveBeenCalledWith('/api/events/3/status', {
-    method: 'POST', body: { status: 'REJECTED', reason: 'Budget not approved' },
+  await user.click(screen.getByRole('button', { name: 'Approve' }));
+  expect(api).toHaveBeenCalledWith('/api/events/3/decision', {
+    method: 'POST', body: { decision: 'APPROVE', reason: '' },
+  });
+});
+
+// AC4 · Rejecting from Under Review sends the typed reason via the decision panel's
+// two-step confirm flow (SCRUM-17), not a single "Reject / return" button.
+it('US5-F03: rejecting from Under Review sends the typed reason', async () => {
+  mockEvent('UNDER_REVIEW');
+  const user = await renderAsCoordinator();
+  await user.click(screen.getByRole('button', { name: 'Reject' }));
+  await user.type(screen.getByLabelText('Rejection reason'), 'Budget not approved');
+  await user.click(screen.getByRole('button', { name: 'Confirm rejection' }));
+  expect(api).toHaveBeenCalledWith('/api/events/3/decision', {
+    method: 'POST', body: { decision: 'REJECT', reason: 'Budget not approved' },
   });
 });
 
@@ -91,7 +110,8 @@ it('US5-F08: the event page picks up a status change on the next 10-second refre
   jest.useFakeTimers();
   mockEvent('UNDER_REVIEW');
   await renderAsCoordinator();
-  expect(screen.getByText('Under Review')).toBeInTheDocument();
+  // "Under Review" also appears in the review-phase panel (SCRUM-16), so expect at least one.
+  expect(screen.getAllByText('Under Review').length).toBeGreaterThan(0);
 
   mockEvent('APPROVED');
   await act(async () => { jest.advanceTimersByTime(10000); });

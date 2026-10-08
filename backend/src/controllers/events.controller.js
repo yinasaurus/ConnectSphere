@@ -34,6 +34,21 @@ const submit = asyncHandler(async (req, res) => {
   res.json({ event });
 });
 
+const openForReview = asyncHandler(async (req, res) => {
+  const event = await eventsService.openForReview(req.user, req.params.id);
+  res.json({ event });
+});
+
+const decide = asyncHandler(async (req, res) => {
+  const event = await eventsService.decideEvent(
+    req.user,
+    req.params.id,
+    req.body.decision,
+    req.body.reason
+  );
+  res.json({ event });
+});
+
 const changeStatus = asyncHandler(async (req, res) => {
   const event = await eventsService.changeStatus(
     req.user,
@@ -63,6 +78,25 @@ const acceptReassign = asyncHandler(async (req, res) => {
   res.json({ event });
 });
 
+const requestClarification = asyncHandler(async (req, res) => {
+  const event = await eventsService.requestClarification(
+    req.user,
+    req.params.id,
+    req.body.remarks
+  );
+  res.json({ event });
+});
+
+const respondClarification = asyncHandler(async (req, res) => {
+  const event = await eventsService.respondClarification(
+    req.user,
+    req.params.id,
+    req.body.response,
+    req.body.amendments
+  );
+  res.json({ event });
+});
+
 module.exports = {
   list,
   get,
@@ -70,8 +104,12 @@ module.exports = {
   create,
   update,
   submit,
+  openForReview,
+  decide,
   changeStatus,
   history,
   requestReassign,
   acceptReassign,
+  requestClarification,
+  respondClarification,
 };

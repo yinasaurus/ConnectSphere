@@ -8,6 +8,7 @@ import Events from './pages/Events';
 import NewEvent from './pages/NewEvent';
 import Drafts from './pages/Drafts';
 import EventDetail from './pages/EventDetail';
+import VenueBooking from './pages/VenueBooking';
 import CalendarPage from './pages/CalendarPage';
 import Venues from './pages/Venues';
 import Equipment from './pages/Equipment';
@@ -36,6 +37,8 @@ export default function App() {
             <Route path="events/new" element={<ProtectedRoute allowedRoles={requestRoles}><NewEvent /></ProtectedRoute>} />
             <Route path="events/:id/edit" element={<ProtectedRoute allowedRoles={requestRoles}><NewEvent /></ProtectedRoute>} />
             <Route path="drafts" element={<ProtectedRoute allowedRoles={requestRoles}><Drafts /></ProtectedRoute>} />
+            {/* Keep booking requests scoped to an event and available only to coordinators. */}
+            <Route path="events/:id/venue-booking" element={<ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR]}><VenueBooking /></ProtectedRoute>} />
             <Route path="events/:id" element={<EventDetail />} />
             <Route path="calendar" element={<CalendarPage />} />
             <Route

@@ -9,7 +9,8 @@
  *   AC4  Submitted / Under Review -> Rejected.
  *   AC6  Planning -> Awaiting Safety Check.
  *   AC7  Preparation is only reachable from Awaiting Safety Check.
- *   Any transition outside the matrix fails with HTTP 400.
+ *   Any transition outside the matrix fails with HTTP 409 (kept from the pre-existing
+ *   convention; SCRUM-64 already shipped a test depending on this exact status code).
  *
  * Labels: US5-M.. (this file), US5-S.. / US5-R.. (events.status.test.js),
  *         US5-F.. (frontend StatusBadge.test.jsx, EventDetail.status.test.jsx, Dashboard.test.jsx)
@@ -82,25 +83,25 @@ describe('SCRUM-5 event status machine', () => {
   });
 
   // Every other pair of statuses (skipping steps, going backwards, staying on the same
-  // status, leaving COMPLETED/CANCELLED) fails with 400 INVALID_STATUS_TRANSITION.
+  // status, leaving COMPLETED/CANCELLED) fails with 409 INVALID_STATUS_TRANSITION.
   // This includes the key "no bypass" cases, e.g. PLANNING -> PREPARATION (skips the
   // safety check, AC7), APPROVED -> REJECTED (AC4 only from Submitted / Under Review)
   // and REJECTED -> APPROVED (must be resubmitted and reviewed again).
-  it.each(EXPECTED_BLOCKED)('US5-M02: blocks %s -> %s with 400', (from, to) => {
+  it.each(EXPECTED_BLOCKED)('US5-M02: blocks %s -> %s with 409', (from, to) => {
     expect(errorFrom(() => assertTransition(from, to)))
-      .toMatchObject({ status: 400, code: 'INVALID_STATUS_TRANSITION' });
+      .toMatchObject({ status: 409, code: 'INVALID_STATUS_TRANSITION' });
   });
 
   // A status that doesn't exist (typo, the removed VENUE_SECURED value, missing) is refused.
   it.each(['ARCHIVED', 'VENUE_SECURED', undefined])('US5-M03: refuses unknown target status %s', (to) => {
     expect(errorFrom(() => assertTransition('DRAFT', to)))
-      .toMatchObject({ status: 400, message: `Unknown event status: ${to}` });
+      .toMatchObject({ status: 409, message: `Unknown event status: ${to}` });
   });
 
   // An event stuck on an unknown current status (bad data) can't move anywhere.
   it('US5-M04: an event with an unknown current status cannot move', () => {
     expect(errorFrom(() => assertTransition('VENUE_SECURED', 'PLANNING')))
-      .toMatchObject({ status: 400 });
+      .toMatchObject({ status: 409 });
   });
 
   // Safety net: every status has a row in the matrix, so a status added later can't be
