@@ -66,7 +66,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Confirmed can revert to Planning after a major change | `CONFIRMED → PLANNING` |
 | Organiser cannot edit after submit; changes go through the coordinator | `events.service` update guard |
 | Confirmed fields are locked (date/time/attendance/venue/equipment) | `SIGNIFICANT_FIELDS` |
-| Coordinators are **auto-assigned**, one per event, fair load | least active events on submit |
+| Submitted requests go to an **unassigned queue** (no auto-assign); the Lead assigns a Coordinator later (SCRUM-28 / W7 #5) | `submitEvent` → `SUBMITTED`, `coordinator_id` null |
 | Coordinators can **view** other events but only **edit** assigned ones | list vs update |
 | Reassignment: current coordinator requests, new coordinator accepts | `/reassign` endpoints |
 | Approve / reject (SCRUM-17): only the **assigned** coordinator decides, nobody while unassigned; reject needs a reason of 10–1000 characters; organiser is notified with the reason; reason kept on the event, in status history and in the audit log | `POST /api/events/:id/decision` → `decideEvent` |

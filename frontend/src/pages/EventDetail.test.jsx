@@ -514,6 +514,21 @@ it('US17-F16: the organiser sees the rejection reason on a rejected event', asyn
 });
 
 /*
+ * AC: SCRUM-28 AC1
+ * Scenario: Organiser opens a submitted request that is waiting in the unassigned queue.
+ * Setup: Status SUBMITTED, coordinatorId null (no auto-assign on submit).
+ * Expected: People card shows Unassigned, not the old "will be auto-assigned" copy.
+ * Type: normal
+ */
+it('SCRUM-28 AC1: a submitted request with no Coordinator shows Unassigned', async () => {
+  mockEvent({ coordinatorId: null, status: 'SUBMITTED' });
+  renderEvent();
+  expect(await screen.findByText('Review me')).toBeInTheDocument();
+  expect(screen.getByText('Unassigned')).toBeInTheDocument();
+  expect(screen.queryByText(/auto-assigned/i)).not.toBeInTheDocument();
+});
+
+/*
  * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility)
  * Scenario: An attendee requests an event that has venue booking information.
  * Setup:    The attendee can access only a confirmed public event and is not a

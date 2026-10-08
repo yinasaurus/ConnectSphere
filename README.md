@@ -47,7 +47,7 @@ Login looks up the `users` table in Supabase and issues an httpOnly JWT cookie. 
 ## What you can already click through
 
 1. Organiser saves a draft and submits it.
-2. A coordinator is auto-assigned (least number of active events).
+2. The request is placed in the unassigned queue with status **Submitted** (no Coordinator is assigned automatically). The Event Coordinator Lead assigns a Coordinator later.
 3. Coordinator approves into **Planning**, requests a venue, or rejects with a reason (rejection is not final — resubmit is allowed).
 4. Venue staff approve/reject the booking, optionally giving a reason and a suggested alternative. The event's assigned Coordinator gets an in-app notice naming the event and venue (with the reason and alternative on a rejection). Confirmed bookings block overlapping windows, including setup/teardown.
 5. Coordinator can confirm only after an approved venue booking.

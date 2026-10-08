@@ -140,4 +140,26 @@ describe('TC-DRAFT-04 (Draft Saving & Resuming)', () => {
     expect(screen.queryByText(/is required/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  /*
+   * AC: SCRUM-28 AC1, AC4
+   * Scenario: Organiser opens the new-request form and reads what submit vs draft will do.
+   * Setup: Empty new-event page (no ACTION_REQUIRED event).
+   * Expected: Copy says submit goes to the unassigned queue, and does not promise auto-assignment.
+   * Type: normal
+   */
+  it('tells the organiser that submit queues the request instead of auto-assigning a Coordinator', async () => {
+    render(
+      <MemoryRouter initialEntries={['/app/events/new']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/app/events/new" element={<NewEvent />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/unassigned queue for the Event Coordinator Lead/i)).toBeInTheDocument();
+    expect(screen.queryByText(/auto-assigns/i)).not.toBeInTheDocument();
+  });
 });
