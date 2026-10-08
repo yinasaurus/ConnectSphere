@@ -234,6 +234,7 @@ describe('SCUM-16 (Event Clarification & Review Panel)', () => {
       if (path === '/api/comments/5') return Promise.resolve({ comments: [] });
       if (path === '/api/venues') return Promise.resolve({ venues: [] });
       if (path === '/api/events/5/venue-bookings') return Promise.resolve({ bookings: [] });
+      if (path === '/api/events/5/equipment-requests') return Promise.resolve({ requests: [] });
       throw new Error(`Unhandled api: ${path}`);
     });
 
@@ -291,6 +292,7 @@ describe('SCUM-16 (Event Clarification & Review Panel)', () => {
       if (path === '/api/comments/5') return Promise.resolve({ comments: [] });
       if (path === '/api/venues') return Promise.resolve({ venues: [] });
       if (path === '/api/events/5/venue-bookings') return Promise.resolve({ bookings: [] });
+      if (path === '/api/events/5/equipment-requests') return Promise.resolve({ requests: [] });
       throw new Error(`Unhandled api: ${path}`);
     });
 
@@ -321,11 +323,13 @@ beforeEach(() => {
 });
 
 /*
- * AC:       SCRUM-26 AC8 (display of one existing request only)
- * Scenario: An Event Organiser views their event page containing a previously submitted booking.
- * Setup:    The event-scoped booking endpoint returns an Approved request for Hall.
- * Expected: Displays this event's request and status without retrieving the global booking
- *           queue; this test does not cover multiple requests.
+ * AC:       SCRUM-26 AC8 (display of one existing request only); SCRUM-39 AC1 + AC2 (role
+ *           access to planning data, including the event's equipment requests)
+ * Scenario: The event's own Organiser opens a Planning event.
+ * Setup:    Organiser user 1; event 3 owned by user 1; one APPROVED booking at "Hall"; no
+ *           equipment requests. Any other path fails, as the API would refuse it.
+ * Expected: The event and its booking ("Hall: APPROVED") are shown, and the page never asks
+ *           for the global bookings queue, which Organisers aren't allowed to see.
  * Type:     normal
  */
 it('loads an organiser event and its booking without requesting the restricted global queue', async () => {
@@ -335,6 +339,8 @@ it('loads an organiser event and its booking without requesting the restricted g
     if (path === '/api/comments/3') return { comments: [] };
     if (path === '/api/venues') return { venues: [] };
     if (path === '/api/events/3/venue-bookings') return { bookings: [{ id: 7, venue_name: 'Hall', status: 'APPROVED' }] };
+    // SCRUM-39: the page now also loads the event's equipment requests for planning roles.
+    if (path === '/api/events/3/equipment-requests') return { requests: [] };
     throw new Error('You do not have access to this action');
   });
   render(
@@ -429,6 +435,7 @@ function mockEvent({ coordinatorId, status = 'UNDER_REVIEW', rejectionReason = n
       if (decisionError) throw new Error(decisionError);
       return { event: {} };
     }
+    if (path === '/api/events/3/review') return { event: {} };
     if (path === '/api/events/3/history') return { history: [] };
     if (path === '/api/comments/3') return { comments: [] };
     if (path === '/api/venues') return { venues: [] };
@@ -514,12 +521,50 @@ it('US17-F16: the organiser sees the rejection reason on a rejected event', asyn
 });
 
 /*
- * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility)
+ * SCRUM-64: a Submitted request has no reviewable status until its assigned
+ * coordinator opens it. These check the button appears only for that coordinator
+ * and wires to the right endpoint.
+ */
+
+// AC1 + AC6 · The assigned coordinator sees an "Open for review" button on a
+// Submitted request, and it calls the review endpoint.
+it('US64-F01: the assigned coordinator opens a submitted request for review', async () => {
+  useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
+  mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
+  renderEvent();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Open for review' }));
+  expect(api).toHaveBeenCalledWith('/api/events/3/review', { method: 'POST' });
+});
+
+// AC3 · A coordinator who isn't assigned to this request (id 9) never sees the button,
+// even though they can still view the event for planning purposes.
+it('US64-F02: an unrelated coordinator does not see the Open for review button', async () => {
+  useAuth.mockReturnValue({ user: { id: 9 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
+  mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
+  renderEvent();
+  expect(await screen.findByText('Review me')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Open for review' })).not.toBeInTheDocument();
+});
+
+// AC6 · The organiser never sees the coordinator-only button on their own request.
+it('US64-F03: the organiser does not see the Open for review button', async () => {
+  mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
+  renderEvent();
+  expect(await screen.findByText('Review me')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Open for review' })).not.toBeInTheDocument();
+});
+
+/*
+ * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility); SCRUM-39 AC1
+ *           (agreed decision: Attendees keep the public view, so equipment requests are
+ *           never requested either)
  * Scenario: An attendee requests an event that has venue booking information.
  * Setup:    The attendee can access only a confirmed public event and is not a
  *           Coordinator or Venue Staff member.
  * Expected: The event page shows its public event and registration information, hides
- *           staff-only panels, and does not request comments or event status history.
+ *           staff-only panels, and does not request comments, event status history or
+ *           equipment requests.
  * Type:     boundary
  */
 it('loads an attendee event without requesting restricted planning data', async () => {
@@ -540,6 +585,8 @@ it('loads an attendee event without requesting restricted planning data', async 
   expect(screen.queryByText('Status history')).not.toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith('/api/comments/3');
   expect(api).not.toHaveBeenCalledWith('/api/events/3/history');
+  // SCRUM-39: attendees don't get planning details, so equipment is never requested.
+  expect(api).not.toHaveBeenCalledWith('/api/events/3/equipment-requests');
 });
 
 /*
