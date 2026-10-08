@@ -146,7 +146,6 @@ export default function EventDetail() {
   // cancelled bookings don't count). Equipment isn't loaded on this page, so the backend still
   // has the final say and its refusal is shown in the coordinator card.
   // SCRUM-18 AC9: several bookings; each PENDING one is decided on its own.
-  const pendingBookings = bookings.filter((b) => b.status === 'PENDING');
   // SCRUM-5 AC6: rejected/cancelled don't count toward the safety check.
   const activeBookings = bookings.filter((booking) => !['REJECTED', 'CANCELLED'].includes(booking.status));
   const venuesReadyForSafetyCheck = activeBookings.length > 0 && pendingBookings.length === 0;
