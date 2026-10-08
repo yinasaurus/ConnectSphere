@@ -98,10 +98,10 @@ describe('SCRUM-71 assign coordinator (event page)', () => {
   });
 
   /*
-   * AC: SCRUM-71 AC1, AC2
+   * AC: SCRUM-71 AC1
    * Scenario: A Lead opens a Submitted event that has no Coordinator.
-   * Setup: Session is Lead. Event 3 is SUBMITTED with coordinatorId null. API lists two active Coordinators.
-   * Expected: The assign card is shown and both active Coordinators are in the dropdown.
+   * Setup: Session is Lead. Event 3 is SUBMITTED with coordinatorId null. API lists two Coordinators.
+   * Expected: The assign card is shown and both Coordinators are in the dropdown.
    * Type: normal
    */
   it('US71-F01: a Lead sees active Coordinators to assign on a Submitted unassigned event', async () => {

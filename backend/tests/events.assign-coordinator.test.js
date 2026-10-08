@@ -96,7 +96,8 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
   /*
    * AC: SCRUM-71 AC2
    * Scenario: The Lead picks a Coordinator whose account is inactive.
-   * Setup: Event is Submitted and unassigned. User 9 exists with EVENT_COORDINATOR but is_active false.
+   * Setup: Event is Submitted and unassigned. User 9 exists but is_active is false.
+   *   The Coordinator role is not loaded; inactive accounts are refused before the role check.
    * Expected: 409 INVALID_COORDINATOR. updateById is not called so the event stays unassigned.
    * Type: error
    */
@@ -156,7 +157,8 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
   /*
    * AC: SCRUM-71 AC5
    * Scenario: The event already has a Coordinator. The Lead tries this assign action anyway.
-   * Setup: Event 3 has coordinator_id 2. The Lead asks to assign user 4 instead.
+   * Setup: Event 3 is still SUBMITTED and already has coordinator_id 2. The Lead asks to assign user 4.
+   *   Status stays Submitted so a failure cannot be explained by the AC1 Submitted-only rule.
    * Expected: 409 ALREADY_ASSIGNED. Original coordinator_id 2 is kept. This is reassignment (SCRUM-31).
    * Type: conflict
    */
@@ -390,7 +392,7 @@ describe('SCRUM-71 POST /api/events/:id/assign-coordinator (route)', () => {
   });
 
   /*
-   * AC: SCRUM-71 AC6
+   * AC: none (authentication, not AC6 — AC6 is a signed-in user without the Lead role)
    * Scenario: No session cookie.
    * Setup: Anonymous POST to the assign path.
    * Expected: 401. The event is not written.
