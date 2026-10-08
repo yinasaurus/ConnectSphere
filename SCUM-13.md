@@ -17,6 +17,8 @@ Server-side authorisation is the security boundary. React guards and navigation 
 | Request venue booking | Coordinator |
 | Event-specific bookings | Event access checked first, query constrained to event; attendees see approved bookings only; internal notes omitted |
 | Equipment page | Coordinator or Technical Support (matches existing navigation) |
+| Unassigned queue; coordinator assignment overview (SCRUM-54) | Event Coordinator Lead only |
+| Open or record a safety check (SCRUM-54) | Safety Officer only |
 
 Missing/invalid/expired session and disabled users receive 401. Wrong roles receive 403. Inaccessible event IDs receive 404 to avoid disclosing other clients' events. Frontend role denial redirects home; logged-out users redirect to login.
 
