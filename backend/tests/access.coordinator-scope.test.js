@@ -17,7 +17,6 @@ const { createApp } = require('../src/app');
 describe('SCRUM-54 coordinator assignment scope', () => {
   const app = createApp();
   const token = jwt.sign({ sub: 4 }, env.jwtSecret);
-  const assigned = { id: 2, roles: [ROLES.EVENT_COORDINATOR] };
   const otherCoordinator = { id: 4, roles: [ROLES.EVENT_COORDINATOR] };
   const hybrid = { id: 2, roles: [ROLES.EVENT_COORDINATOR, ROLES.EVENT_COORDINATOR_LEAD] };
 
@@ -165,6 +164,50 @@ describe('SCRUM-54 coordinator assignment scope', () => {
     expect(res.body).toEqual({ error: 'FORBIDDEN', message: expect.any(String) });
     expect(res.body).not.toHaveProperty('event');
     expect(JSON.stringify(res.body)).not.toMatch(/Secret Workshop|Confidential purpose|Do not leak/i);
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC: SCRUM-54 AC6
+   * Scenario: A Coordinator GETs an event assigned to someone else over HTTP.
+   * Setup: Session user 4 is a Coordinator; event 3 is assigned to user 2.
+   * Expected: 200 with the event they are allowed to view. Nothing is changed.
+   * Type: normal
+   */
+  it('returns the event when an unassigned Coordinator views it over HTTP', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce({ id: 4, is_active: true })
+      .mockResolvedValueOnce(event);
+    db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }]);
+    const res = await request(app)
+      .get('/api/events/3')
+      .set('Cookie', `${env.sessionCookieName}=${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.event.id).toBe(3);
+    expect(res.body.event.name).toBe('Secret Workshop');
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC: SCRUM-54 AC5, AC7
+   * Scenario: A Coordinator POSTs APPROVE on an event they are not assigned to.
+   * Setup: Same unassigned caller; event is under review and named Secret Workshop.
+   * Expected: 403 with only error and message — the name must not appear; row unchanged.
+   * Type: error
+   */
+  it('returns 403 without event details when an unassigned Coordinator approves over HTTP', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce({ id: 4, is_active: true })
+      .mockResolvedValueOnce(event);
+    db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }]);
+    const res = await request(app)
+      .post('/api/events/3/decision')
+      .set('Cookie', `${env.sessionCookieName}=${token}`)
+      .send({ decision: 'APPROVE' });
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: 'FORBIDDEN', message: expect.any(String) });
+    expect(res.body).not.toHaveProperty('event');
+    expect(JSON.stringify(res.body)).not.toMatch(/Secret Workshop/i);
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
