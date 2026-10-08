@@ -1,8 +1,8 @@
 /**
  * Event lifecycle statuses from the customer briefing + G3/G4 Q&A.
  *
- * Draft            – saved before submission
- * Submitted        – sent for review
+ * Draft            – saved before submission (not in the unassigned queue)
+ * Submitted        – in the Lead's unassigned queue; no Coordinator yet (W7 #5 / SCRUM-28)
  * Under Review     – coordinator assigned; clarification is a sub-state of this
  * Planning         – approved; venue/equipment arrangements underway
  * Confirmed        – essential arrangements completed

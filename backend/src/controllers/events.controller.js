@@ -1,10 +1,19 @@
 const eventsService = require('../services/events.service');
 const { asyncHandler } = require('../utils/asyncHandler');
 
+/**
+ * Purpose: list events the caller may see, including the Lead's unassigned queue when asked.
+ * AC: SCRUM-28 AC3, AC4 — `unassigned=true` is Submitted + no Coordinator (drafts excluded).
+ * Business rule: W7 #5; the Lead UI for this list is SCRUM-65.
+ * Inputs: query.status, query.q, query.unassigned
+ * Outputs: `{ events }`
+ * Failure: 401 from auth middleware if there is no session
+ */
 const list = asyncHandler(async (req, res) => {
   const events = await eventsService.listEvents(req.user, {
     status: req.query.status,
     q: req.query.q,
+    unassigned: req.query.unassigned === 'true' || req.query.unassigned === '1',
   });
   res.json({ events });
 });
@@ -29,6 +38,13 @@ const update = asyncHandler(async (req, res) => {
   res.json({ event });
 });
 
+/**
+ * Purpose: HTTP entry for submitting a complete request into the unassigned queue.
+ * AC: SCRUM-28 AC1, AC2
+ * Inputs: authenticated user, event id in the path
+ * Outputs: `{ event }` with status SUBMITTED and coordinatorId null
+ * Failure: service errors (403/400/404/409) are returned as JSON
+ */
 const submit = asyncHandler(async (req, res) => {
   const event = await eventsService.submitEvent(req.user, req.params.id);
   res.json({ event });
