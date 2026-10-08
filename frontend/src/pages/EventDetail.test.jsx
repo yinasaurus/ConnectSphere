@@ -426,7 +426,7 @@ it.each(['APPROVED', 'PLANNING'])(
 
 // Fakes the API for event 3, owned by organiser 1 and assigned to `coordinatorId`.
 // By default it's under review; `decisionError` makes the decision endpoint fail.
-function mockEvent({ coordinatorId, status = 'UNDER_REVIEW', rejectionReason = null, decisionError = null }) {
+function mockEvent({ coordinatorId, status = 'UNDER_REVIEW', rejectionReason = null, decisionError = null, bookings = [] }) {
   api.mockImplementation(async (path) => {
     if (path === '/api/events/3') {
       return { event: { id: 3, organiserId: 1, coordinatorId, name: 'Review me', status, rejectionReason } };
@@ -439,7 +439,7 @@ function mockEvent({ coordinatorId, status = 'UNDER_REVIEW', rejectionReason = n
     if (path === '/api/events/3/history') return { history: [] };
     if (path === '/api/comments/3') return { comments: [] };
     if (path === '/api/venues') return { venues: [] };
-    if (path === '/api/events/3/venue-bookings') return { bookings: [] };
+    if (path === '/api/events/3/venue-bookings') return { bookings };
     throw new Error(`Unexpected ${path}`);
   });
 }
@@ -587,5 +587,112 @@ it('loads an attendee event without requesting restricted planning data', async 
   expect(api).not.toHaveBeenCalledWith('/api/events/3/history');
   // SCRUM-39: attendees don't get planning details, so equipment is never requested.
   expect(api).not.toHaveBeenCalledWith('/api/events/3/equipment-requests');
+});
+
+/*
+ * AC:       SCRUM-18 AC7 & AC6
+ * Scenario: Event Coordinator views an event with a rejected venue booking
+ * Setup:    Signed in as Event Coordinator; event has a REJECTED booking with decision reason and alternative suggestion
+ * Expected: The rejected booking displays its status, the rejection reason, and the suggested alternative on the event page
+ * Type:     normal
+ */
+it('US18-F01 (AC7): displays rejection reason and suggested alternative for rejected booking to coordinator', async () => {
+  useAuth.mockReturnValue({
+    user: { id: 2 },
+    hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
+  });
+  mockEvent({
+    coordinatorId: 2,
+    status: 'PLANNING',
+    bookings: [
+      {
+        id: 5,
+        venue_name: 'Helix Hall',
+        status: 'REJECTED',
+        decision_reason: 'Air conditioning malfunction',
+        alternative_suggestion: 'Seminar Room 3',
+      },
+    ],
+  });
+  renderEvent();
+  expect(await screen.findByText('Helix Hall')).toBeInTheDocument();
+  expect(screen.getByText('Reason: Air conditioning malfunction')).toBeInTheDocument();
+  expect(screen.getByText('Suggested alternative: Seminar Room 3')).toBeInTheDocument();
+});
+
+/*
+ * AC:       SCRUM-18 AC8
+ * Scenario: Event Coordinator views an event with an approved venue booking
+ * Setup:    Signed in as Event Coordinator; event has an APPROVED booking
+ * Expected: The approved booking displays the 'Confirmed venue booking' label
+ * Type:     normal
+ */
+it('US18-F02 (AC8): displays confirmed venue booking label for approved booking', async () => {
+  useAuth.mockReturnValue({
+    user: { id: 2 },
+    hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
+  });
+  mockEvent({
+    coordinatorId: 2,
+    status: 'PLANNING',
+    bookings: [
+      {
+        id: 6,
+        venue_name: 'Innovation Hall',
+        status: 'APPROVED',
+      },
+    ],
+  });
+  renderEvent();
+  expect(await screen.findByText('Innovation Hall')).toBeInTheDocument();
+  expect(screen.getByText('✓ Confirmed venue booking')).toBeInTheDocument();
+});
+
+/*
+ * AC:       SCRUM-18 AC2
+ * Scenario: Venue Staff views pending venue booking card on Event Detail page
+ * Setup:    Signed in as Venue Staff; booking has start_at and end_at, and event has startAt and endAt
+ * Expected: The card displays event name, venue name, booking window with date and time, and event date
+ * Type:     normal
+ */
+it('US18-F03 (AC2): displays event name, venue name, booking window, and event date on pending card for Venue Staff', async () => {
+  useAuth.mockReturnValue({
+    user: { id: 40 },
+    hasRole: (...roles) => roles.includes('VENUE_STAFF'),
+  });
+  api.mockImplementation(async (path) => {
+    if (path === '/api/events/3') {
+      return {
+        event: {
+          id: 3,
+          name: 'Annual Tech Conference',
+          status: 'PLANNING',
+          startAt: '2026-11-20T08:00:00.000Z',
+          endAt: '2026-11-20T18:00:00.000Z',
+        },
+      };
+    }
+    if (path === '/api/events/3/history') return { history: [] };
+    if (path === '/api/comments/3') return { comments: [] };
+    if (path === '/api/venues') return { venues: [] };
+    if (path === '/api/events/3/venue-bookings') {
+      return {
+        bookings: [
+          {
+            id: 15,
+            venue_name: 'Grand Auditorium',
+            status: 'PENDING',
+            start_at: '2026-11-20T09:00:00.000Z',
+            end_at: '2026-11-20T12:00:00.000Z',
+          },
+        ],
+      };
+    }
+    throw new Error(`Unexpected ${path}`);
+  });
+  renderEvent();
+  expect((await screen.findAllByText(/Grand Auditorium/)).length).toBeGreaterThan(0);
+  expect(screen.getByText(/Booking window:/i)).toBeInTheDocument();
+  expect(screen.getByText(/Event date:/i)).toBeInTheDocument();
 });
 });
