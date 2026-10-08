@@ -4,7 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import EventDecisionPanel from '../components/EventDecisionPanel';
 import StatusBadge from '../components/StatusBadge';
-import { ROLES } from '../constants';
+import { LIVE_REFRESH_MS, ROLES } from '../constants';
 
 // Format each saved booking window and submitted date for the event's request list.
 function formatBookingTime(value) {
@@ -43,6 +43,7 @@ export default function EventDetail() {
   const [venueReason, setVenueReason] = useState('');
   const [venueAlternative, setVenueAlternative] = useState('');
   const [error, setError] = useState('');
+  const [coordinatorError, setCoordinatorError] = useState('');
   const [message, setMessage] = useState('');
   const [showClarificationInput, setShowClarificationInput] = useState(false);
   const [clarificationNotes, setClarificationNotes] = useState('');
@@ -67,21 +68,31 @@ export default function EventDetail() {
   }, [id, canViewPlanning]);
 
   useEffect(() => {
-    reload().catch((err) => setError(err.message));
+    const refresh = () => reload().catch((err) => setError(err.message));
+    refresh();
+    const timer = setInterval(refresh, LIVE_REFRESH_MS);
+    return () => clearInterval(timer);
   }, [reload]);
 
   // Runs one button's API call, then shows "Updated." and reloads the page data, or shows the
   // server's error message. Used by every action button, including Approve/Reject venue.
-  async function run(action) {
+  async function run(action, showError = setError) {
     setError('');
+    setCoordinatorError('');
     setMessage('');
     try {
       await action();
       setMessage('Updated.');
       await reload();
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
     }
+  }
+
+  // The coordinator card sits below the fold, so its errors are shown inside the card
+  // rather than in the page-level alert the coordinator would have to scroll up to see.
+  function runCoordinatorAction(action) {
+    return run(action, setCoordinatorError);
   }
 
   if (!event) return <p className="muted">{error || 'Loading event…'}</p>;
@@ -91,6 +102,18 @@ export default function EventDetail() {
   // Venue requests are available during the approved/planning phase, not before approval.
   const canBookVenue = ['APPROVED', 'PLANNING'].includes(event.status);
   const assignedBooking = bookings[0];
+  // SCRUM-5 AC6: mirrors the venue half of the backend's isReadyForSafetyCheck (rejected and
+  // cancelled bookings don't count). Equipment isn't loaded on this page, so the backend still
+  // has the final say and its refusal is shown in the coordinator card.
+  const activeBookings = bookings.filter((booking) => !['REJECTED', 'CANCELLED'].includes(booking.status));
+  const pendingBookings = activeBookings.filter((booking) => booking.status !== 'APPROVED');
+  const venuesReadyForSafetyCheck = activeBookings.length > 0 && pendingBookings.length === 0;
+  let safetyCheckHint = '';
+  if (!activeBookings.length) {
+    safetyCheckHint = 'Request a venue first. Every venue booking must be approved before the safety check.';
+  } else if (pendingBookings.length) {
+    safetyCheckHint = `Waiting for venue approval: ${pendingBookings.length} booking${pendingBookings.length === 1 ? '' : 's'} pending.`;
+  }
 
   return (
     <>
@@ -196,6 +219,7 @@ export default function EventDetail() {
           {isCoordinator && (
             <div className="card stack review-panel">
               <h3>Coordinator {event.status === 'UNDER_REVIEW' ? 'review actions' : 'actions'}</h3>
+              {coordinatorError && <div className="alert" role="alert">{coordinatorError}</div>}
               {event.status === 'SUBMITTED' && (
                 <div className="actions">
                   <button className="btn" onClick={() => run(() => api(`/api/events/${id}/review`, { method: 'POST' }))}>
@@ -232,7 +256,7 @@ export default function EventDetail() {
                     )}
                   </div>
                   <EventDecisionPanel
-                    onDecide={(decision, text) => run(() => api(`/api/events/${id}/decision`, {
+                    onDecide={(decision, text) => runCoordinatorAction(() => api(`/api/events/${id}/decision`, {
                       method: 'POST',
                       body: { decision, reason: text },
                     }))}
@@ -255,7 +279,7 @@ export default function EventDetail() {
                         <button
                           className="btn"
                           disabled={!clarificationNotes.trim()}
-                          onClick={() => run(async () => {
+                          onClick={() => runCoordinatorAction(async () => {
                             await api(`/api/events/${id}/clarification`, {
                               method: 'POST',
                               body: { remarks: clarificationNotes },
@@ -272,13 +296,31 @@ export default function EventDetail() {
                   )}
                 </>
               )}
+              {event.status === 'APPROVED' && (
+                <button className="btn" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'PLANNING' } }))}>
+                  Start planning
+                </button>
+              )}
               {event.status === 'PLANNING' && (
-                <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'CONFIRMED' } }))}>
+                <>
+                  <button
+                    className="btn"
+                    disabled={!venuesReadyForSafetyCheck}
+                    aria-describedby={safetyCheckHint ? 'safety-check-hint' : undefined}
+                    onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'AWAITING_SAFETY_CHECK' } }))}
+                  >
+                    Send to safety check
+                  </button>
+                  {safetyCheckHint && <p className="muted" id="safety-check-hint">{safetyCheckHint}</p>}
+                </>
+              )}
+              {event.status === 'PREPARATION' && (
+                <button className="btn" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'CONFIRMED' } }))}>
                   Confirm event
                 </button>
               )}
               {event.status === 'CONFIRMED' && (
-                <button className="btn secondary" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'COMPLETED' } }))}>
+                <button className="btn secondary" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'COMPLETED' } }))}>
                   Mark completed
                 </button>
               )}

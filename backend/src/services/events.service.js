@@ -6,6 +6,7 @@ const {
   EVENT_DECISION,
   MIN_REJECTION_REASON_LENGTH,
   SIGNIFICANT_FIELDS,
+  BOOKING_STATUS,
 } = require('../constants/statuses');
 const { REJECTION_REASON_MESSAGE } = require('../validators/events.validators');
 const { httpError } = require('../middleware/errorHandler');
@@ -424,21 +425,28 @@ async function openForReview(user, id) {
 }
 
 const DECISION_TARGET_STATUS = {
-  [EVENT_DECISION.APPROVE]: EVENT_STATUS.PLANNING,
+  [EVENT_DECISION.APPROVE]: EVENT_STATUS.APPROVED,
   [EVENT_DECISION.REJECT]: EVENT_STATUS.REJECTED,
+};
+
+// AC2: approving only applies to the initial, already-under-review request.
+// AC4: rejecting is allowed either before (SUBMITTED) or during (UNDER_REVIEW) review.
+const DECISION_EXPECTED_STATUSES = {
+  [EVENT_DECISION.APPROVE]: [EVENT_STATUS.UNDER_REVIEW],
+  [EVENT_DECISION.REJECT]: [EVENT_STATUS.SUBMITTED, EVENT_STATUS.UNDER_REVIEW],
 };
 
 async function decideEvent(user, id, decision, reason) {
   const nextStatus = DECISION_TARGET_STATUS[decision];
   if (!nextStatus) throw httpError(400, 'Decision must be APPROVE or REJECT', 'VALIDATION_ERROR');
-  return changeStatus(user, id, nextStatus, reason, { expectedStatus: EVENT_STATUS.UNDER_REVIEW });
+  return changeStatus(user, id, nextStatus, reason, { expectedStatuses: DECISION_EXPECTED_STATUSES[decision] });
 }
 
 function statusNotification(name, fromStatus, nextStatus, note) {
   if (nextStatus === EVENT_STATUS.REJECTED) {
     return { title: 'Event request rejected', body: `${name} was rejected. Reason: ${note}` };
   }
-  if (fromStatus === EVENT_STATUS.UNDER_REVIEW && nextStatus === EVENT_STATUS.PLANNING) {
+  if (fromStatus === EVENT_STATUS.UNDER_REVIEW && nextStatus === EVENT_STATUS.APPROVED) {
     const comment = note ? ` Coordinator comment: ${note}` : '';
     return { title: 'Event request approved', body: `${name} was approved for planning.${comment}` };
   }
@@ -448,7 +456,7 @@ function statusNotification(name, fromStatus, nextStatus, note) {
   };
 }
 
-async function changeStatus(user, id, nextStatus, reason, { expectedStatus } = {}) {
+async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expectedStatuses } = {}) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only coordinators can change event status', 'FORBIDDEN');
   }
@@ -459,10 +467,11 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus } = {
     throw httpError(403, 'Only the assigned coordinator can update this event', 'FORBIDDEN');
   }
 
-  if (expectedStatus && existing.status !== expectedStatus) {
+  const allowedFrom = expectedStatuses || (expectedStatus ? [expectedStatus] : null);
+  if (allowedFrom && !allowedFrom.includes(existing.status)) {
     throw httpError(
       409,
-      'Only event requests under review can be approved or rejected',
+      'This decision cannot be made in the event’s current status',
       'INVALID_STATUS_TRANSITION'
     );
   }
@@ -474,6 +483,16 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus } = {
     throw httpError(400, REJECTION_REASON_MESSAGE, 'VALIDATION_ERROR', { fields: ['reason'] });
   }
 
+  // SCRUM-5 AC7: the safety check itself belongs to SCRUM-55/56 (not built yet), so this
+  // always refuses for now rather than silently allowing preparation to start unchecked.
+  if (nextStatus === EVENT_STATUS.PREPARATION) {
+    throw httpError(
+      409,
+      'The Safety Officer must approve the safety check before preparation can start',
+      'SAFETY_CHECK_NOT_APPROVED'
+    );
+  }
+
   const patch = {
     status: nextStatus,
     sub_state: null,
@@ -482,6 +501,13 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus } = {
 
   if (nextStatus === EVENT_STATUS.REJECTED) {
     patch.rejection_reason = note;
+  }
+  // SCRUM-5 AC6: every active venue booking approved, and any requested equipment reserved.
+  if (nextStatus === EVENT_STATUS.AWAITING_SAFETY_CHECK) {
+    const ready = await isReadyForSafetyCheck(existing.id);
+    if (!ready.ok) {
+      throw httpError(409, ready.message, 'NOT_READY_FOR_SAFETY_CHECK');
+    }
   }
   if (nextStatus === EVENT_STATUS.CONFIRMED) {
     const ready = await isReadyToConfirm(existing);
@@ -517,6 +543,30 @@ async function isReadyToConfirm(event) {
   if (!booking) {
     return { ok: false, message: 'A venue booking must be approved before confirmation' };
   }
+  return { ok: true };
+}
+
+// Rejected and cancelled bookings are no longer part of the event's arrangements,
+// so they don't count for or against readiness.
+const INACTIVE_BOOKING_STATUSES = [BOOKING_STATUS.REJECTED, BOOKING_STATUS.CANCELLED];
+
+async function isReadyForSafetyCheck(eventId) {
+  const bookings = await fetchMany(
+    supabase.from('venue_bookings').select('status').eq('event_id', eventId)
+  );
+  const activeBookings = bookings.filter((booking) => !INACTIVE_BOOKING_STATUSES.includes(booking.status));
+  if (!activeBookings.length || !activeBookings.every((booking) => booking.status === BOOKING_STATUS.APPROVED)) {
+    return { ok: false, message: 'Every venue booking must be approved before the safety check' };
+  }
+
+  // Equipment requests aren't built yet (SCRUM-47/48); an empty list is vacuously ready.
+  const equipmentRequests = await fetchMany(
+    supabase.from('equipment_requests').select('status').eq('event_id', eventId)
+  );
+  if (!equipmentRequests.every((item) => item.status === 'RESERVED')) {
+    return { ok: false, message: 'All requested equipment must be reserved before the safety check' };
+  }
+
   return { ok: true };
 }
 

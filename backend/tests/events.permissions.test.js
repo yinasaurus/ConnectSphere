@@ -108,7 +108,7 @@ describe('SCUM-13 event ownership and assigned coordinator permissions', () => {
 
   it('allows an assigned coordinator to review', async () => {
     event.status = 'UNDER_REVIEW';
-    await service.changeStatus(coordinator, 3, 'PLANNING');
+    await service.changeStatus(coordinator, 3, 'APPROVED');
     expect(db.updateById).toHaveBeenCalled();
   });
 
