@@ -123,6 +123,13 @@ function isInternalEventReader(user) {
   ].some((role) => hasRole(user, role));
 }
 
+/**
+ * Purpose: decide whether this user may read this event row. Coordinators (and
+ * other internal staff) may view events they are not assigned to.
+ * AC: SCRUM-54 AC6
+ * Business rule: W4 — Coordinators can view other events but not edit them.
+ * Inputs: user, raw event row. Output: boolean. Failure: false means getEvent 404s.
+ */
 function canViewEvent(user, row) {
   if (isInternalEventReader(user)) {
     return true;
@@ -136,6 +143,11 @@ function canViewEvent(user, row) {
   return false;
 }
 
+/**
+ * Purpose: true when the user may see internal planning fields (history, remarks).
+ * AC: SCRUM-54 AC6 — Coordinators, Leads and Safety Officers are planning readers.
+ * Inputs: user. Output: boolean.
+ */
 function canViewPlanning(user) {
   return [
     ROLES.EVENT_ORGANISER,
@@ -164,6 +176,11 @@ async function assertPlanningAccess(user, eventId) {
   return getEvent(user, eventId);
 }
 
+/**
+ * Purpose: constrain the events list query to rows this role is allowed to see.
+ * AC: SCRUM-54 AC6 — internal staff (including Coordinators) are not filtered by assignment.
+ * Inputs: Supabase query, user. Output: the same query or a tighter filter.
+ */
 function applyVisibility(query, user) {
   if (isInternalEventReader(user)) {
     return query;
