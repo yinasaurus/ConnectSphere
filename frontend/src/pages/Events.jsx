@@ -9,14 +9,16 @@ export default function Events() {
   const { hasRole } = useAuth();
   const [events, setEvents] = useState([]);
   const [status, setStatus] = useState('');
+  const [subState, setSubState] = useState('');
   const [q, setQ] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (status) params.set('status', status);
+    if (subState) params.set('subState', subState);
     if (q) params.set('q', q);
     api(`/api/events?${params.toString()}`).then((data) => setEvents(data.events || []));
-  }, [status, q]);
+  }, [status, subState, q]);
 
   return (
     <>
@@ -32,8 +34,21 @@ export default function Events() {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="actions">
           <input placeholder="Search name or purpose" value={q} onChange={(e) => setQ(e.target.value)} />
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+          <select
+            value={subState === 'ACTION_REQUIRED' ? 'ACTION_REQUIRED' : status}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === 'ACTION_REQUIRED') {
+                setStatus('UNDER_REVIEW');
+                setSubState('ACTION_REQUIRED');
+              } else {
+                setStatus(val);
+                setSubState('');
+              }
+            }}
+          >
             <option value="">All statuses</option>
+            <option value="ACTION_REQUIRED">Needs Attention (Clarification Requested)</option>
             {Object.keys(STATUS_LABELS).map((key) => (
               <option key={key} value={key}>{STATUS_LABELS[key]}</option>
             ))}
@@ -42,8 +57,18 @@ export default function Events() {
       </div>
       <div className="cards">
         {events.map((event) => (
-          <Link key={event.id} to={`/app/events/${event.id}`} className="card" style={{ textDecoration: 'none' }}>
-            <StatusBadge status={event.status} />
+          <Link
+            key={event.id}
+            to={`/app/events/${event.id}`}
+            className={`card ${event.subState === 'ACTION_REQUIRED' ? 'attention-card' : ''}`}
+            style={{ textDecoration: 'none' }}
+          >
+            <div className="row-between" style={{ marginBottom: 6 }}>
+              <StatusBadge status={event.status} subState={event.subState} />
+              {event.subState === 'ACTION_REQUIRED' && (
+                <span style={{ fontSize: '0.8rem', color: '#92400e', fontWeight: 600 }}>Action Required</span>
+              )}
+            </div>
             <h3>{event.name}</h3>
             <p className="muted">{event.organisationName || 'ConnectSphere'} · {event.category}</p>
             <p>{event.startAt ? new Date(event.startAt).toLocaleString() : 'Dates to be confirmed'}</p>

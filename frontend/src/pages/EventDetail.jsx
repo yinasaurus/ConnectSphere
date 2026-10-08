@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import EventDecisionPanel from '../components/EventDecisionPanel';
@@ -31,6 +31,20 @@ function BookingStatusBadge({ status }) {
   );
 }
 
+// Format each saved booking window and submitted date for the event's request list.
+function formatBookingTime(value) {
+  return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatSubmittedDate(value) {
+  return new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+// Show API status constants as readable labels in the event's booking card.
+function formatBookingStatus(status) {
+  return status ? `${status[0]}${status.slice(1).toLowerCase()}` : 'Unknown';
+}
+
 /**
  * Purpose: one event's page. Shows the event and, depending on the user's roles, the actions
  * they can take: Organisers submit, Coordinators review and request a venue, Venue Staff
@@ -42,21 +56,25 @@ function BookingStatusBadge({ status }) {
  */
 export default function EventDetail() {
   const { id } = useParams();
+  const location = useLocation();
   const { user, hasRole } = useAuth();
   const canViewPlanning = hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT);
   const [event, setEvent] = useState(null);
   const [history, setHistory] = useState([]);
   const [comments, setComments] = useState([]);
-  const [venues, setVenues] = useState([]);
+  const [, setVenues] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [comment, setComment] = useState('');
-  const [venueId, setVenueId] = useState('');
   const [reason, setReason] = useState('');
   // Per-booking reason/alternative state for Venue Staff (keyed by booking id).
   const [venueReasons, setVenueReasons] = useState({});
   const [venueAlternatives, setVenueAlternatives] = useState({});
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [showClarificationInput, setShowClarificationInput] = useState(false);
+  const [clarificationNotes, setClarificationNotes] = useState('');
+  const [showRespondForm, setShowRespondForm] = useState(false);
+  const [clarificationReply, setClarificationReply] = useState('');
 
   // Loads the event, its venue bookings and, for planning roles only, history, comments and
   // venues; other roles never request planning data they aren't allowed to see.
@@ -95,8 +113,10 @@ export default function EventDetail() {
 
   if (!event) return <p className="muted">{error || 'Loading event…'}</p>;
 
-  const isOrganiser = event.organiserId === user.id;
-  const isCoordinator = event.coordinatorId === user.id;
+  const isOrganiser = event.organiserId === user?.id;
+  const isCoordinator = event.coordinatorId === user?.id;
+  // Venue requests are available during the approved/planning phase, not before approval.
+  const canBookVenue = ['APPROVED', 'PLANNING'].includes(event.status);
   // SCRUM-18 AC9: there may be several bookings; pending ones are each decided independently.
   const pendingBookings = bookings.filter((b) => b.status === 'PENDING');
 
@@ -108,10 +128,17 @@ export default function EventDetail() {
           <h1>{event.name}</h1>
           <p>{event.purpose}</p>
         </div>
-        <StatusBadge status={event.status} />
+        <StatusBadge status={event.status} subState={event.subState} />
       </div>
       {error && <div className="alert">{error}</div>}
-      {message && <div className="alert success">{message}</div>}
+      {/* Keep the submitted-request confirmation visible after returning from booking. */}
+      {(message || location.state?.venueBookingSubmitted) && (
+        <div className="alert success" role="status">
+          {location.state?.venueBookingSubmitted
+            ? 'Venue booking request submitted. Venue Staff will review it as Pending.'
+            : message}
+        </div>
+      )}
 
       <div className="grid-2">
         <div className="stack">
@@ -136,16 +163,135 @@ export default function EventDetail() {
             </div>
           )}
 
+          {isOrganiser && event.status === 'UNDER_REVIEW' && event.subState === 'ACTION_REQUIRED' && (
+            <div className="card attention-card stack">
+              <div className="row-between">
+                <h3 style={{ margin: 0, color: '#92400e' }}>Action Required: Clarification Requested</h3>
+                <StatusBadge status={event.status} subState={event.subState} />
+              </div>
+              <p>The event coordinator has reviewed your request and needs additional details or amendments before moving to planning.</p>
+              <div className="alert warning" style={{ whiteSpace: 'pre-wrap', margin: '4px 0 12px' }}>
+                <strong>Coordinator review remarks:</strong>
+                <p style={{ marginTop: 4 }}>{event.reviewRemarks}</p>
+              </div>
+              <div className="actions">
+                <Link className="btn" to={`/app/events/${id}/edit`}>Edit & Amend Details</Link>
+                <button className="btn secondary" onClick={() => setShowRespondForm(!showRespondForm)}>
+                  {showRespondForm ? 'Close Response Form' : 'Send Clarification Response'}
+                </button>
+              </div>
+
+              {showRespondForm && (
+                <div className="stack" style={{ marginTop: 12, padding: 12, background: 'var(--paper)', borderRadius: 12 }}>
+                  <label><strong>Your response / clarification notes</strong></label>
+                  <textarea
+                    value={clarificationReply}
+                    onChange={(e) => setClarificationReply(e.target.value)}
+                    placeholder="Describe the changes made or answer the coordinator's questions..."
+                  />
+                  <div className="actions">
+                    <button
+                      className="btn"
+                      disabled={!clarificationReply.trim()}
+                      onClick={() => run(async () => {
+                        await api(`/api/events/${id}/clarification/respond`, {
+                          method: 'POST',
+                          body: { response: clarificationReply },
+                        });
+                        setClarificationReply('');
+                        setShowRespondForm(false);
+                      })}
+                    >
+                      Submit Response
+                    </button>
+                    <button className="btn ghost" onClick={() => setShowRespondForm(false)}>Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isOrganiser && event.status === 'UNDER_REVIEW' && event.subState === 'CLARIFICATION_PROVIDED' && (
+            <div className="card alert info stack">
+              <strong>Clarification Provided</strong>
+              <p>Your clarification notes have been submitted to the coordinator for evaluation.</p>
+              {event.clarificationResponse && (
+                <p className="muted" style={{ fontSize: '0.88rem' }}><strong>Your note:</strong> {event.clarificationResponse}</p>
+              )}
+            </div>
+          )}
+
           {isCoordinator && (
-            <div className="card stack">
-              <h3>Coordinator actions</h3>
+            <div className="card stack review-panel">
+              <h3>Coordinator {event.status === 'UNDER_REVIEW' ? 'review actions' : 'actions'}</h3>
               {event.status === 'UNDER_REVIEW' && (
-                <EventDecisionPanel
-                  onDecide={(decision, text) => run(() => api(`/api/events/${id}/decision`, {
-                    method: 'POST',
-                    body: { decision, reason: text },
-                  }))}
-                />
+                <>
+                  <div style={{ padding: '8px 12px', background: 'var(--paper)', borderRadius: 10, fontSize: '0.9rem' }}>
+                    <p style={{ margin: '0 0 4px' }}>
+                      <strong>Current review phase:</strong>{' '}
+                      <StatusBadge status={event.status} subState={event.subState} />
+                    </p>
+                    {event.reviewRemarks && (
+                      <p style={{ margin: '4px 0' }} className="muted">
+                        <strong>Requested clarification:</strong> {event.reviewRemarks}
+                      </p>
+                    )}
+                    {event.clarificationResponse && (
+                      <p style={{ margin: '4px 0', color: '#075985' }}>
+                        <strong>Organizer response:</strong> {event.clarificationResponse}
+                      </p>
+                    )}
+                    {history.some((item) => item.note?.startsWith('Clarification ')) && (
+                      <div style={{ marginTop: 8 }}>
+                        <p style={{ margin: '0 0 4px' }}><strong>Clarification history</strong></p>
+                        {history.filter((item) => item.note?.startsWith('Clarification ')).map((item) => (
+                          <p key={item.id} className="muted" style={{ margin: '2px 0', fontSize: '0.88rem' }}>
+                            {item.actor_name ? `${item.actor_name}: ` : ''}{item.note}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <EventDecisionPanel
+                    onDecide={(decision, text) => run(() => api(`/api/events/${id}/decision`, {
+                      method: 'POST',
+                      body: { decision, reason: text },
+                    }))}
+                  />
+                  <div className="actions">
+                    <button className="btn secondary" onClick={() => setShowClarificationInput(!showClarificationInput)}>
+                      {event.subState === 'ACTION_REQUIRED' ? 'Update Clarification' : 'Request Clarification / Amendments'}
+                    </button>
+                  </div>
+
+                  {showClarificationInput && (
+                    <div className="stack" style={{ marginTop: 8, padding: 12, background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 12 }}>
+                      <label style={{ margin: 0 }}><strong>Review remarks / requested amendments *</strong></label>
+                      <textarea
+                        value={clarificationNotes}
+                        onChange={(e) => setClarificationNotes(e.target.value)}
+                        placeholder="State incomplete details or amendments needed from the organizer..."
+                      />
+                      <div className="actions">
+                        <button
+                          className="btn"
+                          disabled={!clarificationNotes.trim()}
+                          onClick={() => run(async () => {
+                            await api(`/api/events/${id}/clarification`, {
+                              method: 'POST',
+                              body: { remarks: clarificationNotes },
+                            });
+                            setClarificationNotes('');
+                            setShowClarificationInput(false);
+                          })}
+                        >
+                          Send Clarification Request
+                        </button>
+                        <button className="btn ghost" onClick={() => setShowClarificationInput(false)}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
               {event.status === 'PLANNING' && (
                 <button className="btn" onClick={() => run(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'CONFIRMED' } }))}>
@@ -163,39 +309,11 @@ export default function EventDetail() {
                   <textarea value={reason} onChange={(e) => setReason(e.target.value)} />
                 </>
               )}
-              {event.status === 'PLANNING' && (
-                <>
-                  <label>Request a venue</label>
-                  <select value={venueId} onChange={(e) => setVenueId(e.target.value)}>
-                    <option value="">Select venue</option>
-                    {venues.map((venue) => (
-                      <option key={venue.id} value={venue.id}>
-                        {venue.name} · cap {venue.capacity}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="btn secondary"
-                    disabled={!venueId || !event.startAt}
-                    onClick={() => run(() => api('/api/venues/bookings', {
-                      method: 'POST',
-                      body: {
-                        eventId: Number(id),
-                        venueId: Number(venueId),
-                        startAt: event.startAt,
-                        endAt: event.endAt,
-                      },
-                    }))}
-                  >
-                    Send booking request
-                  </button>
-                </>
-              )}
             </div>
           )}
 
-          {/* SCRUM-18 AC3/AC9: Venue Staff see every pending booking for this event
-              and can approve/reject each one independently.
+          {/* SCRUM-18 AC2/AC3/AC9: Venue Staff see every pending booking for this event
+              with event, venue, date, and time, and can approve/reject each one independently.
               SCRUM-78 AC2/AC3: what staff type goes into the Coordinator's notice. */}
           {hasRole(ROLES.VENUE_STAFF) && pendingBookings.length > 0 && (
             <div className="card stack">
@@ -203,9 +321,22 @@ export default function EventDetail() {
               {pendingBookings.map((booking) => (
                 <div key={booking.id} style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 14, marginTop: 14 }}>
                   <p style={{ fontWeight: 600, marginBottom: 4 }}>
+                    {event.name && <span style={{ marginRight: 6 }}>{event.name} —</span>}
                     {booking.venue_name || `Venue #${booking.venue_id}`}
                     <BookingStatusBadge status={booking.status} />
                   </p>
+                  <p className="muted" style={{ margin: '3px 0', fontSize: '0.88rem' }}>
+                    <strong>Booking window:</strong>{' '}
+                    {booking.start_at && booking.end_at
+                      ? `${new Date(booking.start_at).toLocaleString()} – ${new Date(booking.end_at).toLocaleString()}`
+                      : 'TBC'}
+                  </p>
+                  {event.startAt && (
+                    <p className="muted" style={{ margin: '3px 0', fontSize: '0.88rem' }}>
+                      <strong>Event date:</strong>{' '}
+                      {`${new Date(event.startAt).toLocaleString()} – ${new Date(event.endAt).toLocaleString()}`}
+                    </p>
+                  )}
                   <label htmlFor={`venue-decision-reason-${booking.id}`}>Reason for rejecting (optional)</label>
                   <textarea
                     id={`venue-decision-reason-${booking.id}`}
@@ -285,15 +416,28 @@ export default function EventDetail() {
           <div className="card">
             <h3>Venue bookings</h3>
             {bookings.length ? bookings.map((booking) => (
-              <div key={booking.id} style={{ marginBottom: 10 }}>
-                <p style={{ margin: '2px 0' }}>
-                  <span style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 }}>
-                    {booking.venue_name || `Venue #${booking.venue_id}`}: {booking.status}
-                  </span>
-                  <strong>{booking.venue_name || `Venue #${booking.venue_id}`}</strong>
-                  <BookingStatusBadge status={booking.status} />
+              <div className="venue-request-row" key={booking.id} style={{ marginBottom: 10 }}>
+                <div className="row-between">
+                  <p style={{ margin: '2px 0' }}>
+                    <span style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 }}>
+                      {booking.venue_name || `Venue #${booking.venue_id}`}: {booking.status}
+                    </span>
+                    <strong>{booking.venue_name || `Venue #${booking.venue_id}`}</strong>
+                    <BookingStatusBadge status={booking.status} />
+                  </p>
+                  <span className={`booking-status ${booking.status}`}>{formatBookingStatus(booking.status)}</span>
+                </div>
+                <p className="muted" style={{ margin: '2px 0', fontSize: '0.85rem' }}>
+                  {booking.start_at && booking.end_at
+                    ? `Occupied ${formatBookingTime(
+                      new Date(new Date(booking.start_at).getTime() - Number(booking.setup_minutes || 0) * 60_000)
+                    )} to ${formatBookingTime(
+                      new Date(new Date(booking.end_at).getTime() + Number(booking.teardown_minutes || 0) * 60_000)
+                    )}`
+                    : 'Occupied window unavailable'}
+                  {booking.created_at && ` · Submitted ${formatSubmittedDate(booking.created_at)}`}
                 </p>
-                {/* SCRUM-18 AC8: Coordinator sees the rejection reason and suggested alternative. */}
+                {/* SCRUM-18 AC7: Coordinator sees the rejection reason and suggested alternative. */}
                 {booking.status === 'REJECTED' && booking.decision_reason && (
                   <p style={{ margin: '2px 0', fontSize: '0.88rem', color: '#ef4444' }}>
                     Reason: {booking.decision_reason}
@@ -312,6 +456,10 @@ export default function EventDetail() {
                 )}
               </div>
             )) : <p className="muted">No booking yet. Essential arrangements must be approved before confirmation.</p>}
+            {/* A coordinator may create independent requests for the same event. */}
+            {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && canBookVenue && (
+              <Link className="btn venue-book-link" to={`/app/events/${id}/venue-booking`}>Book a venue</Link>
+            )}
           </div>
 
           {canViewPlanning && <div className="card">
@@ -320,6 +468,11 @@ export default function EventDetail() {
               <p key={item.id}>
                 {item.from_status || '—'} → {item.to_status}
                 <span className="muted"> · {item.actor_name}</span>
+                {item.note && (
+                  <span className="muted" style={{ display: 'block', marginTop: 2 }}>
+                    {item.note}
+                  </span>
+                )}
               </p>
             ))}
             {!history.length && <p className="muted">No transitions yet.</p>}

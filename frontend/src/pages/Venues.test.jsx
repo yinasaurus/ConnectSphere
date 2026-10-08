@@ -60,6 +60,22 @@ function mockDatabaseApi({ validateUpdate = false } = {}) {
       return { bookings: clone(database.bookings) };
     }
 
+    const decisionMatch = path.match(/^\/api\/venues\/bookings\/(\d+)\/decision$/);
+    if (decisionMatch && options.method === 'POST') {
+      const bookingId = Number(decisionMatch[1]);
+      const booking = database.bookings.find((item) => item.id === bookingId);
+      if (booking) {
+        booking.status = options.body.approve ? 'APPROVED' : 'REJECTED';
+        booking.decision_reason = options.body.reason || null;
+        booking.alternative_suggestion = options.body.alternativeSuggestion || null;
+      }
+      return { booking: clone(booking) };
+    }
+
+    if (path.startsWith('/api/venues/search')) {
+      return { venues: clone(database.venues) };
+    }
+
     const updateMatch = path.match(/^\/api\/venues\/(\d+)$/);
     if (updateMatch && options.method === 'PATCH') {
       if (validateUpdate) {
@@ -419,5 +435,288 @@ describe('Venues page inputs', () => {
     expect(screen.queryByRole('heading', { name: 'Update venue' })).not.toBeInTheDocument();
     expect(api).not.toHaveBeenCalledWith('/api/venues/1', expect.anything());
     expect(database.venues[0].name).toBe('Helix Hall');
+  });
+});
+
+const SEARCH_RESULT_VENUE = {
+  id: 1,
+  name: 'Helix Hall',
+  location: 'ConnectSphere Campus, Level 2',
+  capacity: 180,
+  facilities: 'Projector, lecture capture, hearing loop, stage',
+  accessibility: 'Wheelchair access, accessible washrooms, lift',
+  operatingHours: '08:00-22:00',
+  setupMinutes: 45,
+  teardownMinutes: 30,
+  layouts: ['THEATRE', 'CLASSROOM'],
+};
+
+function mockSearchApi(searchResponse) {
+  api.mockImplementation(async (path) => {
+    if (path === '/api/venues') return { venues: [] };
+    if (path === '/api/venues/bookings') return { bookings: [] };
+    if (path.startsWith('/api/venues/search')) return searchResponse;
+    throw new Error(`Unexpected call: ${path}`);
+  });
+}
+
+describe('SCUM-24 venue search results', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useAuth.mockReturnValue({ hasRole: () => false });
+  });
+
+  /*
+   * AC:       SCUM-24 AC1-AC4
+   * Scenario: Coordinator runs a search and reads a result card
+   * Setup:    Search returns Helix Hall with facilities, accessibility and layouts
+   * Expected: The card shows name, location, capacity, facilities, accessibility and layout pills
+   * Type:     normal
+   */
+  it('shows name, location, capacity, facilities, accessibility and layouts for each result', async () => {
+    mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
+    render(<Venues />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+
+    expect(await screen.findByText('Helix Hall')).toBeInTheDocument();
+    expect(screen.getByText('ConnectSphere Campus, Level 2')).toBeInTheDocument();
+    expect(screen.getByText('Capacity 180')).toBeInTheDocument();
+    expect(screen.getByText('Facilities: Projector, lecture capture, hearing loop, stage')).toBeInTheDocument();
+    expect(screen.getByText('Accessibility: Wheelchair access, accessible washrooms, lift')).toBeInTheDocument();
+    expect(screen.getByText('THEATRE', { selector: '.pill' })).toBeInTheDocument();
+    expect(screen.getByText('CLASSROOM', { selector: '.pill' })).toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCUM-24 AC5
+   * Scenario: Coordinator opens and closes extra details on a result
+   * Setup:    Search returns Helix Hall; they click View details then Close
+   * Expected: Operating hours and setup/turnaround appear, then disappear
+   * Type:     normal
+   */
+  it('lets the coordinator select a result to view more details, and close it again', async () => {
+    mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
+    render(<Venues />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'View details' }));
+
+    expect(await screen.findByText('Operating hours: 08:00-22:00')).toBeInTheDocument();
+    expect(screen.getByText('Setup time: 45 min · Turnaround time: 30 min')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByText('Operating hours: 08:00-22:00')).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCUM-24 (empty results)
+   * Scenario: Search matches nothing
+   * Setup:    Search API returns an empty list
+   * Expected: "No venues match your selected filters."
+   * Type:     boundary
+   */
+  it('shows a clear message when no venue matches', async () => {
+    mockSearchApi({ venues: [] });
+    render(<Venues />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+
+    expect(await screen.findByText('No venues match your selected filters.')).toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCUM-24 AC6
+   * Scenario: A second search returns updated catalogue data
+   * Setup:    First search capacity 180, second search capacity 200
+   * Expected: The page shows 200 and not 180
+   * Type:     normal
+   */
+  it('always renders whatever the latest search response says, not a stale previous one', async () => {
+    mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
+    render(<Venues />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+    expect(await screen.findByText('Capacity 180')).toBeInTheDocument();
+
+    mockSearchApi({ venues: [{ ...SEARCH_RESULT_VENUE, capacity: 200 }] });
+    await userEvent.click(screen.getByRole('button', { name: 'Search venues' }));
+
+    expect(await screen.findByText('Capacity 200')).toBeInTheDocument();
+    expect(screen.queryByText('Capacity 180')).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCUM-24 AC5
+   * Scenario: Coordinator had details open and runs a new search
+   * Setup:    View details is open, then Search venues is clicked again
+   * Expected: The detail panel closes
+   * Type:     boundary
+   */
+  it('clears the selected venue detail panel when a new search is run', async () => {
+    mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
+    render(<Venues />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'View details' }));
+    expect(await screen.findByText('Operating hours: 08:00-22:00')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search venues' }));
+    expect(screen.queryByText('Operating hours: 08:00-22:00')).not.toBeInTheDocument();
+  });
+});
+
+describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
+  const pending1 = {
+    id: 101,
+    event_id: 50,
+    venue_id: 1,
+    status: 'PENDING',
+    event_name: 'Tech Symposium',
+    venue_name: 'Innovation Hall',
+    start_at: '2026-10-20T09:00:00.000Z',
+    end_at: '2026-10-20T12:00:00.000Z',
+    event_start_at: '2026-10-20T08:00:00.000Z',
+    event_end_at: '2026-10-20T18:00:00.000Z',
+  };
+
+  const pending2 = {
+    id: 102,
+    event_id: 51,
+    venue_id: 1,
+    status: 'PENDING',
+    event_name: 'Design Workshop',
+    venue_name: 'Innovation Hall',
+    start_at: '2026-10-21T14:00:00.000Z',
+    end_at: '2026-10-21T17:00:00.000Z',
+    event_start_at: '2026-10-21T13:00:00.000Z',
+    event_end_at: '2026-10-21T18:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    database.venues = [{
+      id: 1,
+      name: 'Innovation Hall',
+      location: 'Level 2',
+      capacity: 100,
+      facilities: 'Projector',
+      accessibility: 'Ramp',
+      operatingHours: '08:00 - 22:00',
+      setupMinutes: 30,
+      teardownMinutes: 30,
+      isActive: true,
+      layouts: ['THEATRE'],
+      layoutDetails: [{ id: 10, venue_id: 1, layout: 'THEATRE' }],
+    }];
+    database.bookings = [clone(pending1), clone(pending2)];
+    useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
+    api.mockReset();
+    mockDatabaseApi();
+  });
+
+  /*
+   * AC:       SCRUM-18 AC1 & AC2
+   * Scenario: Venue Staff views pending booking queue
+   * Setup:    Signed in as Venue Staff with two pending bookings
+   * Expected: Pending list shows event name, venue name, booking window, and event date for each request
+   * Type:     normal
+   */
+  it('US18-UI01 (AC1+AC2): pending queue shows event, venue, date and time for each booking', async () => {
+    renderVenues();
+
+    expect(await screen.findByTestId('pending-booking-101')).toBeInTheDocument();
+    expect(screen.getByText(/Pending approval/)).toBeInTheDocument();
+    expect(screen.getByText('Tech Symposium')).toBeInTheDocument();
+    expect(screen.getByText('Design Workshop')).toBeInTheDocument();
+
+    const card101 = screen.getByTestId('pending-booking-101');
+    expect(within(card101).getByText('Tech Symposium')).toBeInTheDocument();
+    expect(within(card101).getByText('Innovation Hall')).toBeInTheDocument();
+    expect(within(card101).getByText(/Booking window:/i)).toBeInTheDocument();
+    expect(within(card101).getByText(/Event date:/i)).toBeInTheDocument();
+
+    const card102 = screen.getByTestId('pending-booking-102');
+    expect(within(card102).getByText('Design Workshop')).toBeInTheDocument();
+    expect(within(card102).getByText('Innovation Hall')).toBeInTheDocument();
+    expect(within(card102).getByText(/Booking window:/i)).toBeInTheDocument();
+    expect(within(card102).getByText(/Event date:/i)).toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCRUM-18 AC3, AC5 & AC9
+   * Scenario: Venue Staff approves a pending booking
+   * Setup:    Two pending bookings (101 and 102) in database
+   * Expected: Clicking Approve on booking 101 sends decision to endpoint for booking 101 only; booking 102 remains pending
+   * Type:     normal
+   */
+  it('US18-UI02 (AC3+AC5+AC9): approving booking 101 hits decision endpoint for 101 only and keeps 102 pending', async () => {
+    const user = userEvent.setup();
+    renderVenues();
+
+    expect(await screen.findByTestId('pending-booking-101')).toBeInTheDocument();
+    expect(screen.getByTestId('pending-booking-102')).toBeInTheDocument();
+
+    const card101 = screen.getByTestId('pending-booking-101');
+    const approveBtn101 = within(card101).getByRole('button', { name: 'Approve' });
+    await user.click(approveBtn101);
+
+    await waitFor(() => {
+      const decisionCalls = api.mock.calls.filter(([path]) => path.includes('/decision'));
+      expect(decisionCalls).toHaveLength(1);
+      expect(decisionCalls[0][0]).toBe('/api/venues/bookings/101/decision');
+      expect(decisionCalls[0][1].body).toEqual({
+        approve: true,
+        reason: undefined,
+        alternativeSuggestion: undefined,
+      });
+    });
+
+    // Booking 101 is now approved and moved to decided bookings table
+    await waitFor(() => {
+      expect(screen.queryByTestId('pending-booking-101')).not.toBeInTheDocument();
+    });
+    // Booking 102 remains in pending queue
+    expect(screen.getByTestId('pending-booking-102')).toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCRUM-18 AC3, AC4, AC5 & AC9
+   * Scenario: Venue Staff rejects a pending booking with reason and suggested alternative
+   * Setup:    Two pending bookings (101 and 102) in database
+   * Expected: Typing reason and alternative in card 102 and clicking Reject sends decision to endpoint for 102 only
+   * Type:     normal
+   */
+  it('US18-UI03 (AC3+AC4+AC9): rejecting booking 102 sends reason and alternative for 102 only', async () => {
+    const user = userEvent.setup();
+    renderVenues();
+
+    expect(await screen.findByTestId('pending-booking-102')).toBeInTheDocument();
+    const card102 = screen.getByTestId('pending-booking-102');
+
+    const reasonInput = within(card102).getByPlaceholderText('Explain why the booking is rejected, if applicable');
+    const altInput = within(card102).getByPlaceholderText('e.g. Orchid Room on the same date');
+    const rejectBtn = within(card102).getByRole('button', { name: 'Reject' });
+
+    await user.type(reasonInput, 'Maintenance scheduled on lighting rig');
+    await user.type(altInput, 'Seminar Room 3');
+    await user.click(rejectBtn);
+
+    await waitFor(() => {
+      const decisionCalls = api.mock.calls.filter(([path]) => path.includes('/decision'));
+      expect(decisionCalls).toHaveLength(1);
+      expect(decisionCalls[0][0]).toBe('/api/venues/bookings/102/decision');
+      expect(decisionCalls[0][1].body).toEqual({
+        approve: false,
+        reason: 'Maintenance scheduled on lighting rig',
+        alternativeSuggestion: 'Seminar Room 3',
+      });
+    });
+
+    // Booking 102 is removed from pending queue
+    await waitFor(() => {
+      expect(screen.queryByTestId('pending-booking-102')).not.toBeInTheDocument();
+    });
+    // Booking 101 remains untouched in pending queue
+    expect(screen.getByTestId('pending-booking-101')).toBeInTheDocument();
   });
 });
