@@ -368,15 +368,14 @@ async function submitEvent(user, id) {
 
   const coordinatorId = existing.coordinator_id || await assignCoordinator();
   await updateById('events', id, {
-    status: EVENT_STATUS.UNDER_REVIEW,
-    sub_state: EVENT_SUB_STATE.IN_REVIEW,
+    status: EVENT_STATUS.SUBMITTED,
     review_remarks: null,
     coordinator_id: coordinatorId,
     rejection_reason: null,
     updated_at: new Date().toISOString(),
   });
 
-  await writeStatusHistory(id, user.id, existing.status, EVENT_STATUS.UNDER_REVIEW, 'Submitted for review');
+  await writeStatusHistory(id, user.id, existing.status, EVENT_STATUS.SUBMITTED, 'Submitted for review');
   await writeAudit(user.id, 'EVENT_SUBMITTED', 'event', id, { coordinatorId });
   await notifyUser(
     coordinatorId,
@@ -385,6 +384,41 @@ async function submitEvent(user, id) {
     `${existing.name} is waiting for review.`,
     id
   );
+
+  return getEvent(user, id);
+}
+
+// SCRUM-64: the assigned coordinator opens a Submitted request, moving it into
+// Under Review. Idempotent when the request is already Under Review (AC5).
+async function openForReview(user, id) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
+    throw httpError(403, 'Only event coordinators can open requests for review', 'FORBIDDEN');
+  }
+
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+
+  if (!existing.coordinator_id) {
+    throw httpError(409, 'This request has not been assigned to a coordinator yet', 'NOT_ASSIGNED');
+  }
+  if (existing.coordinator_id !== user.id) {
+    throw httpError(403, 'Only the assigned coordinator can open this request for review', 'FORBIDDEN');
+  }
+
+  if (existing.status === EVENT_STATUS.UNDER_REVIEW) {
+    return getEvent(user, id);
+  }
+
+  assertTransition(existing.status, EVENT_STATUS.UNDER_REVIEW);
+
+  await updateById('events', id, {
+    status: EVENT_STATUS.UNDER_REVIEW,
+    sub_state: EVENT_SUB_STATE.IN_REVIEW,
+    updated_at: new Date().toISOString(),
+  });
+
+  await writeStatusHistory(id, user.id, existing.status, EVENT_STATUS.UNDER_REVIEW, 'Opened for review');
+  await writeAudit(user.id, 'EVENT_OPENED_FOR_REVIEW', 'event', id, {});
 
   return getEvent(user, id);
 }
@@ -718,6 +752,7 @@ module.exports = {
   createEvent,
   updateEvent,
   submitEvent,
+  openForReview,
   decideEvent,
   changeStatus,
   requestClarification,

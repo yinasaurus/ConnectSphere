@@ -429,6 +429,7 @@ function mockEvent({ coordinatorId, status = 'UNDER_REVIEW', rejectionReason = n
       if (decisionError) throw new Error(decisionError);
       return { event: {} };
     }
+    if (path === '/api/events/3/review') return { event: {} };
     if (path === '/api/events/3/history') return { history: [] };
     if (path === '/api/comments/3') return { comments: [] };
     if (path === '/api/venues') return { venues: [] };
@@ -511,6 +512,41 @@ it('US17-F16: the organiser sees the rejection reason on a rejected event', asyn
   renderEvent();
   expect(await screen.findByText('Attendance numbers are missing')).toBeInTheDocument();
   expect(screen.getByText('Rejection reason:')).toBeInTheDocument();
+});
+
+/*
+ * SCRUM-64: a Submitted request has no reviewable status until its assigned
+ * coordinator opens it. These check the button appears only for that coordinator
+ * and wires to the right endpoint.
+ */
+
+// AC1 + AC6 · The assigned coordinator sees an "Open for review" button on a
+// Submitted request, and it calls the review endpoint.
+it('US64-F01: the assigned coordinator opens a submitted request for review', async () => {
+  useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
+  mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
+  renderEvent();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Open for review' }));
+  expect(api).toHaveBeenCalledWith('/api/events/3/review', { method: 'POST' });
+});
+
+// AC3 · A coordinator who isn't assigned to this request (id 9) never sees the button,
+// even though they can still view the event for planning purposes.
+it('US64-F02: an unrelated coordinator does not see the Open for review button', async () => {
+  useAuth.mockReturnValue({ user: { id: 9 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
+  mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
+  renderEvent();
+  expect(await screen.findByText('Review me')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Open for review' })).not.toBeInTheDocument();
+});
+
+// AC6 · The organiser never sees the coordinator-only button on their own request.
+it('US64-F03: the organiser does not see the Open for review button', async () => {
+  mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
+  renderEvent();
+  expect(await screen.findByText('Review me')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Open for review' })).not.toBeInTheDocument();
 });
 
 /*
