@@ -37,6 +37,9 @@ All demo passwords: `Password123!`
 | organiser@apex.example | Event Organiser (Apex) — cannot see Acme events |
 | coordinator@connectsphere.sg | Event Coordinator |
 | coordinator2@connectsphere.sg | Event Coordinator (for load-balanced assignment) |
+| lead@connectsphere.sg | Event Coordinator Lead |
+| leadcoord@connectsphere.sg | Event Coordinator **and** Lead |
+| safety@connectsphere.sg | Safety Officer |
 | venue@connectsphere.sg | Venue Staff |
 | tech@connectsphere.sg | Technical Support |
 | hybrid@connectsphere.sg | Coordinator **and** Venue Staff |

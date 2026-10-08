@@ -68,6 +68,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Confirmed fields are locked (date/time/attendance/venue/equipment) | `SIGNIFICANT_FIELDS` |
 | Coordinators are **auto-assigned**, one per event, fair load | least active events on submit |
 | Coordinators can **view** other events but only **edit** assigned ones | list vs update |
+| Lead and Safety Officer are first-class roles (SCRUM-54): login returns every held role; only a Lead can open the unassigned queue or assignment overview; only a Safety Officer can open or record a safety check; a Coordinator who is not assigned cannot edit/approve/reject/confirm (403 with no extra event body) | `roles.js`, `access.service`, `requireRole`, Event Coordinator assignment checks |
 | Reassignment: current coordinator requests, new coordinator accepts | `/reassign` endpoints |
 | Approve / reject (SCRUM-17): only the **assigned** coordinator decides, nobody while unassigned; reject needs a reason of 10–1000 characters; organiser is notified with the reason; reason kept on the event, in status history and in the audit log | `POST /api/events/:id/decision` → `decideEvent` |
 | Organisers only see their **organisation** | list visibility |
