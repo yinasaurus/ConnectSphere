@@ -48,13 +48,6 @@ describe('SCRUM-54 safety check page', () => {
   });
 
   /*
-   * AC: SCRUM-54 AC4, AC7
-   * Scenario: A blocked user hits the safety-check page (for example after a stale session).
-   * Setup: GET 403 with a message and no safetyCheck body.
-   * Expected: The refusal is shown and the event name is not rendered from the error.
-   * Type: error
-   */
-  /*
    * AC: SCRUM-54 AC4
    * Scenario: Opening succeeds but recording is refused by the server.
    * Setup: GET returns the check; POST returns 403.
@@ -77,6 +70,13 @@ describe('SCRUM-54 safety check page', () => {
     expect(await screen.findByText('You do not have access to this action')).toBeInTheDocument();
   });
 
+  /*
+   * AC: SCRUM-54 AC4, AC7
+   * Scenario: A blocked user hits the safety-check page (for example after a stale session).
+   * Setup: GET 403 with a message and no safetyCheck body.
+   * Expected: The refusal is shown and the event name is not rendered from the error.
+   * Type: error
+   */
   it('shows the refusal and no extra event details when opening a safety check is blocked', async () => {
     const err = new Error('You do not have access to this action');
     err.status = 403;
