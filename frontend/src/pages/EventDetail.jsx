@@ -23,9 +23,9 @@ function formatBookingStatus(status) {
 /**
  * Purpose: one event's page. Shows the event and, depending on the user's roles, the actions
  * they can take: Organisers submit, Coordinators review and request a venue, Venue Staff
- * approve or reject the pending venue booking, Attendees register.
- * AC: SCRUM-78 AC1-AC3 (the Venue Staff decision card sends the reason and alternative
- * staff typed, or none). The other sections belong to earlier stories.
+ * approve or reject the pending venue booking, Attendees register, Lead assigns a Coordinator
+ * on a Submitted event that has none.
+ * AC: SCRUM-71 AC1, AC2, AC6 (Lead assign card). SCRUM-78 AC1-AC3 (Venue Staff decision card).
  * Failure: load errors are shown in place of the event; action errors are shown above it.
  */
 export default function EventDetail() {
@@ -59,7 +59,7 @@ export default function EventDetail() {
   const [clarificationReply, setClarificationReply] = useState('');
 
   // Loads the event, its venue bookings and, for planning roles only, history, comments and
-  // venues; other roles never request planning data they aren't allowed to see.
+  // venues. A Lead also loads the active-Coordinator list when this event is still unassigned.
   const reload = useCallback(async () => {
     const [eventRes, historyRes, commentRes, venueRes, bookingRes] = await Promise.all([
       api(`/api/events/${id}`),
