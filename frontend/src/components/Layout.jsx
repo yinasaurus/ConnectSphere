@@ -2,6 +2,12 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { ROLE_LABELS, ROLES } from '../constants';
 
+/**
+ * Purpose: signed-in chrome: nav links limited to roles the session holds, and
+ * role pills so Lead / Safety Officer identity is visible after login.
+ * AC: SCRUM-54 AC1 (role labels), AC2 (hybrid accounts see every function they hold),
+ *     AC3 (Unassigned queue / Assignments only for Lead).
+ */
 export default function Layout() {
   const { user, logout, hasRole } = useAuth();
   const location = useLocation();
@@ -30,6 +36,8 @@ export default function Layout() {
           <NavLink to="/app/events">Events</NavLink>
           {hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR) && <NavLink to="/app/events/new">New request</NavLink>}
           {hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR) && <NavLink to="/app/drafts">My drafts</NavLink>}
+          {hasRole(ROLES.EVENT_COORDINATOR_LEAD) && <NavLink to="/app/events/unassigned">Unassigned queue</NavLink>}
+          {hasRole(ROLES.EVENT_COORDINATOR_LEAD) && <NavLink to="/app/assignments">Assignments</NavLink>}
           <NavLink to="/app/calendar">Calendar</NavLink>
           {hasRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF) && (
             <NavLink to="/app/venues">Venues</NavLink>

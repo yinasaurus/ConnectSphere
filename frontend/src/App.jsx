@@ -14,10 +14,18 @@ import Venues from './pages/Venues';
 import Equipment from './pages/Equipment';
 import Notifications from './pages/Notifications';
 import Profile from './pages/Profile';
+import UnassignedQueue from './pages/UnassignedQueue';
+import AssignmentOverview from './pages/AssignmentOverview';
+import SafetyCheck from './pages/SafetyCheck';
 import { ROLES } from './constants';
 
 const requestRoles = [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR];
 
+/**
+ * Purpose: app routes, including Lead-only queue/overview and Safety Officer-only
+ * safety-check screens. Hybrid accounts pass each guard for a role they hold.
+ * AC: SCRUM-54 AC2, AC3, AC4
+ */
 export default function App() {
   return (
     <AuthProvider>
@@ -37,8 +45,13 @@ export default function App() {
             <Route path="events/new" element={<ProtectedRoute allowedRoles={requestRoles}><NewEvent /></ProtectedRoute>} />
             <Route path="events/:id/edit" element={<ProtectedRoute allowedRoles={requestRoles}><NewEvent /></ProtectedRoute>} />
             <Route path="drafts" element={<ProtectedRoute allowedRoles={requestRoles}><Drafts /></ProtectedRoute>} />
+            {/* SCRUM-54 AC3: Unassigned queue and assignment overview are Lead-only. */}
+            <Route path="events/unassigned" element={<ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR_LEAD]}><UnassignedQueue /></ProtectedRoute>} />
+            <Route path="assignments" element={<ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR_LEAD]}><AssignmentOverview /></ProtectedRoute>} />
             {/* Keep booking requests scoped to an event and available only to coordinators. */}
             <Route path="events/:id/venue-booking" element={<ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR]}><VenueBooking /></ProtectedRoute>} />
+            {/* SCRUM-54 AC4: opening or recording a safety check is Safety Officer only. */}
+            <Route path="events/:id/safety-check" element={<ProtectedRoute allowedRoles={[ROLES.SAFETY_OFFICER]}><SafetyCheck /></ProtectedRoute>} />
             <Route path="events/:id" element={<EventDetail />} />
             <Route path="calendar" element={<CalendarPage />} />
             <Route
