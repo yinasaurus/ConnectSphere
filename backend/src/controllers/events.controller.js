@@ -18,6 +18,26 @@ const list = asyncHandler(async (req, res) => {
   res.json({ events });
 });
 
+/**
+ * Purpose: HTTP entry for the Lead's unassigned queue (Submitted, no Coordinator).
+ * AC: SCRUM-65 AC1, AC2, AC3, AC4
+ * Business rule: W7 #5 — the Lead sees basic event information before assigning (SCRUM-71).
+ * Inputs: authenticated Lead (route is also requireRole Lead; SCRUM-54 AC3 owns the access tests).
+ * Outputs: `{ events }` with name, organiser, date/time, attendance, venue and equipment needs.
+ * Failure: 403 if the caller is not a Lead; 401 with no session.
+ */
+const listUnassignedQueue = asyncHandler(async (req, res) => {
+  const events = await eventsService.listUnassignedQueue(req.user);
+  res.json({ events });
+});
+
+/**
+ * Purpose: return one event the caller may see, including a queued request opened by the Lead.
+ * AC: SCRUM-65 AC5
+ * Inputs: authenticated user, event id in the path
+ * Outputs: `{ event }` with full planning details for the Lead
+ * Failure: 404 if missing or not visible
+ */
 const get = asyncHandler(async (req, res) => {
   const event = await eventsService.getEvent(req.user, req.params.id);
   res.json({ event });
@@ -110,6 +130,7 @@ const respondClarification = asyncHandler(async (req, res) => {
 
 module.exports = {
   list,
+  listUnassignedQueue,
   get,
   venueBookings,
   create,

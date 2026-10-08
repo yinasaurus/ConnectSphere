@@ -106,8 +106,15 @@ function mapEvent(row) {
   };
 }
 
+/**
+ * Purpose: decide whether this user may open the event at all.
+ * AC: SCRUM-65 AC5 — the Lead can open a queued request to see its full details.
+ * Inputs: user, raw event row. Outputs: true if visible.
+ * Failure: getEvent treats false as 404 so we do not leak that the row exists.
+ */
 function canViewEvent(user, row) {
   if (hasRole(user, ROLES.EVENT_COORDINATOR)
+    || hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)
     || hasRole(user, ROLES.VENUE_STAFF)
     || hasRole(user, ROLES.TECHNICAL_SUPPORT)) {
     return true;
@@ -121,9 +128,20 @@ function canViewEvent(user, row) {
   return false;
 }
 
+/**
+ * Purpose: planning fields (organiser, attendance, venue/equipment needs, history)
+ * vs the attendee-safe subset.
+ * AC: SCRUM-65 AC4, AC5 — the Lead needs those planning fields on the queue and the detail page.
+ * Inputs: user. Outputs: true for internal planning roles including the Lead.
+ */
 function canViewPlanning(user) {
-  return [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT]
-    .some((role) => hasRole(user, role));
+  return [
+    ROLES.EVENT_ORGANISER,
+    ROLES.EVENT_COORDINATOR,
+    ROLES.EVENT_COORDINATOR_LEAD,
+    ROLES.VENUE_STAFF,
+    ROLES.TECHNICAL_SUPPORT,
+  ].some((role) => hasRole(user, role));
 }
 
 function visibleEvent(user, row) {
@@ -143,8 +161,15 @@ async function assertPlanningAccess(user, eventId) {
   return getEvent(user, eventId);
 }
 
+/**
+ * Purpose: list-query scope. Internal staff and the Lead see every organisation.
+ * AC: SCRUM-65 AC1 — the Lead's queue is not limited to one organiser's organisation.
+ * Inputs: a Supabase query and the caller. Outputs: the same query, possibly filtered.
+ * Failure: unknown roles get an impossible id filter (empty list), not an error.
+ */
 function applyVisibility(query, user) {
   if (hasRole(user, ROLES.EVENT_COORDINATOR)
+    || hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)
     || hasRole(user, ROLES.VENUE_STAFF)
     || hasRole(user, ROLES.TECHNICAL_SUPPORT)) {
     return query;
@@ -194,9 +219,10 @@ async function listEvents(user, filters = {}) {
 
 /**
  * Purpose: load one event the caller is allowed to see.
- * AC: SCRUM-28 AC1, AC2 — used after submit so the organiser sees Submitted and no Coordinator.
+ * AC: SCRUM-28 AC1, AC2 — organiser sees Submitted and no Coordinator after submit.
+ * AC: SCRUM-65 AC5 — the Lead can open any queued request's full details.
  * Inputs: user, event id
- * Outputs: mapped event
+ * Outputs: mapped event (planning fields for the Lead)
  * Failure: 404 if missing or the user cannot view it
  */
 async function getEvent(user, id) {
@@ -393,6 +419,35 @@ function isInUnassignedQueue(event) {
     ? event.coordinatorId
     : event.coordinator_id;
   return status === EVENT_STATUS.SUBMITTED && coordinatorId == null;
+}
+
+/**
+ * Purpose: show the Lead every Submitted request that still has no Coordinator,
+ * with the basic fields needed to choose someone (W7 #5).
+ * AC: SCRUM-65 AC1, AC2, AC3, AC4
+ * Business rule: W7 #5 — the Lead sees the unassigned queue before assigning (SCRUM-71).
+ * Inputs: authenticated Lead. Output: mapped events (name, organiser, times, attendance, venue/equipment needs).
+ * Failure: 403 if the caller is not a Lead. Assigned and Draft rows are never returned.
+ */
+async function listUnassignedQueue(user) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)) {
+    throw httpError(403, 'Only an Event Coordinator Lead can open the unassigned queue', 'FORBIDDEN');
+  }
+
+  const rows = await fetchMany(
+    supabase
+      .from('events')
+      .select(EVENT_SELECT)
+      .eq('status', EVENT_STATUS.SUBMITTED)
+      .is('coordinator_id', null)
+      .order('start_at', { ascending: true })
+  );
+
+  // SQL already asks for Submitted + null coordinator; filter again so AC1–AC3
+  // still hold if extra rows leak through (including in unit tests).
+  return rows
+    .filter((row) => isInUnassignedQueue(row))
+    .map((row) => visibleEvent(user, row));
 }
 
 /**
@@ -763,4 +818,5 @@ module.exports = {
   listHistory,
   findMissingSubmissionFields,
   isInUnassignedQueue,
+  listUnassignedQueue,
 };

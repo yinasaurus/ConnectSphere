@@ -11,6 +11,15 @@ const router = express.Router();
 router.use(requireAuth);
 
 router.get('/', controller.list);
+/**
+ * Purpose: Lead-only list of Submitted requests with no Coordinator.
+ * AC: SCRUM-65 AC1–AC4. Registered before `/:id` so "unassigned-queue" is not parsed as an id.
+ */
+router.get(
+  '/unassigned-queue',
+  requireRole(ROLES.EVENT_COORDINATOR_LEAD),
+  controller.listUnassignedQueue
+);
 router.post('/', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.create);
 router.get('/:id', controller.get);
 router.get('/:id/venue-bookings', controller.venueBookings);
