@@ -360,6 +360,30 @@ describe('SCRUM-71 POST /api/events/:id/assign-coordinator (route)', () => {
   });
 
   /*
+   * AC: SCRUM-71 AC2
+   * Scenario: Lead assigns through HTTP but the chosen Coordinator account is inactive.
+   * Setup: Session is Lead. Event 3 is Submitted and unassigned. Candidate 9 exists with is_active false.
+   * Expected: 409. updateById is not called, so the event stays unassigned.
+   * Type: error
+   */
+  it('US71-R07: assigning an inactive Coordinator through the API leaves the event unchanged', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce({ id: 11, is_active: true })
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce({ id: 9, full_name: 'Inactive', is_active: false });
+    db.fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_COORDINATOR_LEAD }]);
+
+    const res = await request(app)
+      .post('/api/events/3/assign-coordinator')
+      .set('Cookie', `${env.sessionCookieName}=${token}`)
+      .send({ coordinatorId: 9 });
+
+    expect(res.status).toBe(409);
+    expect(db.updateById).not.toHaveBeenCalled();
+    expect(event.coordinator_id).toBeNull();
+  });
+
+  /*
    * AC: SCRUM-71 AC6
    * Scenario: Non-Lead roles hit the route's requireRole check.
    * Setup: Session loads with each non-Lead role. Event is otherwise assignable.
