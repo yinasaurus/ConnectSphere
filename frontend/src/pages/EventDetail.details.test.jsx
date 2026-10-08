@@ -90,7 +90,8 @@ describe('SCRUM-39 event details on the event page', () => {
     expect(screen.getByText('Attendance:').parentElement).toHaveTextContent('Attendance: 120');
     expect(screen.getByText('Venue needs:').parentElement).toHaveTextContent('Venue needs: Theatre layout, stage');
     expect(screen.getByText('Equipment:').parentElement).toHaveTextContent('Equipment: 2 projectors, 4 wireless mics');
-    expect(screen.getByText('Helix Hall: APPROVED')).toBeInTheDocument();
+    expect(screen.getByText('Helix Hall')).toBeInTheDocument();
+    expect(screen.getByText('Approved')).toBeInTheDocument();
     expect(screen.getByText('Projector × 2: PENDING')).toBeInTheDocument();
     expect(api).toHaveBeenCalledWith('/api/events/3/equipment-requests');
   });
@@ -164,7 +165,8 @@ describe('SCRUM-39 event details on the event page', () => {
     renderAs('EVENT_COORDINATOR');
     expect(await screen.findByText('Leadership Forum')).toBeInTheDocument();
     expect(screen.getByText('Attendance:').parentElement).toHaveTextContent('Attendance: 120');
-    expect(screen.getByText('Helix Hall: APPROVED')).toBeInTheDocument();
+    expect(screen.getByText('Helix Hall')).toBeInTheDocument();
+    expect(screen.getByText('Approved')).toBeInTheDocument();
     expect(screen.getByText('Equipment requests could not be loaded: Server unavailable')).toBeInTheDocument();
     // An empty list here would wrongly tell staff that no equipment is needed.
     expect(screen.queryByText('No equipment requested yet.')).not.toBeInTheDocument();

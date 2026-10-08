@@ -233,7 +233,10 @@ describe('SCRUM-39 GET /api/events/:id/venue-bookings (venue, AC2)', () => {
     fetchMany.mockResolvedValueOnce([{ id: 7, event_id: 3, venue_id: 8, status: 'APPROVED', venues: { name: 'Helix Hall' } }]);
     const res = await get('/api/events/3/venue-bookings');
     expect(res.status).toBe(200);
-    expect(res.body.bookings).toEqual([{ id: 7, event_id: 3, venue_id: 8, status: 'APPROVED', venue_name: 'Helix Hall' }]);
+    expect(res.body.bookings).toEqual([{
+      id: 7, event_id: 3, venue_id: 8, status: 'APPROVED', venue_name: 'Helix Hall',
+      venue_details: { capacity: undefined, facilities: undefined, accessibility: undefined, layouts: [] },
+    }]);
     expect(chain.eq).toHaveBeenCalledWith('event_id', 3);
   });
 
@@ -251,7 +254,9 @@ describe('SCRUM-39 GET /api/events/:id/venue-bookings (venue, AC2)', () => {
     fetchMany.mockResolvedValueOnce([{ id: 9, event_id: 3, venue_id: 8, status: 'PENDING', venues: null }]);
     const res = await get('/api/events/3/venue-bookings');
     expect(res.status).toBe(200);
-    expect(res.body.bookings).toEqual([{ id: 9, event_id: 3, venue_id: 8, status: 'PENDING', venue_name: null }]);
+    expect(res.body.bookings).toEqual([{
+      id: 9, event_id: 3, venue_id: 8, status: 'PENDING', venue_name: null, venue_details: null,
+    }]);
   });
 });
 

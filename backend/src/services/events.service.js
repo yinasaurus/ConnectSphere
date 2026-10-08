@@ -1,9 +1,17 @@
 const { supabase, fetchOne, fetchMany, fetchCount, insertOne, updateById } = require('../config/db');
 const { ROLES } = require('../constants/roles');
-const { EVENT_STATUS, SIGNIFICANT_FIELDS } = require('../constants/statuses');
+const {
+  EVENT_STATUS,
+  EVENT_SUB_STATE,
+  EVENT_DECISION,
+  MIN_REJECTION_REASON_LENGTH,
+  SIGNIFICANT_FIELDS,
+  BOOKING_STATUS,
+} = require('../constants/statuses');
+const { REJECTION_REASON_MESSAGE } = require('../validators/events.validators');
 const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
-const { assertTransition } = require('../domain/statusMachine');
+const { assertTransition, assertSubStateTransition } = require('../domain/statusMachine');
 const { writeAudit, notifyUser } = require('./audit.service');
 
 const EVENT_SELECT = `
@@ -40,6 +48,24 @@ function findMissingSubmissionFields(row) {
   });
 }
 
+// Guards against events like "starts 6 Oct, ends 5 Oct" that are never valid,
+// whichever of create/update set the dates. Skipped when either side is
+// absent (e.g. a draft saved before its dates are filled in, SCUM-15).
+function validateDateRange(startAt, endAt) {
+  if (startAt === null || startAt === undefined || endAt === null || endAt === undefined) return;
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+  if (start >= end) {
+    throw httpError(
+      400,
+      'Event start date/time must be before the end date/time',
+      'VALIDATION_ERROR',
+      { fields: ['startAt', 'endAt'] }
+    );
+  }
+}
+
 /**
  * Purpose: turns an events row (snake_case, with joined organisation/organiser/coordinator
  * names) into the camelCase event the API returns.
@@ -61,6 +87,9 @@ function mapEvent(row) {
     purpose: row.purpose,
     category: row.category,
     status: row.status,
+    subState: row.sub_state || null,
+    reviewRemarks: row.review_remarks || null,
+    clarificationResponse: row.clarification_response || null,
     startAt: row.start_at,
     endAt: row.end_at,
     expectedAttendance: row.expected_attendance,
@@ -168,6 +197,7 @@ async function listEvents(user, filters = {}) {
   );
 
   if (filters.status) query = query.eq('status', filters.status);
+  if (filters.subState) query = query.eq('sub_state', filters.subState);
   if (filters.q) {
     const term = String(filters.q).replace(/[,()%]/g, '');
     if (term) query = query.or(`name.ilike.%${term}%,purpose.ilike.%${term}%`);
@@ -203,9 +233,11 @@ async function listVenueBookings(user, eventId) {
   // Reuse event visibility before querying bookings, including client isolation.
   const event = await getEvent(user, eventId);
   let query = supabase.from('venue_bookings')
-      .select('id, event_id, venue_id, status, venues ( name )')
+      // Return saved timing values so each event request can show its own occupied window.
+      // Include venue capabilities so suitability remains assessable for inactive historical venues.
+      .select('id, event_id, venue_id, status, start_at, end_at, setup_minutes, teardown_minutes, created_at, venues ( name, capacity, facilities, accessibility, venue_layouts ( layout ) )')
       .eq('event_id', event.id)
-      .order('start_at');
+      .order('created_at', { ascending: false });
   if (!canViewPlanning(user)) query = query.eq('status', 'APPROVED');
   const rows = await fetchMany(query);
   // Event readers need booking status, not internal notes or decision metadata.
@@ -214,7 +246,20 @@ async function listVenueBookings(user, eventId) {
     event_id: row.event_id,
     venue_id: row.venue_id,
     status: row.status,
+    // Expose only the fields needed to display request dates and occupied windows.
+    start_at: row.start_at,
+    end_at: row.end_at,
+    setup_minutes: row.setup_minutes,
+    teardown_minutes: row.teardown_minutes,
+    created_at: row.created_at,
     venue_name: row.venues?.name || null,
+    // Return only catalogue attributes needed to assess this request's venue independently.
+    venue_details: row.venues ? {
+      capacity: row.venues.capacity,
+      facilities: row.venues.facilities,
+      accessibility: row.venues.accessibility,
+      layouts: (row.venues.venue_layouts || []).map((layout) => layout.layout),
+    } : null,
   }));
 }
 
@@ -256,6 +301,8 @@ async function createEvent(user, payload) {
   const name = (payload.name || '').trim();
   if (!name) throw httpError(400, 'Event name is required', 'VALIDATION_ERROR');
 
+  validateDateRange(payload.startAt, payload.endAt);
+
   const created = await insertOne('events', {
     organisation_id: user.organisationId || payload.organisationId || null,
     organiser_id: hasRole(user, ROLES.EVENT_ORGANISER) ? user.id : payload.organiserId || user.id,
@@ -289,7 +336,10 @@ async function updateEvent(user, id, payload) {
   const isAssignedCoordinator = existing.coordinator_id === user.id
     && hasRole(user, ROLES.EVENT_COORDINATOR);
 
-  if (existing.status !== EVENT_STATUS.DRAFT && isOrganiser && !isAssignedCoordinator) {
+  const canOrganiserEdit = existing.status === EVENT_STATUS.DRAFT
+    || (existing.status === EVENT_STATUS.UNDER_REVIEW && existing.sub_state === EVENT_SUB_STATE.ACTION_REQUIRED);
+
+  if (!canOrganiserEdit && isOrganiser && !isAssignedCoordinator) {
     throw httpError(
       409,
       'After submission, organisers request changes through the assigned coordinator',
@@ -317,6 +367,10 @@ async function updateEvent(user, id, payload) {
   }
 
   const patch = toEventPatch(payload);
+  const nextStart = 'start_at' in patch ? patch.start_at : existing.start_at;
+  const nextEnd = 'end_at' in patch ? patch.end_at : existing.end_at;
+  validateDateRange(nextStart, nextEnd);
+
   patch.updated_at = new Date().toISOString();
   await updateById('events', id, patch);
   await writeAudit(user.id, 'EVENT_UPDATED', 'event', id, payload);
@@ -342,9 +396,6 @@ function toEventPatch(payload) {
     registrationClosesAt: 'registration_closes_at',
     registrationCapacity: 'registration_capacity',
     registrationOpen: 'registration_open',
-    operationalNotes: 'operational_notes',
-    venueReady: 'venue_ready',
-    equipmentReady: 'equipment_ready',
   };
 
   const dateFields = new Set(['start_at', 'end_at', 'registration_opens_at', 'registration_closes_at']);
@@ -393,13 +444,14 @@ async function submitEvent(user, id) {
 
   const coordinatorId = existing.coordinator_id || await assignCoordinator();
   await updateById('events', id, {
-    status: EVENT_STATUS.UNDER_REVIEW,
+    status: EVENT_STATUS.SUBMITTED,
+    review_remarks: null,
     coordinator_id: coordinatorId,
     rejection_reason: null,
     updated_at: new Date().toISOString(),
   });
 
-  await writeStatusHistory(id, user.id, existing.status, EVENT_STATUS.UNDER_REVIEW, 'Submitted for review');
+  await writeStatusHistory(id, user.id, existing.status, EVENT_STATUS.SUBMITTED, 'Submitted for review');
   await writeAudit(user.id, 'EVENT_SUBMITTED', 'event', id, { coordinatorId });
   await notifyUser(
     coordinatorId,
@@ -412,7 +464,74 @@ async function submitEvent(user, id) {
   return getEvent(user, id);
 }
 
-async function changeStatus(user, id, nextStatus, reason) {
+// SCRUM-64: the assigned coordinator opens a Submitted request, moving it into
+// Under Review. Idempotent when the request is already Under Review (AC5).
+async function openForReview(user, id) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
+    throw httpError(403, 'Only event coordinators can open requests for review', 'FORBIDDEN');
+  }
+
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+
+  if (!existing.coordinator_id) {
+    throw httpError(409, 'This request has not been assigned to a coordinator yet', 'NOT_ASSIGNED');
+  }
+  if (existing.coordinator_id !== user.id) {
+    throw httpError(403, 'Only the assigned coordinator can open this request for review', 'FORBIDDEN');
+  }
+
+  if (existing.status === EVENT_STATUS.UNDER_REVIEW) {
+    return getEvent(user, id);
+  }
+
+  assertTransition(existing.status, EVENT_STATUS.UNDER_REVIEW);
+
+  await updateById('events', id, {
+    status: EVENT_STATUS.UNDER_REVIEW,
+    sub_state: EVENT_SUB_STATE.IN_REVIEW,
+    updated_at: new Date().toISOString(),
+  });
+
+  await writeStatusHistory(id, user.id, existing.status, EVENT_STATUS.UNDER_REVIEW, 'Opened for review');
+  await writeAudit(user.id, 'EVENT_OPENED_FOR_REVIEW', 'event', id, {});
+
+  return getEvent(user, id);
+}
+
+const DECISION_TARGET_STATUS = {
+  [EVENT_DECISION.APPROVE]: EVENT_STATUS.APPROVED,
+  [EVENT_DECISION.REJECT]: EVENT_STATUS.REJECTED,
+};
+
+// AC2: approving only applies to the initial, already-under-review request.
+// AC4: rejecting is allowed either before (SUBMITTED) or during (UNDER_REVIEW) review.
+const DECISION_EXPECTED_STATUSES = {
+  [EVENT_DECISION.APPROVE]: [EVENT_STATUS.UNDER_REVIEW],
+  [EVENT_DECISION.REJECT]: [EVENT_STATUS.SUBMITTED, EVENT_STATUS.UNDER_REVIEW],
+};
+
+async function decideEvent(user, id, decision, reason) {
+  const nextStatus = DECISION_TARGET_STATUS[decision];
+  if (!nextStatus) throw httpError(400, 'Decision must be APPROVE or REJECT', 'VALIDATION_ERROR');
+  return changeStatus(user, id, nextStatus, reason, { expectedStatuses: DECISION_EXPECTED_STATUSES[decision] });
+}
+
+function statusNotification(name, fromStatus, nextStatus, note) {
+  if (nextStatus === EVENT_STATUS.REJECTED) {
+    return { title: 'Event request rejected', body: `${name} was rejected. Reason: ${note}` };
+  }
+  if (fromStatus === EVENT_STATUS.UNDER_REVIEW && nextStatus === EVENT_STATUS.APPROVED) {
+    const comment = note ? ` Coordinator comment: ${note}` : '';
+    return { title: 'Event request approved', body: `${name} was approved for planning.${comment}` };
+  }
+  return {
+    title: `Event ${nextStatus.toLowerCase().replace('_', ' ')}`,
+    body: `${name} is now ${nextStatus}.`,
+  };
+}
+
+async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expectedStatuses } = {}) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only coordinators can change event status', 'FORBIDDEN');
   }
@@ -423,15 +542,47 @@ async function changeStatus(user, id, nextStatus, reason) {
     throw httpError(403, 'Only the assigned coordinator can update this event', 'FORBIDDEN');
   }
 
+  const allowedFrom = expectedStatuses || (expectedStatus ? [expectedStatus] : null);
+  if (allowedFrom && !allowedFrom.includes(existing.status)) {
+    throw httpError(
+      409,
+      'This decision cannot be made in the event’s current status',
+      'INVALID_STATUS_TRANSITION'
+    );
+  }
+
   assertTransition(existing.status, nextStatus);
+
+  const note = typeof reason === 'string' ? reason.trim() : '';
+  if (nextStatus === EVENT_STATUS.REJECTED && note.length < MIN_REJECTION_REASON_LENGTH) {
+    throw httpError(400, REJECTION_REASON_MESSAGE, 'VALIDATION_ERROR', { fields: ['reason'] });
+  }
+
+  // SCRUM-5 AC7: the safety check itself belongs to SCRUM-55/56 (not built yet), so this
+  // always refuses for now rather than silently allowing preparation to start unchecked.
+  if (nextStatus === EVENT_STATUS.PREPARATION) {
+    throw httpError(
+      409,
+      'The Safety Officer must approve the safety check before preparation can start',
+      'SAFETY_CHECK_NOT_APPROVED'
+    );
+  }
 
   const patch = {
     status: nextStatus,
+    sub_state: null,
     updated_at: new Date().toISOString(),
   };
 
   if (nextStatus === EVENT_STATUS.REJECTED) {
-    patch.rejection_reason = reason || 'Rejected';
+    patch.rejection_reason = note;
+  }
+  // SCRUM-5 AC6: every active venue booking approved, and any requested equipment reserved.
+  if (nextStatus === EVENT_STATUS.AWAITING_SAFETY_CHECK) {
+    const ready = await isReadyForSafetyCheck(existing.id);
+    if (!ready.ok) {
+      throw httpError(409, ready.message, 'NOT_READY_FOR_SAFETY_CHECK');
+    }
   }
   if (nextStatus === EVENT_STATUS.CONFIRMED) {
     const ready = await isReadyToConfirm(existing);
@@ -441,21 +592,16 @@ async function changeStatus(user, id, nextStatus, reason) {
   }
 
   await updateById('events', id, patch);
-  await writeStatusHistory(id, user.id, existing.status, nextStatus, reason || null);
+  await writeStatusHistory(id, user.id, existing.status, nextStatus, note || null);
   await writeAudit(user.id, 'EVENT_STATUS_CHANGED', 'event', id, {
     from: existing.status,
     to: nextStatus,
-    reason,
+    reason: note || null,
   });
 
   if (existing.organiser_id) {
-    await notifyUser(
-      existing.organiser_id,
-      'EVENT_STATUS_CHANGED',
-      `Event ${nextStatus.toLowerCase().replace('_', ' ')}`,
-      `${existing.name} is now ${nextStatus}.`,
-      id
-    );
+    const { title, body } = statusNotification(existing.name, existing.status, nextStatus, note);
+    await notifyUser(existing.organiser_id, 'EVENT_STATUS_CHANGED', title, body, id);
   }
 
   return getEvent(user, id);
@@ -472,6 +618,30 @@ async function isReadyToConfirm(event) {
   if (!booking) {
     return { ok: false, message: 'A venue booking must be approved before confirmation' };
   }
+  return { ok: true };
+}
+
+// Rejected and cancelled bookings are no longer part of the event's arrangements,
+// so they don't count for or against readiness.
+const INACTIVE_BOOKING_STATUSES = [BOOKING_STATUS.REJECTED, BOOKING_STATUS.CANCELLED];
+
+async function isReadyForSafetyCheck(eventId) {
+  const bookings = await fetchMany(
+    supabase.from('venue_bookings').select('status').eq('event_id', eventId)
+  );
+  const activeBookings = bookings.filter((booking) => !INACTIVE_BOOKING_STATUSES.includes(booking.status));
+  if (!activeBookings.length || !activeBookings.every((booking) => booking.status === BOOKING_STATUS.APPROVED)) {
+    return { ok: false, message: 'Every venue booking must be approved before the safety check' };
+  }
+
+  // Equipment requests aren't built yet (SCRUM-47/48); an empty list is vacuously ready.
+  const equipmentRequests = await fetchMany(
+    supabase.from('equipment_requests').select('status').eq('event_id', eventId)
+  );
+  if (!equipmentRequests.every((item) => item.status === 'RESERVED')) {
+    return { ok: false, message: 'All requested equipment must be reserved before the safety check' };
+  }
+
   return { ok: true };
 }
 
@@ -578,6 +748,127 @@ async function listHistory(user, eventId) {
   }));
 }
 
+async function requestClarification(user, id, remarks) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
+    throw httpError(403, 'Only coordinators can request clarification', 'FORBIDDEN');
+  }
+
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+  if (existing.coordinator_id && existing.coordinator_id !== user.id) {
+    throw httpError(403, 'Only the assigned coordinator can update this event', 'FORBIDDEN');
+  }
+
+  if (existing.status !== EVENT_STATUS.UNDER_REVIEW) {
+    throw httpError(409, 'Clarification can only be requested while the event is under review', 'INVALID_STATUS');
+  }
+
+  const trimmedRemarks = (remarks || '').trim();
+  if (!trimmedRemarks) {
+    throw httpError(400, 'Review remarks are required to request clarification', 'VALIDATION_ERROR');
+  }
+
+  assertSubStateTransition(existing.sub_state, EVENT_SUB_STATE.ACTION_REQUIRED);
+
+  await updateById('events', id, {
+    sub_state: EVENT_SUB_STATE.ACTION_REQUIRED,
+    review_remarks: trimmedRemarks,
+    updated_at: new Date().toISOString(),
+  });
+
+  await writeStatusHistory(id, user.id, EVENT_STATUS.UNDER_REVIEW, EVENT_STATUS.UNDER_REVIEW, `Clarification requested: ${trimmedRemarks}`);
+  await writeAudit(user.id, 'EVENT_CLARIFICATION_REQUESTED', 'event', id, { remarks: trimmedRemarks });
+
+  try {
+    await insertOne('event_comments', {
+      event_id: id,
+      author_id: user.id,
+      body: `[Clarification requested] ${trimmedRemarks}`,
+    });
+  } catch (e) {
+    // Non-blocking
+  }
+
+  if (existing.organiser_id) {
+    await notifyUser(
+      existing.organiser_id,
+      'CLARIFICATION_REQUESTED',
+      'Clarification requested on event',
+      `Coordinator requested clarification for "${existing.name}": ${trimmedRemarks}`,
+      id
+    );
+  }
+
+  return getEvent(user, id);
+}
+
+async function respondClarification(user, id, response, amendments = {}) {
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+
+  const isOrganiser = existing.organiser_id === user.id;
+  if (!isOrganiser) {
+    throw httpError(403, 'Only the event organiser can respond to clarification requests', 'FORBIDDEN');
+  }
+
+  if (existing.status !== EVENT_STATUS.UNDER_REVIEW) {
+    throw httpError(409, 'Clarification can only be responded to while the event is under review', 'INVALID_STATUS');
+  }
+
+  if (existing.sub_state !== EVENT_SUB_STATE.ACTION_REQUIRED) {
+    throw httpError(409, 'No clarification is currently requested for this event', 'INVALID_SUB_STATE');
+  }
+
+  const trimmedResponse = (response || '').trim();
+  const validAmendments = amendments && typeof amendments === 'object'
+    ? Object.fromEntries(Object.entries(amendments).filter(([_, v]) => v !== undefined && v !== ''))
+    : {};
+  const hasAmendments = Object.keys(validAmendments).length > 0;
+
+  if (!trimmedResponse && !hasAmendments) {
+    throw httpError(400, 'Clarification response text or amendments are required', 'VALIDATION_ERROR');
+  }
+
+  assertSubStateTransition(existing.sub_state, EVENT_SUB_STATE.CLARIFICATION_PROVIDED);
+
+  let patch = {};
+  if (hasAmendments) {
+    patch = toEventPatch(validAmendments);
+  }
+
+  patch.sub_state = EVENT_SUB_STATE.CLARIFICATION_PROVIDED;
+  patch.clarification_response = trimmedResponse || 'Amended details submitted';
+  patch.updated_at = new Date().toISOString();
+
+  await updateById('events', id, patch);
+
+  const note = trimmedResponse ? `Clarification responded: ${trimmedResponse}` : 'Clarification responded with amended details';
+  await writeStatusHistory(id, user.id, EVENT_STATUS.UNDER_REVIEW, EVENT_STATUS.UNDER_REVIEW, note);
+  await writeAudit(user.id, 'EVENT_CLARIFICATION_RESPONDED', 'event', id, { response: trimmedResponse, amendments });
+
+  try {
+    await insertOne('event_comments', {
+      event_id: id,
+      author_id: user.id,
+      body: `[Clarification response] ${trimmedResponse || 'Amended event details submitted.'}`,
+    });
+  } catch (e) {
+    // Non-blocking
+  }
+
+  if (existing.coordinator_id) {
+    await notifyUser(
+      existing.coordinator_id,
+      'CLARIFICATION_PROVIDED',
+      'Clarification provided for event',
+      `Organiser responded for "${existing.name}": ${trimmedResponse || 'Updated request details.'}`,
+      id
+    );
+  }
+
+  return getEvent(user, id);
+}
+
 module.exports = {
   listEvents,
   getEvent,
@@ -587,7 +878,11 @@ module.exports = {
   createEvent,
   updateEvent,
   submitEvent,
+  openForReview,
+  decideEvent,
   changeStatus,
+  requestClarification,
+  respondClarification,
   requestCoordinatorChange,
   acceptCoordinatorChange,
   listHistory,
