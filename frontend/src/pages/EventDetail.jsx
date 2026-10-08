@@ -25,14 +25,22 @@ function formatBookingStatus(status) {
  * they can take: Organisers submit, Coordinators review and request a venue, Venue Staff
  * approve or reject the pending venue booking, Attendees register.
  * AC: SCRUM-78 AC1-AC3 (the Venue Staff decision card sends the reason and alternative
- * staff typed, or none). The other sections belong to earlier stories.
+ * staff typed, or none). SCRUM-65 AC5: the Lead can open this page from the unassigned
+ * queue and see the full request details. The other sections belong to earlier stories.
  * Failure: load errors are shown in place of the event; action errors are shown above it.
  */
 export default function EventDetail() {
   const { id } = useParams();
   const location = useLocation();
   const { user, hasRole } = useAuth();
-  const canViewPlanning = hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT);
+  // SCRUM-65 AC5: the Lead needs the same planning fields as other internal staff.
+  const canViewPlanning = hasRole(
+    ROLES.EVENT_ORGANISER,
+    ROLES.EVENT_COORDINATOR,
+    ROLES.EVENT_COORDINATOR_LEAD,
+    ROLES.VENUE_STAFF,
+    ROLES.TECHNICAL_SUPPORT
+  );
   const [event, setEvent] = useState(null);
   const [history, setHistory] = useState([]);
   const [comments, setComments] = useState([]);
