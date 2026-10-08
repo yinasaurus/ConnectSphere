@@ -4,6 +4,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../auth';
 import { api } from '../api';
 import EventDetail from './EventDetail';
+import VenueBooking from './VenueBooking';
+import Layout from '../components/Layout';
+import ProtectedRoute from '../components/ProtectedRoute';
 
 jest.mock('../api', () => ({
   api: jest.fn(),
@@ -317,6 +320,14 @@ beforeEach(() => {
   useAuth.mockReturnValue({ user: { id: 1 }, hasRole: (...roles) => roles.includes('EVENT_ORGANISER') });
 });
 
+/*
+ * AC:       SCRUM-26 AC8 (display of one existing request only)
+ * Scenario: An Event Organiser views their event page containing a previously submitted booking.
+ * Setup:    The event-scoped booking endpoint returns an Approved request for Hall.
+ * Expected: Displays this event's request and status without retrieving the global booking
+ *           queue; this test does not cover multiple requests.
+ * Type:     normal
+ */
 it('loads an organiser event and its booking without requesting the restricted global queue', async () => {
   api.mockImplementation(async (path) => {
     if (path === '/api/events/3') return { event: { id: 3, organiserId: 1, name: 'My event', status: 'PLANNING' } };
@@ -332,9 +343,74 @@ it('loads an organiser event and its booking without requesting the restricted g
     </MemoryRouter>
   );
   expect(await screen.findByText('My event')).toBeInTheDocument();
-  expect(screen.getByText('Hall: APPROVED')).toBeInTheDocument();
+  expect(screen.getByText('Hall')).toBeInTheDocument();
+  expect(screen.getByText('Approved')).toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith('/api/venues/bookings');
 });
+/*
+ * AC:       Not directly covered by SCRUM-26 (event-specific booking-page navigation)
+ * Scenario: An assigned Event Coordinator opens venue booking for an eligible event.
+ * Setup:    The event is Approved or Planning and the application route is protected
+ *           for Event Coordinators.
+ * Expected: Selecting "Book a venue" opens the event-specific booking page, showing the
+ *           event title and a link back to its details.
+ * Type:     normal
+ */
+/* 
+  This integration test verifies that an assigned Event Coordinator can open the
+  venue booking page directly from the Event Details page when an event is in 
+  either the APPROVED or PLANNING state.
+*/
+// Exercise the same protected nested route and layout used by the application.
+it.each(['APPROVED', 'PLANNING'])(
+  'opens the event-specific booking page from an assigned coordinator %s event',
+  async (status) => {
+  const user = userEvent.setup();
+  useAuth.mockReturnValue({
+    user: { id: 2, fullName: 'Event Coordinator', roles: ['EVENT_COORDINATOR'] },
+    hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
+    logout: jest.fn(),
+  });
+  api.mockImplementation(async (path) => {
+    if (path === '/api/events/3') {
+      return {
+        event: {
+          id: 3,
+          coordinatorId: 2,
+          name: 'Course Withdrawal Conference',
+          category: 'SEMINAR',
+          status,
+          startAt: '2026-11-10T10:00:00.000Z',
+          endAt: '2026-11-10T12:00:00.000Z',
+          expectedAttendance: 100,
+          venueRequirements: 'Air con',
+          accessibilityNeeds: 'None',
+        },
+      };
+    }
+    if (path === '/api/events/3/history') return { history: [] };
+    if (path === '/api/comments/3') return { comments: [] };
+    if (path === '/api/venues') return { venues: [] };
+    if (path === '/api/events/3/venue-bookings') return { bookings: [] };
+    throw new Error(`Unexpected ${path}`);
+  });
+  render(
+    <MemoryRouter initialEntries={['/app/events/3']}>
+      <Routes>
+        <Route path="/app" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route path="events/:id/venue-booking" element={<ProtectedRoute allowedRoles={['EVENT_COORDINATOR']}><VenueBooking /></ProtectedRoute>} />
+          <Route path="events/:id" element={<EventDetail />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>
+  );
+
+  await user.click(await screen.findByRole('link', { name: 'Book a venue' }));
+  expect(await screen.findByText('Book a venue for this event')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Course Withdrawal Conference' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '‹ Back to event' })).toHaveAttribute('href', '/app/events/3');
+  }
+);
 
 /*
  * SCRUM-17 page-level tests (US17-F12 to US17-F16).
@@ -437,6 +513,15 @@ it('US17-F16: the organiser sees the rejection reason on a rejected event', asyn
   expect(screen.getByText('Rejection reason:')).toBeInTheDocument();
 });
 
+/*
+ * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility)
+ * Scenario: An attendee requests an event that has venue booking information.
+ * Setup:    The attendee can access only a confirmed public event and is not a
+ *           Coordinator or Venue Staff member.
+ * Expected: The event page shows its public event and registration information, hides
+ *           staff-only panels, and does not request comments or event status history.
+ * Type:     boundary
+ */
 it('loads an attendee event without requesting restricted planning data', async () => {
   useAuth.mockReturnValue({ user: { id: 8 }, hasRole: (...roles) => roles.includes('ATTENDEE') });
   api.mockImplementation(async (path) => {

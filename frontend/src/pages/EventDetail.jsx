@@ -1,10 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import EventDecisionPanel from '../components/EventDecisionPanel';
 import StatusBadge from '../components/StatusBadge';
 import { ROLES } from '../constants';
+
+// Format each saved booking window and submitted date for the event's request list.
+function formatBookingTime(value) {
+  return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatSubmittedDate(value) {
+  return new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+// Show API status constants as readable labels in the event's booking card.
+function formatBookingStatus(status) {
+  return status ? `${status[0]}${status.slice(1).toLowerCase()}` : 'Unknown';
+}
 
 /**
  * Purpose: one event's page. Shows the event and, depending on the user's roles, the actions
@@ -16,15 +30,15 @@ import { ROLES } from '../constants';
  */
 export default function EventDetail() {
   const { id } = useParams();
+  const location = useLocation();
   const { user, hasRole } = useAuth();
   const canViewPlanning = hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT);
   const [event, setEvent] = useState(null);
   const [history, setHistory] = useState([]);
   const [comments, setComments] = useState([]);
-  const [venues, setVenues] = useState([]);
+  const [, setVenues] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [comment, setComment] = useState('');
-  const [venueId, setVenueId] = useState('');
   const [reason, setReason] = useState('');
   const [venueReason, setVenueReason] = useState('');
   const [venueAlternative, setVenueAlternative] = useState('');
@@ -74,6 +88,8 @@ export default function EventDetail() {
 
   const isOrganiser = event.organiserId === user?.id;
   const isCoordinator = event.coordinatorId === user?.id;
+  // Venue requests are available during the approved/planning phase, not before approval.
+  const canBookVenue = ['APPROVED', 'PLANNING'].includes(event.status);
   const assignedBooking = bookings[0];
 
   return (
@@ -87,7 +103,14 @@ export default function EventDetail() {
         <StatusBadge status={event.status} subState={event.subState} />
       </div>
       {error && <div className="alert">{error}</div>}
-      {message && <div className="alert success">{message}</div>}
+      {/* Keep the submitted-request confirmation visible after returning from booking. */}
+      {(message || location.state?.venueBookingSubmitted) && (
+        <div className="alert success" role="status">
+          {location.state?.venueBookingSubmitted
+            ? 'Venue booking request submitted. Venue Staff will review it as Pending.'
+            : message}
+        </div>
+      )}
 
       <div className="grid-2">
         <div className="stack">
@@ -258,34 +281,6 @@ export default function EventDetail() {
                   <textarea value={reason} onChange={(e) => setReason(e.target.value)} />
                 </>
               )}
-              {event.status === 'PLANNING' && (
-                <>
-                  <label>Request a venue</label>
-                  <select value={venueId} onChange={(e) => setVenueId(e.target.value)}>
-                    <option value="">Select venue</option>
-                    {venues.map((venue) => (
-                      <option key={venue.id} value={venue.id}>
-                        {venue.name} · cap {venue.capacity}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="btn secondary"
-                    disabled={!venueId || !event.startAt}
-                    onClick={() => run(() => api('/api/venues/bookings', {
-                      method: 'POST',
-                      body: {
-                        eventId: Number(id),
-                        venueId: Number(venueId),
-                        startAt: event.startAt,
-                        endAt: event.endAt,
-                      },
-                    }))}
-                  >
-                    Send booking request
-                  </button>
-                </>
-              )}
             </div>
           )}
 
@@ -351,10 +346,30 @@ export default function EventDetail() {
             <p><strong>Coordinator:</strong> {event.coordinatorName || 'Will be auto-assigned on submit'}</p>
           </div>}
           <div className="card">
+            {/* If event has min 1 venue booking, display the bookings */}
             <h3>Venue booking</h3>
             {bookings.length ? bookings.map((booking) => (
-              <p key={booking.id}>{booking.venue_name}: {booking.status}</p>
+              <div className="venue-request-row" key={booking.id}>
+                <div className="row-between">
+                  <strong>{booking.venue_name || 'Venue request'}</strong>
+                  <span className={`booking-status ${booking.status}`}>{formatBookingStatus(booking.status)}</span>
+                </div>
+                <p className="muted">
+                  {booking.start_at && booking.end_at
+                    ? `Occupied ${formatBookingTime(
+                      new Date(new Date(booking.start_at).getTime() - Number(booking.setup_minutes || 0) * 60_000)
+                    )} to ${formatBookingTime(
+                      new Date(new Date(booking.end_at).getTime() + Number(booking.teardown_minutes || 0) * 60_000)
+                    )}`
+                    : 'Occupied window unavailable'}
+                  {booking.created_at && ` · Submitted ${formatSubmittedDate(booking.created_at)}`}
+                </p>
+              </div>
             )) : <p className="muted">No booking yet. Essential arrangements must be approved before confirmation.</p>}
+            {/* A coordinator may create independent requests for the same event. */}
+            {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && canBookVenue && (
+              <Link className="btn venue-book-link" to={`/app/events/${id}/venue-booking`}>Book a venue</Link>
+            )}
           </div>
           {canViewPlanning && <div className="card">
             <h3>Status history</h3>

@@ -329,9 +329,93 @@ input.field-error, select.field-error, textarea.field-error {
   padding: 12px 0;
 }
 
+/* Use the event page's light ConnectSphere palette for the event-scoped booking workflow. */
+.venue-booking-page h1 { margin: 6px 0; }
+.venue-booking-heading { margin-bottom: 18px; }
+.venue-booking-heading p { color: var(--muted); margin: 4px 0; }
+.venue-back-link { display: inline-block; margin: 0 0 14px; }
+.venue-booking-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(280px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.venue-booking-columns h2 {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.08rem;
+  margin: 2px 0 10px;
+}
+.venue-booking-page :focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+.booking-time-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.booking-time-box {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  padding: 14px;
+  background: var(--paper);
+}
+.booking-time-box strong { font-family: Fraunces, Georgia, serif; font-size: 1.18rem; }
+.booking-time-box.occupied { border-color: var(--teal); }
+.booking-footnote { font-size: 0.85rem; margin-bottom: 0; }
+.booking-requirements { margin: 14px 0; }
+.booking-requirements > div {
+  display: grid;
+  grid-template-columns: minmax(105px, 0.8fr) minmax(0, 2fr);
+  gap: 12px;
+  padding: 5px 0;
+}
+.booking-requirements dt { color: var(--muted); }
+.booking-requirements dd { margin: 0; overflow-wrap: anywhere; }
+.booking-warning { color: var(--clay); font-size: 0.88rem; margin-bottom: 0; }
+/* Give suitability the same prominent, accessible visual treatment for selection and request history. */
+.venue-suitability {
+  border: 1px solid;
+  border-radius: 12px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  font-size: 0.88rem;
+}
+.venue-suitability.suitable { background: #d8eee3; border-color: var(--ok); color: var(--ok); }
+.venue-suitability.unsuitable { background: #f7dcdc; border-color: var(--bad); color: var(--bad); }
+.venue-suitability.unavailable { background: #f4f0e7; border-color: var(--line); color: var(--muted); }
+.venue-suitability ul { margin: 6px 0 0; padding-left: 20px; }
+.venue-suitability li + li { margin-top: 3px; }
+.booking-checklist { list-style: none; padding: 0; margin: 12px 0 18px; }
+.booking-checklist li { display: flex; align-items: flex-start; gap: 8px; margin: 9px 0; color: var(--muted); }
+.booking-checklist li.passed { color: var(--teal); }
+.booking-checklist li span { font-weight: 700; }
+.booking-actions { justify-content: flex-end; }
+.venue-request-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.venue-request-row:last-child { border-bottom: 0; }
+.venue-request-row p { font-size: 0.85rem; margin: 5px 0 0; }
+.booking-status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.booking-status.PENDING { background: #fbf0cf; color: var(--warn); }
+.booking-status.APPROVED { background: #d8eee3; color: var(--ok); }
+.booking-status.REJECTED { background: #f7dcdc; color: var(--bad); }
+.venue-book-link { display: inline-block; margin-top: 14px; text-decoration: none; }
+
 @media (max-width: 960px) {
   .auth-shell, .app-shell, .grid-2, .grid-3 { grid-template-columns: 1fr; }
   .sidebar { height: auto; position: static; }
+  /* Keep venue selection focused on its form when the wider app layout collapses. */
+  .venue-booking-shell .sidebar { display: none; }
+  .venue-booking-columns { grid-template-columns: 1fr; }
   .content { padding: 18px; }
   .demo-grid { grid-template-columns: 1fr; }
+}
+
+/* Stack timing and requirement rows on small phones to avoid horizontal overflow. */
+@media (max-width: 560px) {
+  .booking-time-grid { grid-template-columns: 1fr; }
+  .booking-requirements > div { grid-template-columns: 1fr; gap: 2px; }
+  .booking-actions .btn { flex: 1; text-align: center; }
 }
