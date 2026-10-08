@@ -196,6 +196,13 @@ export default function EventDetail() {
           {isCoordinator && (
             <div className="card stack review-panel">
               <h3>Coordinator {event.status === 'UNDER_REVIEW' ? 'review actions' : 'actions'}</h3>
+              {event.status === 'SUBMITTED' && (
+                <div className="actions">
+                  <button className="btn" onClick={() => run(() => api(`/api/events/${id}/review`, { method: 'POST' }))}>
+                    Open for review
+                  </button>
+                </div>
+              )}
               {event.status === 'UNDER_REVIEW' && (
                 <>
                   <div style={{ padding: '8px 12px', background: 'var(--paper)', borderRadius: 10, fontSize: '0.9rem' }}>

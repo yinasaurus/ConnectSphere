@@ -175,11 +175,14 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   // changes are made; rejection is not necessarily final." After a rejection, the organiser
   // can submit again: the event goes back under review and the old reason is cleared.
   it('US17-B13: a rejected request can be resubmitted by the organiser', async () => {
+    // SCRUM-64: submission now rests at SUBMITTED; the assigned coordinator opens it
+    // for review from there (same as a first-time submission), rather than landing
+    // back at UNDER_REVIEW directly.
     event.status = 'REJECTED';
     event.rejection_reason = 'Attendance numbers are missing';
     await service.submitEvent(organiser, 3);
     expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
-      status: 'UNDER_REVIEW', rejection_reason: null,
+      status: 'SUBMITTED', rejection_reason: null,
     }));
   });
 

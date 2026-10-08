@@ -16,6 +16,7 @@ router.get('/:id', controller.get);
 router.get('/:id/venue-bookings', controller.venueBookings);
 router.patch('/:id', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.update);
 router.post('/:id/submit', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.submit);
+router.post('/:id/review', requireRole(ROLES.EVENT_COORDINATOR), controller.openForReview);
 router.post(
   '/:id/decision',
   requireRole(ROLES.EVENT_COORDINATOR),
