@@ -21,11 +21,13 @@ function formatBookingStatus(status) {
 }
 
 /**
- * Purpose: one event's page. Shows the event and, depending on the user's roles, the actions
- * they can take: Organisers submit, Coordinators review and request a venue, Venue Staff
- * approve or reject the pending venue booking, Attendees register.
- * AC: SCRUM-78 AC1-AC3 (the Venue Staff decision card sends the reason and alternative
- * staff typed, or none). The other sections belong to earlier stories.
+ * Purpose: one event's page. Shows its latest details and, depending on the user's roles,
+ * the actions they can take: Organisers submit, Coordinators review and request a venue,
+ * Venue Staff approve or reject the pending venue booking, Attendees register.
+ * AC: SCRUM-39 AC1 + AC2 (the "Request details", "Venue booking" and "Equipment requests"
+ * cards show attendance, date, time, venue and equipment); SCRUM-78 AC1-AC3 (the Venue
+ * Staff decision card sends the reason and alternative staff typed, or none). Other
+ * sections belong to earlier stories.
  * Failure: load errors are shown in place of the event; action errors are shown above it.
  */
 export default function EventDetail() {
@@ -38,6 +40,8 @@ export default function EventDetail() {
   const [comments, setComments] = useState([]);
   const [, setVenues] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [equipmentRequests, setEquipmentRequests] = useState([]);
+  const [equipmentError, setEquipmentError] = useState('');
   const [comment, setComment] = useState('');
   const [reason, setReason] = useState('');
   const [venueReason, setVenueReason] = useState('');
@@ -50,21 +54,30 @@ export default function EventDetail() {
   const [showRespondForm, setShowRespondForm] = useState(false);
   const [clarificationReply, setClarificationReply] = useState('');
 
-  // Loads the event, its venue bookings and, for planning roles only, history, comments and
-  // venues; other roles never request planning data they aren't allowed to see.
+  // Loads the event, its venue bookings and, for planning roles only, history, comments,
+  // venues and equipment requests; other roles never request planning data they aren't
+  // allowed to see.
   const reload = useCallback(async () => {
-    const [eventRes, historyRes, commentRes, venueRes, bookingRes] = await Promise.all([
+    const [eventRes, historyRes, commentRes, venueRes, bookingRes, equipmentRes] = await Promise.all([
       api(`/api/events/${id}`),
       canViewPlanning ? api(`/api/events/${id}/history`) : Promise.resolve({ history: [] }),
       canViewPlanning ? api(`/api/comments/${id}`) : Promise.resolve({ comments: [] }),
       canViewPlanning ? api('/api/venues') : Promise.resolve({ venues: [] }),
       api(`/api/events/${id}/venue-bookings`),
+      // SCRUM-39 AC2: Attendees aren't allowed planning details, so they never ask for this.
+      // SCRUM-39 AC1: a failure here is shown in the equipment card only, so it can't stop
+      // the user from viewing the rest of the event.
+      canViewPlanning
+        ? api(`/api/events/${id}/equipment-requests`).catch((err) => ({ requests: [], loadError: err.message }))
+        : Promise.resolve({ requests: [] }),
     ]);
     setEvent(eventRes.event);
     setHistory(historyRes.history || []);
     setComments(commentRes.comments || []);
     setVenues(venueRes.venues || []);
     setBookings(bookingRes.bookings || []);
+    setEquipmentRequests(equipmentRes.requests || []);
+    setEquipmentError(equipmentRes.loadError || '');
   }, [id, canViewPlanning]);
 
   useEffect(() => {
@@ -420,6 +433,15 @@ export default function EventDetail() {
               <Link className="btn venue-book-link" to={`/app/events/${id}/venue-booking`}>Book a venue</Link>
             )}
           </div>
+          {canViewPlanning && <div className="card">
+            <h3>Equipment requests</h3>
+            {equipmentError ? <p className="alert">Equipment requests could not be loaded: {equipmentError}</p>
+              : equipmentRequests.length ? equipmentRequests.map((item) => (
+              <p key={item.id}>
+                {item.equipment_name || 'Item no longer in catalogue'} × {item.quantity}: {item.status}
+              </p>
+            )) : <p className="muted">No equipment requested yet.</p>}
+          </div>}
           {canViewPlanning && <div className="card">
             <h3>Status history</h3>
             {history.map((item) => (

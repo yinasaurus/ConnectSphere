@@ -76,6 +76,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Reassignment: current coordinator requests, new coordinator accepts | `/reassign` endpoints |
 | Approve / reject (SCRUM-17): only the **assigned** coordinator decides, nobody while unassigned; reject needs a reason of 10–1000 characters; organiser is notified with the reason; reason kept on the event, in status history and in the audit log | `POST /api/events/:id/decision` → `decideEvent` |
 | Organisers only see their **organisation** | list visibility |
+| Event details (SCRUM-39): Coordinators, Venue Staff, Technical Support and the owning Organiser see attendance, date/time, venue needs, the booked venue, equipment notes and equipment requests in any stage, including Planning and Confirmed; Attendees get the public view of confirmed events only | `GET /api/events/:id`, `/:id/venue-bookings`, `/:id/equipment-requests` → `EventDetail` |
 | Multiple roles on one account | `user_roles` + demo user `hybrid@...` |
 | Venue staff CRUD venues; tech staff maintain equipment | venue/equipment routes |
 | Setup and turnaround (SCRUM-59): only Venue Staff set each venue's setup and turnaround minutes ("Teardown" on the form); whole numbers ≥ 0, anything negative, non-numeric or empty is rejected and nothing is saved; new venues start at 30/30. Customer to confirm 0 and "optional" | Update venue form, `setupMinutes` / `teardownMinutes` in `venues.validators.js`, `PATCH /api/venues/:id` |

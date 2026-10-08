@@ -234,6 +234,7 @@ describe('SCUM-16 (Event Clarification & Review Panel)', () => {
       if (path === '/api/comments/5') return Promise.resolve({ comments: [] });
       if (path === '/api/venues') return Promise.resolve({ venues: [] });
       if (path === '/api/events/5/venue-bookings') return Promise.resolve({ bookings: [] });
+      if (path === '/api/events/5/equipment-requests') return Promise.resolve({ requests: [] });
       throw new Error(`Unhandled api: ${path}`);
     });
 
@@ -291,6 +292,7 @@ describe('SCUM-16 (Event Clarification & Review Panel)', () => {
       if (path === '/api/comments/5') return Promise.resolve({ comments: [] });
       if (path === '/api/venues') return Promise.resolve({ venues: [] });
       if (path === '/api/events/5/venue-bookings') return Promise.resolve({ bookings: [] });
+      if (path === '/api/events/5/equipment-requests') return Promise.resolve({ requests: [] });
       throw new Error(`Unhandled api: ${path}`);
     });
 
@@ -321,11 +323,13 @@ beforeEach(() => {
 });
 
 /*
- * AC:       SCRUM-26 AC8 (display of one existing request only)
- * Scenario: An Event Organiser views their event page containing a previously submitted booking.
- * Setup:    The event-scoped booking endpoint returns an Approved request for Hall.
- * Expected: Displays this event's request and status without retrieving the global booking
- *           queue; this test does not cover multiple requests.
+ * AC:       SCRUM-26 AC8 (display of one existing request only); SCRUM-39 AC1 + AC2 (role
+ *           access to planning data, including the event's equipment requests)
+ * Scenario: The event's own Organiser opens a Planning event.
+ * Setup:    Organiser user 1; event 3 owned by user 1; one APPROVED booking at "Hall"; no
+ *           equipment requests. Any other path fails, as the API would refuse it.
+ * Expected: The event and its booking ("Hall: APPROVED") are shown, and the page never asks
+ *           for the global bookings queue, which Organisers aren't allowed to see.
  * Type:     normal
  */
 it('loads an organiser event and its booking without requesting the restricted global queue', async () => {
@@ -335,6 +339,8 @@ it('loads an organiser event and its booking without requesting the restricted g
     if (path === '/api/comments/3') return { comments: [] };
     if (path === '/api/venues') return { venues: [] };
     if (path === '/api/events/3/venue-bookings') return { bookings: [{ id: 7, venue_name: 'Hall', status: 'APPROVED' }] };
+    // SCRUM-39: the page now also loads the event's equipment requests for planning roles.
+    if (path === '/api/events/3/equipment-requests') return { requests: [] };
     throw new Error('You do not have access to this action');
   });
   render(
@@ -550,12 +556,15 @@ it('US64-F03: the organiser does not see the Open for review button', async () =
 });
 
 /*
- * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility)
+ * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility); SCRUM-39 AC1
+ *           (agreed decision: Attendees keep the public view, so equipment requests are
+ *           never requested either)
  * Scenario: An attendee requests an event that has venue booking information.
  * Setup:    The attendee can access only a confirmed public event and is not a
  *           Coordinator or Venue Staff member.
  * Expected: The event page shows its public event and registration information, hides
- *           staff-only panels, and does not request comments or event status history.
+ *           staff-only panels, and does not request comments, event status history or
+ *           equipment requests.
  * Type:     boundary
  */
 it('loads an attendee event without requesting restricted planning data', async () => {
@@ -576,5 +585,7 @@ it('loads an attendee event without requesting restricted planning data', async 
   expect(screen.queryByText('Status history')).not.toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith('/api/comments/3');
   expect(api).not.toHaveBeenCalledWith('/api/events/3/history');
+  // SCRUM-39: attendees don't get planning details, so equipment is never requested.
+  expect(api).not.toHaveBeenCalledWith('/api/events/3/equipment-requests');
 });
 });

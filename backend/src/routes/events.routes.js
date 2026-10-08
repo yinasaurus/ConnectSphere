@@ -12,8 +12,14 @@ router.use(requireAuth);
 
 router.get('/', controller.list);
 router.post('/', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.create);
+// SCRUM-39 AC1 + AC2: no role gate here because who may see which event (and how much of it)
+// is decided per event in the service; outsiders get 404.
 router.get('/:id', controller.get);
+// SCRUM-39 AC2 (booked venue): same per-event access as GET /:id; Attendees only see
+// approved bookings.
 router.get('/:id/venue-bookings', controller.venueBookings);
+// SCRUM-39 AC2: access is decided per event in the service (same rules as GET /:id).
+router.get('/:id/equipment-requests', controller.equipmentRequests);
 router.patch('/:id', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.update);
 router.post('/:id/submit', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.submit);
 router.post('/:id/review', requireRole(ROLES.EVENT_COORDINATOR), controller.openForReview);
