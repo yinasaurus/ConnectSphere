@@ -10,6 +10,7 @@ Server-side authorisation is the security boundary. React guards and navigation 
 | Edit request | Owner within existing draft/edit rules, or assigned Coordinator; role must be Organiser/Coordinator |
 | Submit request | Owner with Organiser/Coordinator role, or assigned Coordinator |
 | Review/change event status | Assigned Coordinator only |
+| Assign a Coordinator to a Submitted event that has none (SCRUM-71) | Event Coordinator Lead only; active Coordinators only |
 | Read events | Organisers: same organisation; internal staff: existing visibility; attendees: confirmed registration-enabled events, public fields only |
 | Read/post planning discussion; read history | Planning roles with event access; no attendee-only access |
 | Venue page/global booking queue | Coordinator or Venue Staff |
@@ -36,6 +37,7 @@ Missing/invalid/expired session and disabled users receive 401. Wrong roles rece
 - `backend/tests/venues.authorization.test.js`: global queue role regression.
 - `frontend/src/components/ProtectedRoute.test.jsx`: session loading, login redirect, denied roles, allowed roles, hybrid role and unrestricted authenticated route.
 - `frontend/src/pages/EventDetail.test.jsx`: organiser event details load without calling the restricted global queue.
+- `backend/tests/events.assign-coordinator.test.js` and `frontend/src/pages/EventDetail.assign.test.jsx`: Lead assign; inactive/non-Lead rejected; already-assigned kept.
 
 Run `npm test`, `npm run lint`, and `npm run build` from the repository root. Tests mock database access; they do not seed, alter or require the shared database.
 
