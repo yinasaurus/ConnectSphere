@@ -156,13 +156,13 @@ describe('SCRUM-71 assign coordinator (event page)', () => {
   /*
    * AC: SCRUM-71 AC5
    * Scenario: A Lead opens an event that already has a Coordinator.
-   * Setup: Event is UNDER_REVIEW with coordinatorId 2.
+   * Setup: Event is still SUBMITTED but coordinatorId is already 2, so AC1 status is not what hides the card.
    * Expected: The assign card is hidden. Changing the Coordinator is reassignment, not this action.
    * Type: conflict
    */
   it('US71-F04: a Lead cannot assign through this action when the event already has a Coordinator', async () => {
     mockAuth(leadUser);
-    stubApi(leadUser, { ...submittedUnassigned(), status: 'UNDER_REVIEW', coordinatorId: 2 });
+    stubApi(leadUser, { ...submittedUnassigned(), status: 'SUBMITTED', coordinatorId: 2 });
     renderEvent();
 
     expect(await screen.findByText('Workshop')).toBeInTheDocument();

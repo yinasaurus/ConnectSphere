@@ -162,7 +162,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
    */
   it('US71-B05: an event that already has a Coordinator cannot be assigned through this action', async () => {
     event.coordinator_id = 2;
-    event.status = 'UNDER_REVIEW';
+    event.status = 'SUBMITTED';
 
     await expect(service.assignPrimaryCoordinator(lead, 3, 4)).rejects.toMatchObject({
       status: 409,
