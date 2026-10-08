@@ -94,9 +94,10 @@ describe('SCRUM-28 unassigned queue (service)', () => {
 
   /*
    * AC: SCRUM-28 AC1
-   * Scenario: Coordinators exist in the database at submit time (old auto-assign would have picked one).
-   * Setup: fetchMany would return coordinator users if load-balancing still ran.
-   * Expected: Submit still stores coordinator_id null — availability must not trigger assignment.
+   * Scenario: Coordinators exist at submit time (old auto-assign would have picked one).
+   * Setup: Complete draft. Submit does not read coordinator rows; the unused fetchMany stub
+   *         would only matter if load-balancing still ran.
+   * Expected: coordinator_id is null and user_roles is never queried.
    * Type: boundary
    */
   it('AC1: submit does not assign even when Coordinators are available', async () => {
@@ -151,6 +152,23 @@ describe('SCRUM-28 unassigned queue (service)', () => {
     await expect(service.submitEvent(organiser, 404)).rejects.toMatchObject({ status: 404 });
     expect(db.updateById).not.toHaveBeenCalled();
   });
+
+  /*
+   * AC: SCRUM-28 AC1
+   * Scenario: Organiser submits an event that is not allowed to move to Submitted.
+   * Setup: Already SUBMITTED (in the queue) or PLANNING — neither may transition to SUBMITTED.
+   * Expected: 409, nothing written, no Coordinator assigned.
+   * Type: error
+   */
+  it.each([EVENT_STATUS.SUBMITTED, EVENT_STATUS.PLANNING])(
+    'AC1: submit from %s is refused with 409 and does not assign a Coordinator',
+    async (status) => {
+      event.status = status;
+      event.coordinator_id = status === EVENT_STATUS.PLANNING ? 2 : null;
+      await expect(service.submitEvent(organiser, 3)).rejects.toMatchObject({ status: 409 });
+      expect(db.updateById).not.toHaveBeenCalled();
+    }
+  );
 
   /*
    * AC: SCRUM-28 AC1
@@ -249,13 +267,6 @@ describe('SCRUM-28 unassigned queue (service)', () => {
 
   /*
    * AC: SCRUM-28 AC3
-   * Scenario: Under Review (coordinator assigned in later stories) is not the unassigned queue.
-   * Setup: UNDER_REVIEW with coordinator 2 — the old submit destination.
-   * Expected: Helper and unassigned list both exclude it.
-   * Type: boundary
-   */
-  /*
-   * AC: SCRUM-28 AC3
    * Scenario: Queue membership helper is asked about a missing event.
    * Setup: null instead of a row (e.g. a lookup that returned nothing).
    * Expected: false — only a Submitted, unassigned row is in the queue.
@@ -266,13 +277,13 @@ describe('SCRUM-28 unassigned queue (service)', () => {
   });
 
   /*
-   * AC: SCRUM-28 AC3
-   * Scenario: Listing by status Submitted (without the unassigned flag) still works.
+   * AC: not an AC check — regression for listEvents after the unassigned filter was added
+   * Scenario: Callers that list by status=Submitted (without unassigned=true) still get a status filter.
    * Setup: One Submitted unassigned event; filter is status only.
-   * Expected: The status filter is applied so existing list-by-status callers keep working.
+   * Expected: eq(status) is used and coordinator_id is not required to be null.
    * Type: normal
    */
-  it('AC3: listing by status Submitted does not require the unassigned flag', async () => {
+  it('listEvents still filters by status Submitted when unassigned is not requested', async () => {
     event.status = EVENT_STATUS.SUBMITTED;
     event.coordinator_id = null;
     db.fetchMany.mockResolvedValue([event]);
@@ -284,6 +295,13 @@ describe('SCRUM-28 unassigned queue (service)', () => {
     expect(listed).toHaveLength(1);
   });
 
+  /*
+   * AC: SCRUM-28 AC3
+   * Scenario: Under Review (coordinator assigned in later stories) is not the unassigned queue.
+   * Setup: UNDER_REVIEW with coordinator 2 — the old submit destination.
+   * Expected: Helper and unassigned list both exclude it.
+   * Type: boundary
+   */
   it('AC3: an under-review event is not in the unassigned queue', async () => {
     event.status = EVENT_STATUS.UNDER_REVIEW;
     event.coordinator_id = 2;
