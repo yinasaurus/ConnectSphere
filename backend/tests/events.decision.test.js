@@ -127,8 +127,9 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   });
 
   // AC1 · Negative: every status other than UNDER_REVIEW is refused with 409 Conflict,
-  // including PLANNING (can't approve twice) and REJECTED (can't reject twice).
-  it.each(['DRAFT', 'PLANNING', 'CONFIRMED', 'REJECTED', 'COMPLETED', 'CANCELLED'])(
+  // including SUBMITTED (unassigned queue, SCRUM-28), PLANNING (can't approve twice)
+  // and REJECTED (can't reject twice).
+  it.each(['DRAFT', 'SUBMITTED', 'PLANNING', 'CONFIRMED', 'REJECTED', 'COMPLETED', 'CANCELLED'])(
     'US17-B07: a decision on an event in %s is refused with 409',
     async (status) => {
       event.status = status;
