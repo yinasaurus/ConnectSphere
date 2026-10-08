@@ -83,6 +83,15 @@ const requireAuth = asyncHandler(async (req, _res, next) => {
   next();
 });
 
+/**
+ * Purpose: rebuild the session user from the database, including every role
+ * the account holds, so login and later requests see the same identity.
+ * AC: SCRUM-54 AC1 (Lead / Safety Officer are present in `roles`);
+ *     SCRUM-54 AC2 (more than one role is returned in the same session).
+ * Business rule: W4 — multiple roles are possible; login itself is SCRUM-12.
+ * Inputs: user id from the JWT `sub`. Output: public user fields + `roles`.
+ * Failure: returns null when the user row is missing (caller treats as 401).
+ */
 async function loadUser(id) {
   const user = await fetchOne(supabase.from('users').select('*').eq('id', id));
   if (!user) return null;
@@ -105,6 +114,14 @@ async function loadUser(id) {
   };
 }
 
+/**
+ * Purpose: block a route unless the session holds at least one of the allowed
+ * roles. A hybrid account is allowed when any held role matches.
+ * AC: SCRUM-54 AC2 (every held role is usable in the same session);
+ *     SCRUM-54 AC3, AC4, AC7 (wrong role is 403 with no event body).
+ * Inputs: one or more role names. Failure: 401 if unauthenticated, 403
+ * `{ error, message }` if none of the session roles are allowed.
+ */
 function requireRole(...allowed) {
   return (req, _res, next) => {
     if (!req.user) {
@@ -118,6 +135,11 @@ function requireRole(...allowed) {
   };
 }
 
+/**
+ * Purpose: true when this user holds the named role, including on hybrid accounts.
+ * AC: SCRUM-54 AC2
+ * Inputs: user with a `roles` array, role string. Output: boolean.
+ */
 function hasRole(user, role) {
   return Boolean(user?.roles?.includes(role));
 }

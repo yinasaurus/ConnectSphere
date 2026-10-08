@@ -66,6 +66,12 @@ async function seed() {
     { email: 'organiser@apex.example', full_name: 'Ben Tan', organisation_id: apex.id, department: null, roles: ['EVENT_ORGANISER'] },
     { email: 'coordinator@connectsphere.sg', full_name: 'Chloe Lim', organisation_id: null, department: 'Event Operations', roles: ['EVENT_COORDINATOR'] },
     { email: 'coordinator2@connectsphere.sg', full_name: 'Daniel Ong', organisation_id: null, department: 'Event Operations', roles: ['EVENT_COORDINATOR'] },
+    // SCRUM-54 AC1: Lead is a distinct role recognised on login (W7 #5).
+    { email: 'lead@connectsphere.sg', full_name: 'Ivy Tan', organisation_id: null, department: 'Event Operations', roles: ['EVENT_COORDINATOR_LEAD'] },
+    // SCRUM-54 AC2: Coordinator + Lead can use both roles in one session (W4).
+    { email: 'leadcoord@connectsphere.sg', full_name: 'Jordan Ng', organisation_id: null, department: 'Event Operations', roles: ['EVENT_COORDINATOR', 'EVENT_COORDINATOR_LEAD'] },
+    // SCRUM-54 AC1: Safety Officer is a distinct role recognised on login (W7 #6).
+    { email: 'safety@connectsphere.sg', full_name: 'Kai Rahman', organisation_id: null, department: 'Safety', roles: ['SAFETY_OFFICER'] },
     { email: 'venue@connectsphere.sg', full_name: 'Elena Wong', organisation_id: null, department: 'Venues', roles: ['VENUE_STAFF'] },
     { email: 'tech@connectsphere.sg', full_name: 'Farid Hassan', organisation_id: null, department: 'Technical Support', roles: ['TECHNICAL_SUPPORT'] },
     { email: 'hybrid@connectsphere.sg', full_name: 'Gina Koh', organisation_id: null, department: 'Operations', roles: ['EVENT_COORDINATOR', 'VENUE_STAFF'] },
