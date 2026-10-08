@@ -192,6 +192,13 @@ async function listEvents(user, filters = {}) {
     .map((row) => visibleEvent(user, row));
 }
 
+/**
+ * Purpose: load one event the caller is allowed to see.
+ * AC: SCRUM-28 AC1, AC2 — used after submit so the organiser sees Submitted and no Coordinator.
+ * Inputs: user, event id
+ * Outputs: mapped event
+ * Failure: 404 if missing or the user cannot view it
+ */
 async function getEvent(user, id) {
   const row = await fetchOne(
     supabase.from('events').select(EVENT_SELECT).eq('id', id)
@@ -235,8 +242,8 @@ async function listVenueBookings(user, eventId) {
 }
 
 /**
- * Purpose: save a new event request as a Draft so the organiser can finish it later.
- * AC: SCRUM-28 AC4 — drafts stay DRAFT with no Coordinator and are not queued.
+ * Purpose: save a new event request as a Draft so the organiser can finish it later (SCUM-15).
+ * AC: SCRUM-28 AC4 — a draft stays DRAFT with no Coordinator and is not placed in the unassigned queue.
  * Inputs: user (organiser or coordinator), payload (name required; other fields optional)
  * Outputs: the created mapped event
  * Failure: 403 if the role cannot create; 400 if the name is missing or dates are invalid
@@ -276,6 +283,13 @@ async function createEvent(user, payload) {
   return getEvent(user, created.id);
 }
 
+/**
+ * Purpose: patch an event the organiser still owns as a draft, or the assigned coordinator may edit.
+ * AC: SCRUM-28 AC4 — saving more draft fields does not submit or place the request in the queue.
+ * Inputs: user, event id, payload of fields to change
+ * Outputs: mapped event after the patch
+ * Failure: 404 if missing; 403 if not allowed; 409 if the organiser is locked after submit
+ */
 async function updateEvent(user, id, payload) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
@@ -579,6 +593,13 @@ async function acceptCoordinatorChange(user, eventId) {
   return getEvent(user, eventId);
 }
 
+/**
+ * Purpose: append one status-history row for an event (audit trail of lifecycle moves).
+ * AC: SCRUM-28 AC1 — submit records DRAFT (or REJECTED) → SUBMITTED, not Under Review.
+ * Inputs: event id, actor id, from/to status, optional note
+ * Outputs: none (insert only)
+ * Failure: insert errors propagate to the caller
+ */
 async function writeStatusHistory(eventId, actorId, fromStatus, toStatus, note) {
   await insertOne('event_status_history', {
     event_id: eventId,
