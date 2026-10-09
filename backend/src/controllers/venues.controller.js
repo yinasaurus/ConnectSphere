@@ -60,6 +60,12 @@ const requestBooking = asyncHandler(async (req, res) => {
   res.status(201).json({ booking });
 });
 
+/**
+ * Purpose: POST /api/venues/bookings/:id/decision. Passes the signed-in Venue Staff member,
+ * the booking id and the JSON body { approve, reason, alternativeSuggestion } to the service.
+ * AC: SCRUM-78 AC1-AC6 (the service saves the decision and notifies the Coordinator).
+ * Output: 200 { booking }. Errors from the service (403, 404, 500) go to the error handler.
+ */
 const decideBooking = asyncHandler(async (req, res) => {
   const booking = await venuesService.decideBooking(req.user, req.params.id, req.body);
   res.json({ booking });

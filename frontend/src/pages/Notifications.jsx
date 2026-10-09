@@ -2,6 +2,13 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 
+/**
+ * Purpose: the signed-in user's in-app notices, newest first, with "Mark read" and a link to
+ * the event each notice is about.
+ * AC: SCRUM-78 AC1-AC4 (this is where a Coordinator sees a booking decision notice, with
+ * the event and venue in its text and an "Open event" link).
+ * Failure: NEEDS HUMAN: a failed load is not caught, so the list just stays empty.
+ */
 export default function Notifications() {
   const [items, setItems] = useState([]);
 

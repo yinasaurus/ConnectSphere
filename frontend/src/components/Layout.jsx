@@ -1,13 +1,25 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { ROLE_LABELS, ROLES } from '../constants';
 
 export default function Layout() {
   const { user, logout, hasRole } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
+  /* 
+    This code change checks whether the user is currently viewing the venue booking page so 
+    the main layout component can adapt its design (specifically for mobile screens).
+
+    Output Examples:
+    true: If location.pathname is "/events/456/venue-booking" (the pattern matches).
+
+    false: If location.pathname is "/events/456" or "/dashboard" (the pattern does not match).
+  */
+  // Mark the booking page so its layout can hide the navigation sidebar on mobile.
+  const isVenueBookingPage = /\/events\/[^/]+\/venue-booking$/.test(location.pathname);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${isVenueBookingPage ? ' venue-booking-shell' : ''}`}>
       <aside className="sidebar">
         <div className="brand-mark">
           <span className="logo-dot" />
