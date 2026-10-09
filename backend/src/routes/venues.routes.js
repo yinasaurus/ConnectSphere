@@ -15,7 +15,6 @@ router.post('/', requireRole(ROLES.VENUE_STAFF), validateBody(createVenueSchema)
 router.patch('/:id', requireRole(ROLES.VENUE_STAFF), validateBody(updateVenueSchema), controller.update);
 router.get('/search', controller.search);
 
-
 router.get(
   '/bookings',
   requireRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF),
@@ -25,6 +24,19 @@ router.post('/bookings', requireRole(ROLES.EVENT_COORDINATOR), controller.reques
 // Venue Staff approve or reject a booking request; the assigned Coordinator is notified
 // (SCRUM-78). Anyone else gets 403 here, before anything is saved or sent.
 router.post('/bookings/:id/decision', requireRole(ROLES.VENUE_STAFF), controller.decideBooking);
+
+// SCRUM-66 AC6: internal users only; Event Organisers and Attendees get 403.
+router.get(
+  '/:id/availability',
+  requireRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT),
+  controller.availability
+);
+// SCRUM-67 AC5: coordinators, venue staff and the coordinator lead only.
+router.get(
+  '/:id/bookings',
+  requireRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.EVENT_COORDINATOR_LEAD),
+  controller.venueBookings
+);
 
 router.get('/unavailability', controller.unavailability);
 router.post('/unavailability', requireRole(ROLES.VENUE_STAFF), controller.block);

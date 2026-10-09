@@ -31,8 +31,11 @@ export const ROLE_LABELS = {
 export const STATUS_LABELS = {
   DRAFT: 'Draft',
   SUBMITTED: 'Submitted',
-  UNDER_REVIEW: 'Under review',
+  UNDER_REVIEW: 'Under Review',
+  APPROVED: 'Approved',
   PLANNING: 'Planning',
+  AWAITING_SAFETY_CHECK: 'Awaiting Safety Check',
+  PREPARATION: 'Preparation',
   CONFIRMED: 'Confirmed',
   COMPLETED: 'Completed',
   CANCELLED: 'Cancelled',
@@ -52,6 +55,9 @@ export const SUB_STATE_LABELS = {
 };
 
 export const MIN_REJECTION_REASON_LENGTH = 10;
+
+// SCRUM-5 AC5: how often dashboards and the event page re-fetch so status changes appear without a reload.
+export const LIVE_REFRESH_MS = 10000;
 
 export const CATEGORIES = [
   'CONFERENCE',
@@ -81,12 +87,15 @@ export const DEMO_ACCOUNTS = [
 export const DEMO_PASSWORD = 'Password123!';
 
 /**
- * Purpose: send each role to a home screen they are allowed to use.
- * AC: SCRUM-54 AC1, AC2 (a hybrid account still lands on a screen for a role they hold).
- * Inputs: roles array from the login payload. Output: an in-app path.
+ * Purpose: send each role to a useful first screen after login.
+ * AC: SCRUM-65 AC1 — the Lead lands on the unassigned queue so they can see new requests.
+ *     SCRUM-54 AC1, AC2 — a hybrid still lands on a screen for a role they hold.
+ * Inputs: role name array from the session. Outputs: an in-app path.
+ * Failure: unknown roles fall through to `/app`.
  */
 export function homePathForRoles(roles = []) {
-  if (roles.includes(ROLES.EVENT_COORDINATOR) || roles.includes(ROLES.EVENT_COORDINATOR_LEAD)) return '/app';
+  if (roles.includes(ROLES.EVENT_COORDINATOR_LEAD)) return '/app/events/unassigned';
+  if (roles.includes(ROLES.EVENT_COORDINATOR)) return '/app';
   if (roles.includes(ROLES.SAFETY_OFFICER)) return '/app';
   if (roles.includes(ROLES.VENUE_STAFF)) return '/app/venues';
   if (roles.includes(ROLES.TECHNICAL_SUPPORT)) return '/app/equipment';

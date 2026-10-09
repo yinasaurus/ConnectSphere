@@ -8,13 +8,14 @@ import Events from './pages/Events';
 import NewEvent from './pages/NewEvent';
 import Drafts from './pages/Drafts';
 import EventDetail from './pages/EventDetail';
+import UnassignedQueue from './pages/UnassignedQueue';
 import VenueBooking from './pages/VenueBooking';
 import CalendarPage from './pages/CalendarPage';
 import Venues from './pages/Venues';
+import VenueAvailability from './pages/VenueAvailability';
 import Equipment from './pages/Equipment';
 import Notifications from './pages/Notifications';
 import Profile from './pages/Profile';
-import UnassignedQueue from './pages/UnassignedQueue';
 import AssignmentOverview from './pages/AssignmentOverview';
 import SafetyCheck from './pages/SafetyCheck';
 import { ROLES } from './constants';
@@ -22,9 +23,9 @@ import { ROLES } from './constants';
 const requestRoles = [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR];
 
 /**
- * Purpose: app routes, including Lead-only queue/overview and Safety Officer-only
- * safety-check screens. Hybrid accounts pass each guard for a role they hold.
- * AC: SCRUM-54 AC2, AC3, AC4
+ * Purpose: route table for the SPA, including Lead-only queue/overview and
+ * Safety Officer-only safety-check screens. Hybrid accounts pass each guard for a role they hold.
+ * AC: SCRUM-54 AC2, AC3, AC4. SCRUM-65 AC1, AC5 — Lead-only `/app/events/unassigned`.
  */
 export default function App() {
   return (
@@ -45,8 +46,15 @@ export default function App() {
             <Route path="events/new" element={<ProtectedRoute allowedRoles={requestRoles}><NewEvent /></ProtectedRoute>} />
             <Route path="events/:id/edit" element={<ProtectedRoute allowedRoles={requestRoles}><NewEvent /></ProtectedRoute>} />
             <Route path="drafts" element={<ProtectedRoute allowedRoles={requestRoles}><Drafts /></ProtectedRoute>} />
-            {/* SCRUM-54 AC3: Unassigned queue and assignment overview are Lead-only. */}
-            <Route path="events/unassigned" element={<ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR_LEAD]}><UnassignedQueue /></ProtectedRoute>} />
+            {/* SCRUM-54 AC3 / SCRUM-65 AC1: Lead unassigned queue. Before events/:id so "unassigned" is not an id. */}
+            <Route
+              path="events/unassigned"
+              element={(
+                <ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR_LEAD]}>
+                  <UnassignedQueue />
+                </ProtectedRoute>
+              )}
+            />
             <Route path="assignments" element={<ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR_LEAD]}><AssignmentOverview /></ProtectedRoute>} />
             {/* Keep booking requests scoped to an event and available only to coordinators. */}
             <Route path="events/:id/venue-booking" element={<ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR]}><VenueBooking /></ProtectedRoute>} />
@@ -59,6 +67,15 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF]}>
                   <Venues />
+                </ProtectedRoute>
+              }
+            />
+            {/* SCRUM-66 AC6: Event Organisers and Attendees are redirected away. */}
+            <Route
+              path="venues/availability"
+              element={
+                <ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT]}>
+                  <VenueAvailability />
                 </ProtectedRoute>
               }
             />

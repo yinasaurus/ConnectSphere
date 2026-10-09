@@ -17,10 +17,12 @@ describe('SCRUM-54 role labels after login', () => {
    * AC: SCRUM-54 AC2
    * Scenario: A hybrid Coordinator + Lead is sent to a home path they are allowed to use.
    * Setup: Both roles on the same account.
-   * Expected: Home is /app, the same landing a Coordinator or Lead uses.
+   * Expected: Home is the unassigned queue (Lead is checked first), which they are allowed to use.
    * Type: normal
    */
-  it('sends a Coordinator + Lead hybrid to the shared staff home', () => {
-    expect(homePathForRoles([ROLES.EVENT_COORDINATOR, ROLES.EVENT_COORDINATOR_LEAD])).toBe('/app');
+  it('sends a Coordinator + Lead hybrid to the unassigned queue', () => {
+    expect(homePathForRoles([ROLES.EVENT_COORDINATOR, ROLES.EVENT_COORDINATOR_LEAD])).toBe(
+      '/app/events/unassigned'
+    );
   });
 });

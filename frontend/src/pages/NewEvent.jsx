@@ -118,6 +118,12 @@ export default function NewEvent() {
     return fieldErrors[field] ? 'field-error' : '';
   }
 
+  /**
+   * Purpose: POST/PATCH the form, then either stay a draft or POST /submit into the unassigned queue.
+   * AC: SCRUM-28 AC1, AC4 — submitAfter queues the request; otherwise it remains a draft.
+   * Inputs: submitAfter true means submit after save; false means draft only
+   * Failure: missing compulsory fields or API errors are shown on the form
+   */
   async function save(submitAfter) {
     setError('');
 
@@ -189,7 +195,8 @@ export default function NewEvent() {
           <p>
             {eventData?.subState === 'ACTION_REQUIRED'
               ? 'Update the fields requested for clarification by the coordinator, then submit amendments.'
-              : 'Save as draft anytime. Submission auto-assigns a coordinator (least current load).'}
+              /* SCRUM-28 AC1/AC4: drafts stay local to the organiser; submit goes to the Lead's unassigned queue (W7 #5). */
+              : 'Save as draft anytime. Submitting places the request in the unassigned queue for the Event Coordinator Lead.'}
           </p>
         </div>
       </div>

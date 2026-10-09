@@ -7,6 +7,7 @@ import { ROLE_LABELS, ROLES } from '../constants';
  * role pills so Lead / Safety Officer identity is visible after login.
  * AC: SCRUM-54 AC1 (role labels), AC2 (hybrid accounts see every function they hold),
  *     AC3 (Unassigned queue / Assignments only for Lead).
+ *     SCRUM-65 AC1 — the Lead gets an Unassigned queue nav item; other roles do not.
  */
 export default function Layout() {
   const { user, logout, hasRole } = useAuth();
@@ -36,11 +37,18 @@ export default function Layout() {
           <NavLink to="/app/events">Events</NavLink>
           {hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR) && <NavLink to="/app/events/new">New request</NavLink>}
           {hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR) && <NavLink to="/app/drafts">My drafts</NavLink>}
-          {hasRole(ROLES.EVENT_COORDINATOR_LEAD) && <NavLink to="/app/events/unassigned">Unassigned queue</NavLink>}
+          {hasRole(ROLES.EVENT_COORDINATOR_LEAD) && (
+            <NavLink to="/app/events/unassigned">Unassigned queue</NavLink>
+          )}
           {hasRole(ROLES.EVENT_COORDINATOR_LEAD) && <NavLink to="/app/assignments">Assignments</NavLink>}
           <NavLink to="/app/calendar">Calendar</NavLink>
           {hasRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF) && (
-            <NavLink to="/app/venues">Venues</NavLink>
+            // `end` keeps Venues from also highlighting on /app/venues/availability.
+            <NavLink to="/app/venues" end>Venues</NavLink>
+          )}
+          {/* SCRUM-66 AC6: same roles as the route in App.jsx. */}
+          {hasRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT) && (
+            <NavLink to="/app/venues/availability">Venue availability</NavLink>
           )}
           {hasRole(ROLES.EVENT_COORDINATOR, ROLES.TECHNICAL_SUPPORT) && (
             <NavLink to="/app/equipment">Equipment</NavLink>
