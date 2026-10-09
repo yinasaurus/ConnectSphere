@@ -17,4 +17,13 @@ const eventDecisionSchema = z.object({
   }
 });
 
-module.exports = { eventDecisionSchema, REJECTION_REASON_MESSAGE };
+/**
+ * Purpose: require a numeric coordinator id on the Lead assign action.
+ * AC: SCRUM-71 AC1
+ * Inputs: request body. Output: { coordinatorId }. Failure: 400 when missing or not a positive integer.
+ */
+const assignCoordinatorSchema = z.object({
+  coordinatorId: z.coerce.number({ error: 'Coordinator is required' }).int().positive('Coordinator is required'),
+});
+
+module.exports = { eventDecisionSchema, REJECTION_REASON_MESSAGE, assignCoordinatorSchema };

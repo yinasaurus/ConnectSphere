@@ -6,6 +6,7 @@ const {
   EVENT_DECISION,
   MIN_REJECTION_REASON_LENGTH,
   SIGNIFICANT_FIELDS,
+  BOOKING_STATUS,
 } = require('../constants/statuses');
 const { REJECTION_REASON_MESSAGE } = require('../validators/events.validators');
 const { httpError } = require('../middleware/errorHandler');
@@ -65,6 +66,14 @@ function validateDateRange(startAt, endAt) {
   }
 }
 
+/**
+ * Purpose: turns an events row (snake_case, with joined organisation/organiser/coordinator
+ * names) into the camelCase event the API returns.
+ * AC: SCRUM-39 AC2 (attendance, start/end date and time, venue needs and equipment notes
+ * come from here).
+ * Input: a database row or null. Output: the event object, or null for no row. Empty
+ * columns stay null.
+ */
 function mapEvent(row) {
   if (!row) return null;
   return {
@@ -107,10 +116,19 @@ function mapEvent(row) {
 }
 
 /**
- * Purpose: decide whether this user may open the event at all.
- * AC: SCRUM-65 AC5 — the Lead can open a queued request to see its full details.
- * Inputs: user, raw event row. Outputs: true if visible.
- * Failure: getEvent treats false as 404 so we do not leak that the row exists.
+ * Purpose: decides whether a user may see one event at all.
+ * AC: SCRUM-39 AC1 (who the "authorised users" are). SCRUM-65 AC5 — the Lead can open a
+ * queued request to see its full details.
+ * Business rule source: Week 4 Q&A, "Coordinator can view other events for planning
+ * purpose"; Week 2 Q&A, Organisers can't view events of unrelated clients (requirements
+ * document section 8b).
+ * Rules: Coordinators, Lead, Venue Staff and Technical Support see every event (Lead so
+ * they can open an unassigned Submitted event to assign it, SCRUM-71 AC1/AC6, and to read
+ * queue details, SCRUM-65 AC5); Organisers see
+ * their own organisation's (none if they have no organisation); Attendees see only
+ * Confirmed events that take registrations; anyone else sees nothing. No stage is blocked
+ * for internal roles.
+ * Output: true or false. Never throws. getEvent treats false as 404 so we do not leak that the row exists.
  */
 function canViewEvent(user, row) {
   if (hasRole(user, ROLES.EVENT_COORDINATOR)
@@ -129,10 +147,12 @@ function canViewEvent(user, row) {
 }
 
 /**
- * Purpose: planning fields (organiser, attendance, venue/equipment needs, history)
- * vs the attendee-safe subset.
- * AC: SCRUM-65 AC4, AC5 — the Lead needs those planning fields on the queue and the detail page.
- * Inputs: user. Outputs: true for internal planning roles including the Lead.
+ * Purpose: whether a user's roles allow planning details (attendance, venue needs,
+ * equipment, history, comments) rather than the public Attendee view.
+ * AC: SCRUM-39 AC1 + AC2 (Attendees keep the public view, agreed decision).
+ *     SCRUM-65 AC4, AC5 — the Lead needs those planning fields on the queue and the detail page.
+ *     SCRUM-71 AC1 — Lead is a planning reader so they can assign from the event page.
+ * Output: true for Organiser, Coordinator, Lead, Venue Staff or Technical Support; false otherwise.
  */
 function canViewPlanning(user) {
   return [
@@ -144,6 +164,11 @@ function canViewPlanning(user) {
   ].some((role) => hasRole(user, role));
 }
 
+/**
+ * Purpose: returns the full event for planning roles and a reduced public copy for others.
+ * AC: SCRUM-39 AC2 (planning roles get every AC2 field), AC1 (Attendees don't).
+ * Inputs: the user and an events row the user may already see (checked by canViewEvent).
+ */
 function visibleEvent(user, row) {
   const event = mapEvent(row);
   if (canViewPlanning(user)) return event;
@@ -162,10 +187,10 @@ async function assertPlanningAccess(user, eventId) {
 }
 
 /**
- * Purpose: list-query scope. Internal staff and the Lead see every organisation.
+ * Purpose: constrain an events list query to rows this user is allowed to see.
  * AC: SCRUM-65 AC1 — the Lead's queue is not limited to one organiser's organisation.
- * Inputs: a Supabase query and the caller. Outputs: the same query, possibly filtered.
- * Failure: unknown roles get an impossible id filter (empty list), not an error.
+ *     SCRUM-71 AC1 — Lead sees all events, same as other internal staff, so unassigned Submitted ones appear.
+ * Inputs: supabase query, session user. Output: the same query or a filter. Failure: unknown roles match no rows (id = -1).
  */
 function applyVisibility(query, user) {
   if (hasRole(user, ROLES.EVENT_COORDINATOR)
@@ -218,12 +243,14 @@ async function listEvents(user, filters = {}) {
 }
 
 /**
- * Purpose: load one event the caller is allowed to see.
- * AC: SCRUM-28 AC1, AC2 — organiser sees Submitted and no Coordinator after submit.
- * AC: SCRUM-65 AC5 — the Lead can open any queued request's full details.
- * Inputs: user, event id
- * Outputs: mapped event (planning fields for the Lead)
- * Failure: 404 if missing or the user cannot view it
+ * Purpose: loads one event for the signed-in user, always fresh from the database, so the
+ * details shown are the latest.
+ * AC: SCRUM-39 AC1 + AC2. SCRUM-28 AC1, AC2 — after submit the organiser sees Submitted
+ *     and no Coordinator.
+ *     SCRUM-65 AC5 — the Lead can open any queued request's full details.
+ * Inputs: the user and the event id. Output: the event as visibleEvent shapes it.
+ * Failure: 404 "Event not found" both when it doesn't exist and when the user may not see
+ * it, so outsiders can't tell the two apart.
  */
 async function getEvent(user, id) {
   const row = await fetchOne(
@@ -233,37 +260,80 @@ async function getEvent(user, id) {
   return visibleEvent(user, row);
 }
 
+/**
+ * Purpose: the venue bookings for one event (venue name and status), shown with its details.
+ * AC: SCRUM-39 AC2 (venue).
+ * Inputs: the user and the event id. Output: [{ id, event_id, venue_id, status, venue_name }].
+ * Attendees only get APPROVED bookings. Failure: 404 from getEvent, before bookings are read.
+ */
 async function listVenueBookings(user, eventId) {
   // Reuse event visibility before querying bookings, including client isolation.
   const event = await getEvent(user, eventId);
   let query = supabase.from('venue_bookings')
       // Return saved timing values so each event request can show its own occupied window.
       // Include venue capabilities so suitability remains assessable for inactive historical venues.
-      .select('id, event_id, venue_id, status, start_at, end_at, setup_minutes, teardown_minutes, created_at, venues ( name, capacity, facilities, accessibility, venue_layouts ( layout ) )')
+      // Include decision reason and alternative suggestion for planning roles (SCRUM-18 AC7).
+      .select('id, event_id, venue_id, status, start_at, end_at, setup_minutes, teardown_minutes, created_at, decision_reason, alternative_suggestion, venues ( name, capacity, facilities, accessibility, venue_layouts ( layout ) )')
       .eq('event_id', event.id)
       .order('created_at', { ascending: false });
   if (!canViewPlanning(user)) query = query.eq('status', 'APPROVED');
   const rows = await fetchMany(query);
-  // Event readers need booking status, not internal notes or decision metadata.
+  return rows.map((row) => {
+    const item = {
+      id: row.id,
+      event_id: row.event_id,
+      venue_id: row.venue_id,
+      status: row.status,
+      // Expose timing fields needed to display request dates and occupied windows.
+      start_at: row.start_at,
+      end_at: row.end_at,
+      setup_minutes: row.setup_minutes,
+      teardown_minutes: row.teardown_minutes,
+      created_at: row.created_at,
+      venue_name: row.venues?.name || null,
+      // Return only catalogue attributes needed to assess this request's venue independently.
+      venue_details: row.venues ? {
+        capacity: row.venues.capacity,
+        facilities: row.venues.facilities,
+        accessibility: row.venues.accessibility,
+        layouts: (row.venues.venue_layouts || []).map((layout) => layout.layout),
+      } : null,
+    };
+    if (canViewPlanning(user)) {
+      if (row.decision_reason !== undefined) item.decision_reason = row.decision_reason;
+      if (row.alternative_suggestion !== undefined) item.alternative_suggestion = row.alternative_suggestion;
+    }
+    return item;
+  });
+}
+
+/**
+ * Purpose: the equipment requested for one event (item, quantity, status), shown with the
+ * event details so authorised users can see its equipment requirement in one place.
+ * AC: SCRUM-39 AC2 (equipment requirement), AC1 (only users allowed to see the event).
+ * Inputs: the signed-in user and the event id.
+ * Output: [{ id, event_id, equipment_id, equipment_name, quantity, status }], newest first.
+ * Failure: 403 for roles without planning access (Attendees get the public view only);
+ * 404 if the event doesn't exist or the user can't see it (e.g. another organisation),
+ * checked before any equipment is read.
+ */
+async function listEquipmentRequests(user, eventId) {
+  if (!canViewPlanning(user)) throw httpError(403, 'Planning information is restricted', 'FORBIDDEN');
+  const event = await getEvent(user, eventId);
+  const rows = await fetchMany(
+    supabase.from('equipment_requests')
+      .select('id, event_id, equipment_id, quantity, status, equipment ( name )')
+      .eq('event_id', event.id)
+      .order('id', { ascending: false })
+  );
+  // Decision reasons and who asked/decided are left out; readers need the requirement itself.
   return rows.map((row) => ({
     id: row.id,
     event_id: row.event_id,
-    venue_id: row.venue_id,
+    equipment_id: row.equipment_id,
+    equipment_name: row.equipment?.name || null,
+    quantity: row.quantity,
     status: row.status,
-    // Expose only the fields needed to display request dates and occupied windows.
-    start_at: row.start_at,
-    end_at: row.end_at,
-    setup_minutes: row.setup_minutes,
-    teardown_minutes: row.teardown_minutes,
-    created_at: row.created_at,
-    venue_name: row.venues?.name || null,
-    // Return only catalogue attributes needed to assess this request's venue independently.
-    venue_details: row.venues ? {
-      capacity: row.venues.capacity,
-      facilities: row.venues.facilities,
-      accessibility: row.venues.accessibility,
-      layouts: (row.venues.venue_layouts || []).map((layout) => layout.layout),
-    } : null,
   }));
 }
 
@@ -504,22 +574,64 @@ async function submitEvent(user, id) {
   return getEvent(user, id);
 }
 
+// SCRUM-64: the assigned coordinator opens a Submitted request, moving it into
+// Under Review. Idempotent when the request is already Under Review (AC5).
+async function openForReview(user, id) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
+    throw httpError(403, 'Only event coordinators can open requests for review', 'FORBIDDEN');
+  }
+
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+
+  if (!existing.coordinator_id) {
+    throw httpError(409, 'This request has not been assigned to a coordinator yet', 'NOT_ASSIGNED');
+  }
+  if (existing.coordinator_id !== user.id) {
+    throw httpError(403, 'Only the assigned coordinator can open this request for review', 'FORBIDDEN');
+  }
+
+  if (existing.status === EVENT_STATUS.UNDER_REVIEW) {
+    return getEvent(user, id);
+  }
+
+  assertTransition(existing.status, EVENT_STATUS.UNDER_REVIEW);
+
+  await updateById('events', id, {
+    status: EVENT_STATUS.UNDER_REVIEW,
+    sub_state: EVENT_SUB_STATE.IN_REVIEW,
+    updated_at: new Date().toISOString(),
+  });
+
+  await writeStatusHistory(id, user.id, existing.status, EVENT_STATUS.UNDER_REVIEW, 'Opened for review');
+  await writeAudit(user.id, 'EVENT_OPENED_FOR_REVIEW', 'event', id, {});
+
+  return getEvent(user, id);
+}
+
 const DECISION_TARGET_STATUS = {
-  [EVENT_DECISION.APPROVE]: EVENT_STATUS.PLANNING,
+  [EVENT_DECISION.APPROVE]: EVENT_STATUS.APPROVED,
   [EVENT_DECISION.REJECT]: EVENT_STATUS.REJECTED,
+};
+
+// AC2: approving only applies to the initial, already-under-review request.
+// AC4: rejecting is allowed either before (SUBMITTED) or during (UNDER_REVIEW) review.
+const DECISION_EXPECTED_STATUSES = {
+  [EVENT_DECISION.APPROVE]: [EVENT_STATUS.UNDER_REVIEW],
+  [EVENT_DECISION.REJECT]: [EVENT_STATUS.SUBMITTED, EVENT_STATUS.UNDER_REVIEW],
 };
 
 async function decideEvent(user, id, decision, reason) {
   const nextStatus = DECISION_TARGET_STATUS[decision];
   if (!nextStatus) throw httpError(400, 'Decision must be APPROVE or REJECT', 'VALIDATION_ERROR');
-  return changeStatus(user, id, nextStatus, reason, { expectedStatus: EVENT_STATUS.UNDER_REVIEW });
+  return changeStatus(user, id, nextStatus, reason, { expectedStatuses: DECISION_EXPECTED_STATUSES[decision] });
 }
 
 function statusNotification(name, fromStatus, nextStatus, note) {
   if (nextStatus === EVENT_STATUS.REJECTED) {
     return { title: 'Event request rejected', body: `${name} was rejected. Reason: ${note}` };
   }
-  if (fromStatus === EVENT_STATUS.UNDER_REVIEW && nextStatus === EVENT_STATUS.PLANNING) {
+  if (fromStatus === EVENT_STATUS.UNDER_REVIEW && nextStatus === EVENT_STATUS.APPROVED) {
     const comment = note ? ` Coordinator comment: ${note}` : '';
     return { title: 'Event request approved', body: `${name} was approved for planning.${comment}` };
   }
@@ -529,7 +641,7 @@ function statusNotification(name, fromStatus, nextStatus, note) {
   };
 }
 
-async function changeStatus(user, id, nextStatus, reason, { expectedStatus } = {}) {
+async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expectedStatuses } = {}) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only coordinators can change event status', 'FORBIDDEN');
   }
@@ -540,10 +652,11 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus } = {
     throw httpError(403, 'Only the assigned coordinator can update this event', 'FORBIDDEN');
   }
 
-  if (expectedStatus && existing.status !== expectedStatus) {
+  const allowedFrom = expectedStatuses || (expectedStatus ? [expectedStatus] : null);
+  if (allowedFrom && !allowedFrom.includes(existing.status)) {
     throw httpError(
       409,
-      'Only event requests under review can be approved or rejected',
+      'This decision cannot be made in the event’s current status',
       'INVALID_STATUS_TRANSITION'
     );
   }
@@ -555,6 +668,16 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus } = {
     throw httpError(400, REJECTION_REASON_MESSAGE, 'VALIDATION_ERROR', { fields: ['reason'] });
   }
 
+  // SCRUM-5 AC7: the safety check itself belongs to SCRUM-55/56 (not built yet), so this
+  // always refuses for now rather than silently allowing preparation to start unchecked.
+  if (nextStatus === EVENT_STATUS.PREPARATION) {
+    throw httpError(
+      409,
+      'The Safety Officer must approve the safety check before preparation can start',
+      'SAFETY_CHECK_NOT_APPROVED'
+    );
+  }
+
   const patch = {
     status: nextStatus,
     sub_state: null,
@@ -563,6 +686,13 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus } = {
 
   if (nextStatus === EVENT_STATUS.REJECTED) {
     patch.rejection_reason = note;
+  }
+  // SCRUM-5 AC6: every active venue booking approved, and any requested equipment reserved.
+  if (nextStatus === EVENT_STATUS.AWAITING_SAFETY_CHECK) {
+    const ready = await isReadyForSafetyCheck(existing.id);
+    if (!ready.ok) {
+      throw httpError(409, ready.message, 'NOT_READY_FOR_SAFETY_CHECK');
+    }
   }
   if (nextStatus === EVENT_STATUS.CONFIRMED) {
     const ready = await isReadyToConfirm(existing);
@@ -599,6 +729,134 @@ async function isReadyToConfirm(event) {
     return { ok: false, message: 'A venue booking must be approved before confirmation' };
   }
   return { ok: true };
+}
+
+// Rejected and cancelled bookings are no longer part of the event's arrangements,
+// so they don't count for or against readiness.
+const INACTIVE_BOOKING_STATUSES = [BOOKING_STATUS.REJECTED, BOOKING_STATUS.CANCELLED];
+
+async function isReadyForSafetyCheck(eventId) {
+  const bookings = await fetchMany(
+    supabase.from('venue_bookings').select('status').eq('event_id', eventId)
+  );
+  const activeBookings = bookings.filter((booking) => !INACTIVE_BOOKING_STATUSES.includes(booking.status));
+  if (!activeBookings.length || !activeBookings.every((booking) => booking.status === BOOKING_STATUS.APPROVED)) {
+    return { ok: false, message: 'Every venue booking must be approved before the safety check' };
+  }
+
+  // Equipment requests aren't built yet (SCRUM-47/48); an empty list is vacuously ready.
+  const equipmentRequests = await fetchMany(
+    supabase.from('equipment_requests').select('status').eq('event_id', eventId)
+  );
+  if (!equipmentRequests.every((item) => item.status === 'RESERVED')) {
+    return { ok: false, message: 'All requested equipment must be reserved before the safety check' };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Purpose: load a user and refuse anyone who is not an active Event Coordinator.
+ * AC: SCRUM-71 AC2
+ * Business rule: W7 #5 — the Lead picks from Coordinators; inactive accounts cannot be assigned.
+ * Inputs: coordinatorId. Output: the user row. Failure: 409 INVALID_COORDINATOR; caller must not write the event.
+ */
+async function requireActiveCoordinator(coordinatorId) {
+  const candidate = await fetchOne(
+    supabase.from('users').select('id, full_name, is_active').eq('id', coordinatorId)
+  );
+  if (!candidate || !candidate.is_active) {
+    throw httpError(409, 'Only an active Coordinator can be assigned', 'INVALID_COORDINATOR');
+  }
+
+  const roleRows = await fetchMany(
+    supabase.from('user_roles').select('role').eq('user_id', coordinatorId)
+  );
+  const isCoordinator = roleRows.some((row) => row.role === ROLES.EVENT_COORDINATOR);
+  if (!isCoordinator) {
+    throw httpError(409, 'Only an active Coordinator can be assigned', 'INVALID_COORDINATOR');
+  }
+  return candidate;
+}
+
+/**
+ * Purpose: list Coordinators the Lead may choose from (active accounts only).
+ * AC: SCRUM-71 AC1, AC2
+ * Business rule: W4 — the Lead chooses the Coordinator manually.
+ * Inputs: authenticated user. Output: { id, fullName }[]. Failure: 403 if the user is not a Lead.
+ */
+async function listAssignableCoordinators(user) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)) {
+    throw httpError(403, 'Only an Event Coordinator Lead can assign a coordinator', 'FORBIDDEN');
+  }
+
+  const roleRows = await fetchMany(
+    supabase.from('user_roles').select('user_id').eq('role', ROLES.EVENT_COORDINATOR)
+  );
+  const ids = [...new Set(roleRows.map((row) => row.user_id))];
+  if (!ids.length) return [];
+
+  const coordinators = await fetchMany(
+    supabase.from('users').select('id, full_name, is_active').in('id', ids)
+  );
+  // AC2: inactive accounts must not appear as assignable, even if the query forgets is_active.
+  return coordinators
+    .filter((row) => row.is_active)
+    .map((row) => ({ id: row.id, fullName: row.full_name }));
+}
+
+/**
+ * Purpose: let a Lead set the one primary Coordinator on a Submitted event that has none.
+ * AC: SCRUM-71 AC1, AC2, AC3, AC4, AC5, AC6
+ * Business rule: W7 #5 (Lead assigns new requests), W2/W4 (exactly one primary Coordinator).
+ * Inputs: Lead user, event id, coordinatorId to assign.
+ * Output: the updated event. Failure: 403 if not Lead; 404 if the event is missing;
+ *   409 if the event is not Submitted, already has a Coordinator, or the chosen user is
+ *   inactive / not a Coordinator. On failure the event is not written.
+ */
+async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)) {
+    throw httpError(403, 'Only an Event Coordinator Lead can assign a coordinator', 'FORBIDDEN');
+  }
+
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+
+  // AC5: overwriting an existing Coordinator is reassignment (SCRUM-31 / SCRUM-33), not this action.
+  if (existing.coordinator_id) {
+    throw httpError(409, 'This event already has a coordinator', 'ALREADY_ASSIGNED');
+  }
+
+  // AC1: only a Submitted request with no Coordinator can be assigned here.
+  if (existing.status !== EVENT_STATUS.SUBMITTED) {
+    throw httpError(
+      409,
+      'Only a Submitted event with no coordinator can be assigned',
+      'INVALID_STATUS'
+    );
+  }
+
+  await requireActiveCoordinator(coordinatorId);
+  assertTransition(existing.status, EVENT_STATUS.UNDER_REVIEW);
+
+  await updateById('events', eventId, {
+    coordinator_id: coordinatorId,
+    status: EVENT_STATUS.UNDER_REVIEW,
+    sub_state: EVENT_SUB_STATE.IN_REVIEW,
+    updated_at: new Date().toISOString(),
+  });
+
+  await writeStatusHistory(
+    eventId,
+    user.id,
+    existing.status,
+    EVENT_STATUS.UNDER_REVIEW,
+    'Coordinator assigned'
+  );
+  await writeAudit(user.id, 'COORDINATOR_ASSIGNED', 'event', eventId, { coordinatorId });
+  // Organiser / Coordinator notices are SCRUM-29 and SCRUM-45 — do not notify here.
+
+  return getEvent(user, eventId);
 }
 
 async function requestCoordinatorChange(user, eventId, newCoordinatorId) {
@@ -805,16 +1063,20 @@ module.exports = {
   listEvents,
   getEvent,
   listVenueBookings,
+  listEquipmentRequests,
   assertPlanningAccess,
   createEvent,
   updateEvent,
   submitEvent,
+  openForReview,
   decideEvent,
   changeStatus,
   requestClarification,
   respondClarification,
   requestCoordinatorChange,
   acceptCoordinatorChange,
+  assignPrimaryCoordinator,
+  listAssignableCoordinators,
   listHistory,
   findMissingSubmissionFields,
   isInUnassignedQueue,

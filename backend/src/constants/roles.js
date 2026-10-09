@@ -1,7 +1,7 @@
 const ROLES = {
   EVENT_ORGANISER: 'EVENT_ORGANISER',
   EVENT_COORDINATOR: 'EVENT_COORDINATOR',
-  // SCRUM-65 AC1: the unassigned-queue view is for the Lead. Overlaps SCRUM-54.
+  // Week 7 change #5. SCRUM-65: Lead views the unassigned queue. SCRUM-71: only a Lead may assign.
   EVENT_COORDINATOR_LEAD: 'EVENT_COORDINATOR_LEAD',
   VENUE_STAFF: 'VENUE_STAFF',
   TECHNICAL_SUPPORT: 'TECHNICAL_SUPPORT',

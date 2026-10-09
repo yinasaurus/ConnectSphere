@@ -57,9 +57,61 @@ describe('SCUM-13 event ownership and assigned coordinator permissions', () => {
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
+  describe('SCRUM-64 opening a submitted event request for review', () => {
+    beforeEach(() => {
+      event.status = 'SUBMITTED';
+    });
+
+    it('AC1: lets the assigned coordinator open a submitted request, moving it to Under Review', async () => {
+      await service.openForReview(coordinator, 3);
+      expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'UNDER_REVIEW' }));
+    });
+
+    it('AC2: rejects opening a request still in the unassigned queue (no coordinator assigned)', async () => {
+      event.coordinator_id = null;
+      await expect(service.openForReview(coordinator, 3)).rejects.toMatchObject({ status: 409, code: 'NOT_ASSIGNED' });
+      expect(db.updateById).not.toHaveBeenCalled();
+    });
+
+    it('AC3: rejects opening a request assigned to a different coordinator', async () => {
+      await expect(service.openForReview({ ...coordinator, id: 4 }, 3)).rejects.toMatchObject({ status: 403 });
+      expect(db.updateById).not.toHaveBeenCalled();
+    });
+
+    it('AC4: a Draft request cannot be opened for review (never reachable from the reviewable queue)', async () => {
+      event.status = 'DRAFT';
+      await expect(service.openForReview(coordinator, 3)).rejects.toMatchObject({ status: 409, code: 'INVALID_STATUS_TRANSITION' });
+      expect(db.updateById).not.toHaveBeenCalled();
+    });
+
+    it('AC4: a Draft request is excluded when listing by Submitted status', async () => {
+      event.status = 'DRAFT';
+      db.fetchMany.mockResolvedValue([event].filter((row) => row.status === 'SUBMITTED'));
+      const results = await service.listEvents(coordinator, { status: 'SUBMITTED' });
+      expect(results).toHaveLength(0);
+    });
+
+    it('AC5: opening an already Under Review request is idempotent (no error, no re-trigger)', async () => {
+      event.status = 'UNDER_REVIEW';
+      await expect(service.openForReview(coordinator, 3)).resolves.toBeDefined();
+      expect(db.updateById).not.toHaveBeenCalled();
+    });
+
+    it('AC6: rejects an organiser attempting to open a request for review', async () => {
+      await expect(service.openForReview(organiser, 3)).rejects.toMatchObject({ status: 403 });
+      expect(db.updateById).not.toHaveBeenCalled();
+    });
+
+    it('rejects opening a request that does not exist', async () => {
+      db.fetchOne.mockResolvedValueOnce(null);
+      await expect(service.openForReview(coordinator, 999)).rejects.toMatchObject({ status: 404 });
+      expect(db.updateById).not.toHaveBeenCalled();
+    });
+  });
+
   it('allows an assigned coordinator to review', async () => {
     event.status = 'UNDER_REVIEW';
-    await service.changeStatus(coordinator, 3, 'PLANNING');
+    await service.changeStatus(coordinator, 3, 'APPROVED');
     expect(db.updateById).toHaveBeenCalled();
   });
 
