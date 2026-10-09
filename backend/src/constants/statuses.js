@@ -1,8 +1,8 @@
 /**
  * Event lifecycle statuses (SCRUM-5):
  *
- * DRAFT                  – saved before submission
- * SUBMITTED              – sent for review
+ * DRAFT                  – saved before submission (not in the unassigned queue)
+ * SUBMITTED              – in the Lead's unassigned queue; no Coordinator yet (W7 #5 / SCRUM-28)
  * UNDER_REVIEW           – coordinator assigned and reviewing
  * APPROVED               – enough information to plan (W4)
  * PLANNING               – venue/equipment sourcing underway

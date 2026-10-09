@@ -529,6 +529,7 @@ export default function EventDetail() {
           {canViewPlanning && <div className="card">
             <h3>People</h3>
             <p><strong>Organiser:</strong> {event.organiserName}</p>
+            {/* SCRUM-28 AC1: submitted requests stay unassigned until the Lead assigns (SCRUM-71). */}
             <p><strong>Coordinator:</strong> {event.coordinatorName || 'Unassigned'}</p>
           </div>}
 

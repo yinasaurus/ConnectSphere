@@ -46,7 +46,10 @@ describe('SCUM-13 event ownership and assigned coordinator permissions', () => {
 
   it.each([organiser, coordinator])('allows owner/assigned coordinator submission', async (user) => {
     await service.submitEvent(user, 3);
-    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'SUBMITTED' }));
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
+      status: 'SUBMITTED',
+      coordinator_id: null,
+    }));
   });
 
   it('rejects submission by an unassigned coordinator', async () => {

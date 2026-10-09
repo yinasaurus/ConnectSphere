@@ -1,4 +1,4 @@
-const { supabase, fetchOne, fetchMany, fetchCount, insertOne, updateById } = require('../config/db');
+const { supabase, fetchOne, fetchMany, insertOne, updateById } = require('../config/db');
 const { ROLES } = require('../constants/roles');
 const {
   EVENT_STATUS,
@@ -204,13 +204,27 @@ function applyVisibility(query, user) {
   return query.eq('id', -1);
 }
 
+/**
+ * Purpose: list events the caller may see, optionally narrowed to the Lead's
+ * unassigned queue (Submitted + no Coordinator) without building a queue UI.
+ * AC: SCRUM-28 AC3, AC4 (queue membership is Submitted and unassigned; drafts are excluded)
+ * Business rule: W7 #5 — viewing the queue is SCRUM-65; this only exposes the data set.
+ * Inputs: user, filters.status, filters.unassigned, filters.subState, filters.q
+ * Outputs: mapped events the user can view
+ * Failure: none (empty list when nothing matches)
+ */
 async function listEvents(user, filters = {}) {
   let query = applyVisibility(
     supabase.from('events').select(EVENT_SELECT).order('start_at', { ascending: true }),
     user
   );
 
-  if (filters.status) query = query.eq('status', filters.status);
+  if (filters.unassigned) {
+    // Queue = Submitted and no Coordinator. Do not include drafts or assigned events.
+    query = query.eq('status', EVENT_STATUS.SUBMITTED).is('coordinator_id', null);
+  } else if (filters.status) {
+    query = query.eq('status', filters.status);
+  }
   if (filters.subState) query = query.eq('sub_state', filters.subState);
   if (filters.q) {
     const term = String(filters.q).replace(/[,()%]/g, '');
@@ -218,13 +232,17 @@ async function listEvents(user, filters = {}) {
   }
 
   const rows = await fetchMany(query);
-  return rows.filter((row) => canViewEvent(user, row)).map((row) => visibleEvent(user, row));
+  return rows
+    .filter((row) => canViewEvent(user, row))
+    .filter((row) => !filters.unassigned || isInUnassignedQueue(row))
+    .map((row) => visibleEvent(user, row));
 }
 
 /**
  * Purpose: loads one event for the signed-in user, always fresh from the database, so the
  * details shown are the latest.
- * AC: SCRUM-39 AC1 + AC2.
+ * AC: SCRUM-39 AC1 + AC2. SCRUM-28 AC1, AC2 — after submit the organiser sees Submitted
+ *     and no Coordinator.
  * Inputs: the user and the event id. Output: the event as visibleEvent shapes it.
  * Failure: 404 "Event not found" both when it doesn't exist and when the user may not see
  * it, so outsiders can't tell the two apart.
@@ -314,6 +332,13 @@ async function listEquipmentRequests(user, eventId) {
   }));
 }
 
+/**
+ * Purpose: save a new event request as a Draft so the organiser can finish it later (SCUM-15).
+ * AC: SCRUM-28 AC4 — a draft stays DRAFT with no Coordinator and is not placed in the unassigned queue.
+ * Inputs: user (organiser or coordinator), payload (name required; other fields optional)
+ * Outputs: the created mapped event
+ * Failure: 403 if the role cannot create; 400 if the name is missing or dates are invalid
+ */
 async function createEvent(user, payload) {
   if (!hasRole(user, ROLES.EVENT_ORGANISER) && !hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only organisers can create event requests', 'FORBIDDEN');
@@ -349,6 +374,13 @@ async function createEvent(user, payload) {
   return getEvent(user, created.id);
 }
 
+/**
+ * Purpose: patch an event the organiser still owns as a draft, or the assigned coordinator may edit.
+ * AC: SCRUM-28 AC4 — saving more draft fields does not submit or place the request in the queue.
+ * Inputs: user, event id, payload of fields to change
+ * Outputs: mapped event after the patch
+ * Failure: 404 if missing; 403 if not allowed; 409 if the organiser is locked after submit
+ */
 async function updateEvent(user, id, payload) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
@@ -437,6 +469,34 @@ function toEventPatch(payload) {
   return patch;
 }
 
+/**
+ * Purpose: membership test for the Lead's unassigned queue.
+ * AC: SCRUM-28 AC1, AC3, AC4
+ * Business rule: W7 #5 — a request is queued only while it is Submitted and has no Coordinator.
+ * Inputs: event row (snake_case) or mapped event (camelCase)
+ * Outputs: true if the request belongs in the unassigned queue
+ * Failure: none (boolean)
+ */
+function isInUnassignedQueue(event) {
+  if (!event) return false;
+  const status = event.status;
+  const coordinatorId = Object.prototype.hasOwnProperty.call(event, 'coordinatorId')
+    ? event.coordinatorId
+    : event.coordinator_id;
+  return status === EVENT_STATUS.SUBMITTED && coordinatorId == null;
+}
+
+/**
+ * Purpose: organiser (or assigned coordinator) sends a complete request for Lead assignment.
+ * Status becomes Submitted with no Coordinator so it sits in the unassigned queue.
+ * AC: SCRUM-28 AC1, AC2, AC3
+ * Business rule: W7 #5 (Oct 3 2026, SHIYIN) — auto-assignment replaced by an unassigned queue.
+ * Assignment is SCRUM-71; this method must not pick a Coordinator.
+ * Inputs: user, event id
+ * Outputs: mapped event with status SUBMITTED and coordinatorId null
+ * Failure: 404 if missing; 403 if not the owner/assigned coordinator; 400 if compulsory
+ * fields are incomplete; 409 if the status cannot move to Submitted
+ */
 async function submitEvent(user, id) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
@@ -463,24 +523,19 @@ async function submitEvent(user, id) {
     : existing.status;
   assertTransition(from, EVENT_STATUS.SUBMITTED);
 
-  const coordinatorId = existing.coordinator_id || await assignCoordinator();
+  const previousStatus = existing.status;
+  // W7 #5: leave coordinator_id null. Do not load-balance or notify a Coordinator.
   await updateById('events', id, {
     status: EVENT_STATUS.SUBMITTED,
+    sub_state: null,
     review_remarks: null,
-    coordinator_id: coordinatorId,
+    coordinator_id: null,
     rejection_reason: null,
     updated_at: new Date().toISOString(),
   });
 
-  await writeStatusHistory(id, user.id, existing.status, EVENT_STATUS.SUBMITTED, 'Submitted for review');
-  await writeAudit(user.id, 'EVENT_SUBMITTED', 'event', id, { coordinatorId });
-  await notifyUser(
-    coordinatorId,
-    'EVENT_ASSIGNED',
-    'New event assigned to you',
-    `${existing.name} is waiting for review.`,
-    id
-  );
+  await writeStatusHistory(id, user.id, previousStatus, EVENT_STATUS.SUBMITTED, 'Submitted for review');
+  await writeAudit(user.id, 'EVENT_SUBMITTED', 'event', id, { coordinatorId: null });
 
   return getEvent(user, id);
 }
@@ -666,37 +721,6 @@ async function isReadyForSafetyCheck(eventId) {
   return { ok: true };
 }
 
-async function assignCoordinator() {
-  const roleRows = await fetchMany(
-    supabase.from('user_roles').select('user_id').eq('role', ROLES.EVENT_COORDINATOR)
-  );
-  const ids = roleRows.map((row) => row.user_id);
-  if (!ids.length) {
-    throw httpError(409, 'No event coordinators are available', 'NO_COORDINATOR');
-  }
-
-  const coordinators = await fetchMany(
-    supabase.from('users').select('id').in('id', ids).eq('is_active', true)
-  );
-  if (!coordinators.length) {
-    throw httpError(409, 'No event coordinators are available', 'NO_COORDINATOR');
-  }
-
-  const loads = await Promise.all(coordinators.map(async (coordinator) => {
-    const count = await fetchCount(
-      supabase
-        .from('events')
-        .select('*', { count: 'exact', head: true })
-        .eq('coordinator_id', coordinator.id)
-        .not('status', 'in', '(COMPLETED,CANCELLED,REJECTED)')
-    );
-    return { id: coordinator.id, count };
-  }));
-
-  loads.sort((a, b) => a.count - b.count || a.id - b.id);
-  return loads[0].id;
-}
-
 /**
  * Purpose: load a user and refuse anyone who is not an active Event Coordinator.
  * AC: SCRUM-71 AC2
@@ -848,6 +872,13 @@ async function acceptCoordinatorChange(user, eventId) {
   return getEvent(user, eventId);
 }
 
+/**
+ * Purpose: append one status-history row for an event (audit trail of lifecycle moves).
+ * AC: SCRUM-28 AC1 — submit records DRAFT (or REJECTED) → SUBMITTED, not Under Review.
+ * Inputs: event id, actor id, from/to status, optional note
+ * Outputs: none (insert only)
+ * Failure: insert errors propagate to the caller
+ */
 async function writeStatusHistory(eventId, actorId, fromStatus, toStatus, note) {
   await insertOne('event_status_history', {
     event_id: eventId,
@@ -1014,4 +1045,5 @@ module.exports = {
   listAssignableCoordinators,
   listHistory,
   findMissingSubmissionFields,
+  isInUnassignedQueue,
 };
