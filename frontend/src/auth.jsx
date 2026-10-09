@@ -27,6 +27,7 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     user,
     loading,
+    // SCRUM-54 AC2: any matching held role is enough, including a second role on a hybrid account.
     hasRole: (...roles) => Boolean(user?.roles?.some((role) => roles.includes(role))),
     async login(email, password) {
       const data = await api('/api/auth/login', { method: 'POST', body: { email, password } });

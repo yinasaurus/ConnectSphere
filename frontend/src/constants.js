@@ -1,16 +1,28 @@
+/**
+ * Purpose: role names that match backend user_roles.role after login.
+ * AC: SCRUM-54 AC1, AC2
+ * Business rule: W4 multiple roles; W7 #5 Lead; W7 #6 Safety Officer.
+ */
 export const ROLES = {
   EVENT_ORGANISER: 'EVENT_ORGANISER',
   EVENT_COORDINATOR: 'EVENT_COORDINATOR',
   EVENT_COORDINATOR_LEAD: 'EVENT_COORDINATOR_LEAD',
+  SAFETY_OFFICER: 'SAFETY_OFFICER',
   VENUE_STAFF: 'VENUE_STAFF',
   TECHNICAL_SUPPORT: 'TECHNICAL_SUPPORT',
   ATTENDEE: 'ATTENDEE',
 };
 
+/**
+ * Purpose: labels shown in the header and profile after a valid login so the
+ * session is recognised as Lead or Safety Officer (and any other held roles).
+ * AC: SCRUM-54 AC1
+ */
 export const ROLE_LABELS = {
   EVENT_ORGANISER: 'Event Organiser',
   EVENT_COORDINATOR: 'Event Coordinator',
-  EVENT_COORDINATOR_LEAD: 'Event Coordinator Lead',
+  EVENT_COORDINATOR_LEAD: 'Lead',
+  SAFETY_OFFICER: 'Safety Officer',
   VENUE_STAFF: 'Venue Staff',
   TECHNICAL_SUPPORT: 'Technical Support',
   ATTENDEE: 'Attendee',
@@ -64,6 +76,8 @@ export const DEMO_ACCOUNTS = [
   { email: 'organiser@acme.example', role: 'Organiser (Acme)' },
   { email: 'coordinator@connectsphere.sg', role: 'Coordinator' },
   { email: 'lead@connectsphere.sg', role: 'Lead' },
+  { email: 'leadcoord@connectsphere.sg', role: 'Coordinator + Lead' },
+  { email: 'safety@connectsphere.sg', role: 'Safety Officer' },
   { email: 'venue@connectsphere.sg', role: 'Venue staff' },
   { email: 'tech@connectsphere.sg', role: 'Technical support' },
   { email: 'attendee@example.com', role: 'Attendee' },
@@ -75,12 +89,14 @@ export const DEMO_PASSWORD = 'Password123!';
 /**
  * Purpose: send each role to a useful first screen after login.
  * AC: SCRUM-65 AC1 — the Lead lands on the unassigned queue so they can see new requests.
+ *     SCRUM-54 AC1, AC2 — a hybrid still lands on a screen for a role they hold.
  * Inputs: role name array from the session. Outputs: an in-app path.
  * Failure: unknown roles fall through to `/app`.
  */
 export function homePathForRoles(roles = []) {
   if (roles.includes(ROLES.EVENT_COORDINATOR_LEAD)) return '/app/events/unassigned';
   if (roles.includes(ROLES.EVENT_COORDINATOR)) return '/app';
+  if (roles.includes(ROLES.SAFETY_OFFICER)) return '/app';
   if (roles.includes(ROLES.VENUE_STAFF)) return '/app/venues';
   if (roles.includes(ROLES.TECHNICAL_SUPPORT)) return '/app/equipment';
   if (roles.includes(ROLES.EVENT_ORGANISER)) return '/app/events';

@@ -34,6 +34,7 @@ const listUnassignedQueue = asyncHandler(async (req, res) => {
 /**
  * Purpose: GET /api/events/:id, one event's details for the signed-in user.
  * AC: SCRUM-39 AC1 + AC2. SCRUM-65 AC5 — the Lead can open a queued request's full details.
+ *     SCRUM-54 AC6 — Coordinators may view events they are not assigned to.
  * Output: 200 { event }; 404 from the service goes to the error handler.
  */
 const get = asyncHandler(async (req, res) => {
@@ -64,6 +65,10 @@ const create = asyncHandler(async (req, res) => {
   res.status(201).json({ event });
 });
 
+/**
+ * Purpose: apply an edit. Unassigned Coordinators are refused by the service (403, unchanged).
+ * AC: SCRUM-54 AC5, AC7
+ */
 const update = asyncHandler(async (req, res) => {
   const event = await eventsService.updateEvent(req.user, req.params.id, req.body);
   res.json({ event });
@@ -86,6 +91,10 @@ const openForReview = asyncHandler(async (req, res) => {
   res.json({ event });
 });
 
+/**
+ * Purpose: approve or reject. Only the assigned Coordinator succeeds; others get 403.
+ * AC: SCRUM-54 AC5, AC7
+ */
 const decide = asyncHandler(async (req, res) => {
   const event = await eventsService.decideEvent(
     req.user,
@@ -96,6 +105,10 @@ const decide = asyncHandler(async (req, res) => {
   res.json({ event });
 });
 
+/**
+ * Purpose: confirm or other status moves. Unassigned Coordinators are refused (403, unchanged).
+ * AC: SCRUM-54 AC5, AC7
+ */
 const changeStatus = asyncHandler(async (req, res) => {
   const event = await eventsService.changeStatus(
     req.user,

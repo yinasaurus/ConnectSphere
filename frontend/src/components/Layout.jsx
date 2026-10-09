@@ -3,8 +3,11 @@ import { useAuth } from '../auth';
 import { ROLE_LABELS, ROLES } from '../constants';
 
 /**
- * Purpose: app chrome (sidebar + outlet) shared by every signed-in page.
- * AC: SCRUM-65 AC1 — the Lead gets an Unassigned queue nav item; other roles do not.
+ * Purpose: signed-in chrome: nav links limited to roles the session holds, and
+ * role pills so Lead / Safety Officer identity is visible after login.
+ * AC: SCRUM-54 AC1 (role labels), AC2 (hybrid accounts see every function they hold),
+ *     AC3 (Unassigned queue / Assignments only for Lead).
+ *     SCRUM-65 AC1 — the Lead gets an Unassigned queue nav item; other roles do not.
  */
 export default function Layout() {
   const { user, logout, hasRole } = useAuth();
@@ -32,11 +35,12 @@ export default function Layout() {
         <nav className="nav">
           <NavLink to="/app">Home</NavLink>
           <NavLink to="/app/events">Events</NavLink>
+          {hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR) && <NavLink to="/app/events/new">New request</NavLink>}
+          {hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR) && <NavLink to="/app/drafts">My drafts</NavLink>}
           {hasRole(ROLES.EVENT_COORDINATOR_LEAD) && (
             <NavLink to="/app/events/unassigned">Unassigned queue</NavLink>
           )}
-          {hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR) && <NavLink to="/app/events/new">New request</NavLink>}
-          {hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR) && <NavLink to="/app/drafts">My drafts</NavLink>}
+          {hasRole(ROLES.EVENT_COORDINATOR_LEAD) && <NavLink to="/app/assignments">Assignments</NavLink>}
           <NavLink to="/app/calendar">Calendar</NavLink>
           {hasRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF) && (
             // `end` keeps Venues from also highlighting on /app/venues/availability.

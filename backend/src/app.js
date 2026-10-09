@@ -12,6 +12,7 @@ const venuesRoutes = require('./routes/venues.routes');
 const equipmentRoutes = require('./routes/equipment.routes');
 const notificationsRoutes = require('./routes/notifications.routes');
 const miscRoutes = require('./routes/misc.routes');
+const accessRoutes = require('./routes/access.routes');
 
 function createApp() {
   const app = express();
@@ -25,6 +26,7 @@ function createApp() {
 
   app.use('/api', miscRoutes);
   app.use('/api/auth', authRoutes);
+  app.use('/api', accessRoutes);
   app.use('/api/events', eventsRoutes);
   app.use('/api/venues', venuesRoutes);
   app.use('/api/equipment', equipmentRoutes);

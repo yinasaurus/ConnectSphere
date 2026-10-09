@@ -5,6 +5,7 @@ const { validateBody } = require('../middleware/validate');
 const { eventDecisionSchema, assignCoordinatorSchema } = require('../validators/events.validators');
 const controller = require('../controllers/events.controller');
 const registrations = require('../controllers/registrations.controller');
+const access = require('../controllers/access.controller');
 
 const router = express.Router();
 
@@ -36,6 +37,9 @@ router.post(
 // SCRUM-39 AC1 + AC2: no role gate here because who may see which event (and how much of it)
 // is decided per event in the service; outsiders get 404.
 router.get('/:id', controller.get);
+// AC: SCRUM-54 AC4 — only a Safety Officer may open or record a safety check.
+router.get('/:id/safety-check', requireRole(ROLES.SAFETY_OFFICER), access.openSafetyCheck);
+router.post('/:id/safety-check', requireRole(ROLES.SAFETY_OFFICER), access.recordSafetyCheck);
 // SCRUM-39 AC2 (booked venue): same per-event access as GET /:id; Attendees only see
 // approved bookings.
 router.get('/:id/venue-bookings', controller.venueBookings);

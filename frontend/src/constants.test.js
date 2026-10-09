@@ -19,4 +19,8 @@ describe('homePathForRoles', () => {
       '/app/events/unassigned'
     );
   });
+
+  it('sends a Safety Officer to the dashboard', () => {
+    expect(homePathForRoles([ROLES.SAFETY_OFFICER])).toBe('/app');
+  });
 });

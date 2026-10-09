@@ -69,6 +69,7 @@ export default function EventDetail() {
     ROLES.EVENT_ORGANISER,
     ROLES.EVENT_COORDINATOR,
     ROLES.EVENT_COORDINATOR_LEAD,
+    ROLES.SAFETY_OFFICER,
     ROLES.VENUE_STAFF,
     ROLES.TECHNICAL_SUPPORT
   );
@@ -585,6 +586,13 @@ export default function EventDetail() {
               <Link className="btn venue-book-link" to={`/app/events/${id}/venue-booking`}>Book a venue</Link>
             )}
           </div>
+          {hasRole(ROLES.SAFETY_OFFICER) && (
+            <div className="card">
+              <h3>Safety check</h3>
+              <p className="muted">Only a Safety Officer can open a safety check or record its outcome.</p>
+              <Link className="btn" to={`/app/events/${id}/safety-check`}>Open safety check</Link>
+            </div>
+          )}
 
           {canViewPlanning && <div className="card">
             <h3>Equipment requests</h3>
