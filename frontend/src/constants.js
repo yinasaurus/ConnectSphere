@@ -10,7 +10,7 @@ export const ROLES = {
 export const ROLE_LABELS = {
   EVENT_ORGANISER: 'Event Organiser',
   EVENT_COORDINATOR: 'Event Coordinator',
-  EVENT_COORDINATOR_LEAD: 'Lead',
+  EVENT_COORDINATOR_LEAD: 'Event Coordinator Lead',
   VENUE_STAFF: 'Venue Staff',
   TECHNICAL_SUPPORT: 'Technical Support',
   ATTENDEE: 'Attendee',
@@ -19,8 +19,11 @@ export const ROLE_LABELS = {
 export const STATUS_LABELS = {
   DRAFT: 'Draft',
   SUBMITTED: 'Submitted',
-  UNDER_REVIEW: 'Under review',
+  UNDER_REVIEW: 'Under Review',
+  APPROVED: 'Approved',
   PLANNING: 'Planning',
+  AWAITING_SAFETY_CHECK: 'Awaiting Safety Check',
+  PREPARATION: 'Preparation',
   CONFIRMED: 'Confirmed',
   COMPLETED: 'Completed',
   CANCELLED: 'Cancelled',
@@ -40,6 +43,9 @@ export const SUB_STATE_LABELS = {
 };
 
 export const MIN_REJECTION_REASON_LENGTH = 10;
+
+// SCRUM-5 AC5: how often dashboards and the event page re-fetch so status changes appear without a reload.
+export const LIVE_REFRESH_MS = 10000;
 
 export const CATEGORIES = [
   'CONFERENCE',

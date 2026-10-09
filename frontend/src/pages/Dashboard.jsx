@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import StatusBadge from '../components/StatusBadge';
-import { ROLES } from '../constants';
+import { LIVE_REFRESH_MS, ROLES } from '../constants';
 
 export default function Dashboard() {
   const { user, hasRole } = useAuth();
@@ -11,8 +11,13 @@ export default function Dashboard() {
   const [unread, setUnread] = useState(0);
 
   useEffect(() => {
-    api('/api/events').then((data) => setEvents(data.events || []));
-    api('/api/notifications').then((data) => setUnread(data.unread || 0));
+    const load = () => {
+      api('/api/events').then((data) => setEvents(data.events || []));
+      api('/api/notifications').then((data) => setUnread(data.unread || 0));
+    };
+    load();
+    const timer = setInterval(load, LIVE_REFRESH_MS);
+    return () => clearInterval(timer);
   }, []);
 
   const mine = hasRole(ROLES.EVENT_COORDINATOR)
@@ -23,9 +28,12 @@ export default function Dashboard() {
     (event) => event.organiserId === user.id && event.status === 'UNDER_REVIEW' && event.subState === 'ACTION_REQUIRED'
   );
 
+  // SCRUM-5: covers only the statuses where the coordinator has the next step. Awaiting
+  // Safety Check and Preparation are deliberately excluded — nothing is actionable there
+  // until the Safety Officer (SCRUM-55/56) or a later confirm step moves it along.
   const needsAttention = hasRole(ROLES.EVENT_ORGANISER)
     ? clarificationNeeded
-    : mine.filter((event) => ['SUBMITTED', 'UNDER_REVIEW', 'PLANNING'].includes(event.status));
+    : mine.filter((event) => ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'PLANNING'].includes(event.status));
 
   return (
     <>

@@ -32,7 +32,12 @@ export default function Layout() {
           {hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR) && <NavLink to="/app/drafts">My drafts</NavLink>}
           <NavLink to="/app/calendar">Calendar</NavLink>
           {hasRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF) && (
-            <NavLink to="/app/venues">Venues</NavLink>
+            // `end` keeps Venues from also highlighting on /app/venues/availability.
+            <NavLink to="/app/venues" end>Venues</NavLink>
+          )}
+          {/* SCRUM-66 AC6: same roles as the route in App.jsx. */}
+          {hasRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT) && (
+            <NavLink to="/app/venues/availability">Venue availability</NavLink>
           )}
           {hasRole(ROLES.EVENT_COORDINATOR, ROLES.TECHNICAL_SUPPORT) && (
             <NavLink to="/app/equipment">Equipment</NavLink>

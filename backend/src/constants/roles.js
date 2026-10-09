@@ -1,7 +1,7 @@
 const ROLES = {
   EVENT_ORGANISER: 'EVENT_ORGANISER',
   EVENT_COORDINATOR: 'EVENT_COORDINATOR',
-  // SCRUM-71 AC6: only a Lead may assign a Coordinator. Overlaps SCRUM-54.
+  // Week 7 change #5. SCRUM-71 AC6: only a Lead may assign a Coordinator.
   EVENT_COORDINATOR_LEAD: 'EVENT_COORDINATOR_LEAD',
   VENUE_STAFF: 'VENUE_STAFF',
   TECHNICAL_SUPPORT: 'TECHNICAL_SUPPORT',
