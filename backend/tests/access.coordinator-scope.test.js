@@ -141,7 +141,8 @@ describe('SCRUM-54 coordinator assignment scope', () => {
    */
   it('lets a Coordinator + Lead hybrid approve an event assigned to them', async () => {
     await service.decideEvent(hybrid, 3, 'APPROVE');
-    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'PLANNING' }));
+    // SCRUM-5 / SCRUM-17: approve lands on APPROVED; PLANNING is a separate step.
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'APPROVED' }));
   });
 
   /*
