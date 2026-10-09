@@ -72,6 +72,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Organiser cannot edit after submit; changes go through the coordinator | `events.service` update guard |
 | Confirmed fields are locked (date/time/attendance/venue/equipment) | `SIGNIFICANT_FIELDS` |
 | Coordinators are **auto-assigned**, one per event, fair load | least active events on submit |
+| Lead assigns a Coordinator (SCRUM-71): only a Lead can assign an **active** Coordinator to a **Submitted** event that has none; after that the event has exactly one primary Coordinator and is no longer unassigned; an event that already has a Coordinator cannot be assigned this way (reassignment is SCRUM-31) | `POST /api/events/:id/assign-coordinator` → `assignPrimaryCoordinator`; `GET /api/events/assignable-coordinators` |
 | Coordinators can **view** other events but only **edit** assigned ones | list vs update |
 | Reassignment: current coordinator requests, new coordinator accepts | `/reassign` endpoints |
 | Approve / reject (SCRUM-17): only the **assigned** coordinator decides, nobody while unassigned; reject needs a reason of 10–1000 characters; organiser is notified with the reason; reason kept on the event, in status history and in the audit log | `POST /api/events/:id/decision` → `decideEvent` |

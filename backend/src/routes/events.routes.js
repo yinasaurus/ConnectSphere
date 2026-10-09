@@ -2,7 +2,7 @@ const express = require('express');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { ROLES } = require('../constants/roles');
 const { validateBody } = require('../middleware/validate');
-const { eventDecisionSchema } = require('../validators/events.validators');
+const { eventDecisionSchema, assignCoordinatorSchema } = require('../validators/events.validators');
 const controller = require('../controllers/events.controller');
 const registrations = require('../controllers/registrations.controller');
 
@@ -12,6 +12,18 @@ router.use(requireAuth);
 
 router.get('/', controller.list);
 router.post('/', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.create);
+// SCRUM-71: Lead-only list of active Coordinators, then assign one to a Submitted event.
+router.get(
+  '/assignable-coordinators',
+  requireRole(ROLES.EVENT_COORDINATOR_LEAD),
+  controller.listAssignableCoordinators
+);
+router.post(
+  '/:id/assign-coordinator',
+  requireRole(ROLES.EVENT_COORDINATOR_LEAD),
+  validateBody(assignCoordinatorSchema),
+  controller.assignCoordinator
+);
 // SCRUM-39 AC1 + AC2: no role gate here because who may see which event (and how much of it)
 // is decided per event in the service; outsiders get 404.
 router.get('/:id', controller.get);

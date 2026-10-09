@@ -121,7 +121,8 @@ function mapEvent(row) {
  * Business rule source: Week 4 Q&A, "Coordinator can view other events for planning
  * purpose"; Week 2 Q&A, Organisers can't view events of unrelated clients (requirements
  * document section 8b).
- * Rules: Coordinators, Venue Staff and Technical Support see every event; Organisers see
+ * Rules: Coordinators, Lead, Venue Staff and Technical Support see every event (Lead so
+ * they can open an unassigned Submitted event to assign it, SCRUM-71 AC1/AC6); Organisers see
  * their own organisation's (none if they have no organisation); Attendees see only
  * Confirmed events that take registrations; anyone else sees nothing. No stage is blocked
  * for internal roles.
@@ -129,6 +130,7 @@ function mapEvent(row) {
  */
 function canViewEvent(user, row) {
   if (hasRole(user, ROLES.EVENT_COORDINATOR)
+    || hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)
     || hasRole(user, ROLES.VENUE_STAFF)
     || hasRole(user, ROLES.TECHNICAL_SUPPORT)) {
     return true;
@@ -146,11 +148,17 @@ function canViewEvent(user, row) {
  * Purpose: whether a user's roles allow planning details (attendance, venue needs,
  * equipment, history, comments) rather than the public Attendee view.
  * AC: SCRUM-39 AC1 + AC2 (Attendees keep the public view, agreed decision).
- * Output: true for Organiser, Coordinator, Venue Staff or Technical Support; false otherwise.
+ *     SCRUM-71 AC1 — Lead is a planning reader so they can assign from the event page.
+ * Output: true for Organiser, Coordinator, Lead, Venue Staff or Technical Support; false otherwise.
  */
 function canViewPlanning(user) {
-  return [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT]
-    .some((role) => hasRole(user, role));
+  return [
+    ROLES.EVENT_ORGANISER,
+    ROLES.EVENT_COORDINATOR,
+    ROLES.EVENT_COORDINATOR_LEAD,
+    ROLES.VENUE_STAFF,
+    ROLES.TECHNICAL_SUPPORT,
+  ].some((role) => hasRole(user, role));
 }
 
 /**
@@ -175,8 +183,14 @@ async function assertPlanningAccess(user, eventId) {
   return getEvent(user, eventId);
 }
 
+/**
+ * Purpose: constrain an events list query to rows this user is allowed to see.
+ * AC: SCRUM-71 AC1 — Lead sees all events, same as other internal staff, so unassigned Submitted ones appear.
+ * Inputs: supabase query, session user. Output: the same query or a filter. Failure: unknown roles match no rows (id = -1).
+ */
 function applyVisibility(query, user) {
   if (hasRole(user, ROLES.EVENT_COORDINATOR)
+    || hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)
     || hasRole(user, ROLES.VENUE_STAFF)
     || hasRole(user, ROLES.TECHNICAL_SUPPORT)) {
     return query;
@@ -683,6 +697,110 @@ async function assignCoordinator() {
   return loads[0].id;
 }
 
+/**
+ * Purpose: load a user and refuse anyone who is not an active Event Coordinator.
+ * AC: SCRUM-71 AC2
+ * Business rule: W7 #5 — the Lead picks from Coordinators; inactive accounts cannot be assigned.
+ * Inputs: coordinatorId. Output: the user row. Failure: 409 INVALID_COORDINATOR; caller must not write the event.
+ */
+async function requireActiveCoordinator(coordinatorId) {
+  const candidate = await fetchOne(
+    supabase.from('users').select('id, full_name, is_active').eq('id', coordinatorId)
+  );
+  if (!candidate || !candidate.is_active) {
+    throw httpError(409, 'Only an active Coordinator can be assigned', 'INVALID_COORDINATOR');
+  }
+
+  const roleRows = await fetchMany(
+    supabase.from('user_roles').select('role').eq('user_id', coordinatorId)
+  );
+  const isCoordinator = roleRows.some((row) => row.role === ROLES.EVENT_COORDINATOR);
+  if (!isCoordinator) {
+    throw httpError(409, 'Only an active Coordinator can be assigned', 'INVALID_COORDINATOR');
+  }
+  return candidate;
+}
+
+/**
+ * Purpose: list Coordinators the Lead may choose from (active accounts only).
+ * AC: SCRUM-71 AC1, AC2
+ * Business rule: W4 — the Lead chooses the Coordinator manually.
+ * Inputs: authenticated user. Output: { id, fullName }[]. Failure: 403 if the user is not a Lead.
+ */
+async function listAssignableCoordinators(user) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)) {
+    throw httpError(403, 'Only an Event Coordinator Lead can assign a coordinator', 'FORBIDDEN');
+  }
+
+  const roleRows = await fetchMany(
+    supabase.from('user_roles').select('user_id').eq('role', ROLES.EVENT_COORDINATOR)
+  );
+  const ids = [...new Set(roleRows.map((row) => row.user_id))];
+  if (!ids.length) return [];
+
+  const coordinators = await fetchMany(
+    supabase.from('users').select('id, full_name, is_active').in('id', ids)
+  );
+  // AC2: inactive accounts must not appear as assignable, even if the query forgets is_active.
+  return coordinators
+    .filter((row) => row.is_active)
+    .map((row) => ({ id: row.id, fullName: row.full_name }));
+}
+
+/**
+ * Purpose: let a Lead set the one primary Coordinator on a Submitted event that has none.
+ * AC: SCRUM-71 AC1, AC2, AC3, AC4, AC5, AC6
+ * Business rule: W7 #5 (Lead assigns new requests), W2/W4 (exactly one primary Coordinator).
+ * Inputs: Lead user, event id, coordinatorId to assign.
+ * Output: the updated event. Failure: 403 if not Lead; 404 if the event is missing;
+ *   409 if the event is not Submitted, already has a Coordinator, or the chosen user is
+ *   inactive / not a Coordinator. On failure the event is not written.
+ */
+async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)) {
+    throw httpError(403, 'Only an Event Coordinator Lead can assign a coordinator', 'FORBIDDEN');
+  }
+
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+
+  // AC5: overwriting an existing Coordinator is reassignment (SCRUM-31 / SCRUM-33), not this action.
+  if (existing.coordinator_id) {
+    throw httpError(409, 'This event already has a coordinator', 'ALREADY_ASSIGNED');
+  }
+
+  // AC1: only a Submitted request with no Coordinator can be assigned here.
+  if (existing.status !== EVENT_STATUS.SUBMITTED) {
+    throw httpError(
+      409,
+      'Only a Submitted event with no coordinator can be assigned',
+      'INVALID_STATUS'
+    );
+  }
+
+  await requireActiveCoordinator(coordinatorId);
+  assertTransition(existing.status, EVENT_STATUS.UNDER_REVIEW);
+
+  await updateById('events', eventId, {
+    coordinator_id: coordinatorId,
+    status: EVENT_STATUS.UNDER_REVIEW,
+    sub_state: EVENT_SUB_STATE.IN_REVIEW,
+    updated_at: new Date().toISOString(),
+  });
+
+  await writeStatusHistory(
+    eventId,
+    user.id,
+    existing.status,
+    EVENT_STATUS.UNDER_REVIEW,
+    'Coordinator assigned'
+  );
+  await writeAudit(user.id, 'COORDINATOR_ASSIGNED', 'event', eventId, { coordinatorId });
+  // Organiser / Coordinator notices are SCRUM-29 and SCRUM-45 — do not notify here.
+
+  return getEvent(user, eventId);
+}
+
 async function requestCoordinatorChange(user, eventId, newCoordinatorId) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
@@ -892,6 +1010,8 @@ module.exports = {
   respondClarification,
   requestCoordinatorChange,
   acceptCoordinatorChange,
+  assignPrimaryCoordinator,
+  listAssignableCoordinators,
   listHistory,
   findMissingSubmissionFields,
 };

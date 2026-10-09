@@ -49,9 +49,11 @@ function formatBookingStatus(status) {
 /**
  * Purpose: one event's page. Shows the event and, depending on the user's roles, the actions
  * they can take: Organisers submit, Coordinators review and request a venue, Venue Staff
- * approve or reject pending venue bookings, Attendees register.
+ * approve or reject pending venue bookings, Attendees register, Lead assigns a Coordinator
+ * on a Submitted event that has none.
  * AC: SCRUM-18 AC1-AC9 (each pending booking is decided on its own).
  *     SCRUM-39 AC1 + AC2 (request details, venue booking, equipment requests).
+ *     SCRUM-71 AC1, AC2, AC6 (Lead assign card).
  *     SCRUM-78 AC1-AC3 (the Venue Staff card sends the reason and alternative staff typed, or none).
  * Failure: load errors are shown in place of the event; action errors are shown above it.
  */
@@ -60,12 +62,21 @@ export default function EventDetail() {
   const { id } = useParams();
   const location = useLocation();
   const { user, hasRole } = useAuth();
-  const canViewPlanning = hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT);
+  const isLead = hasRole(ROLES.EVENT_COORDINATOR_LEAD);
+  const canViewPlanning = hasRole(
+    ROLES.EVENT_ORGANISER,
+    ROLES.EVENT_COORDINATOR,
+    ROLES.EVENT_COORDINATOR_LEAD,
+    ROLES.VENUE_STAFF,
+    ROLES.TECHNICAL_SUPPORT
+  );
   const [event, setEvent] = useState(null);
   const [history, setHistory] = useState([]);
   const [comments, setComments] = useState([]);
   const [, setVenues] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [assignableCoordinators, setAssignableCoordinators] = useState([]);
+  const [assignCoordinatorId, setAssignCoordinatorId] = useState('');
   const [equipmentRequests, setEquipmentRequests] = useState([]);
   const [equipmentError, setEquipmentError] = useState('');
   const [comment, setComment] = useState('');
@@ -84,7 +95,7 @@ export default function EventDetail() {
 
   // Loads the event, its venue bookings and, for planning roles only, history, comments,
   // venues and equipment requests; other roles never request planning data they aren't
-  // allowed to see.
+  // allowed to see. A Lead also loads the active-Coordinator list when this event is still unassigned.
   const reload = useCallback(async () => {
     const [eventRes, historyRes, commentRes, venueRes, bookingRes, equipmentRes] = await Promise.all([
       api(`/api/events/${id}`),
@@ -106,7 +117,13 @@ export default function EventDetail() {
     setBookings(bookingRes.bookings || []);
     setEquipmentRequests(equipmentRes.requests || []);
     setEquipmentError(equipmentRes.loadError || '');
-  }, [id, canViewPlanning]);
+    if (isLead && eventRes.event.status === 'SUBMITTED' && !eventRes.event.coordinatorId) {
+      const coordRes = await api('/api/events/assignable-coordinators');
+      setAssignableCoordinators(coordRes.coordinators || []);
+    } else {
+      setAssignableCoordinators([]);
+    }
+  }, [id, canViewPlanning, isLead]);
 
   useEffect(() => {
     const refresh = () => reload().catch((err) => setError(err.message));
@@ -196,6 +213,41 @@ export default function EventDetail() {
             <p><strong>Equipment:</strong> {event.equipmentNotes || '—'}</p>
             {event.rejectionReason && <p><strong>Rejection reason:</strong> {event.rejectionReason}</p>}
           </div>
+
+          {/*
+            Purpose: Lead chooses the one primary Coordinator for a Submitted event that has none.
+            AC: SCRUM-71 AC1, AC2, AC6
+            Business rule: W7 #5, W4 (manual choice). Inactive Coordinators are omitted by the API.
+            Failure: the server message is shown; the event is not changed.
+          */}
+          {isLead && event.status === 'SUBMITTED' && !event.coordinatorId && (
+            <div className="card stack">
+              <h3>Assign coordinator</h3>
+              <p className="muted">Choose an active Event Coordinator as the main point of contact. Only a Lead can do this.</p>
+              <label htmlFor="assign-coordinator">Coordinator</label>
+              <select
+                id="assign-coordinator"
+                value={assignCoordinatorId}
+                onChange={(e) => setAssignCoordinatorId(e.target.value)}
+              >
+                <option value="">Select a coordinator</option>
+                {assignableCoordinators.map((row) => (
+                  <option key={row.id} value={row.id}>{row.fullName}</option>
+                ))}
+              </select>
+              <button
+                className="btn"
+                type="button"
+                disabled={!assignCoordinatorId}
+                onClick={() => run(() => api(`/api/events/${id}/assign-coordinator`, {
+                  method: 'POST',
+                  body: { coordinatorId: Number(assignCoordinatorId) },
+                }))}
+              >
+                Assign coordinator
+              </button>
+            </div>
+          )}
 
           {isOrganiser && event.status === 'DRAFT' && (
             <div className="card actions">
@@ -477,7 +529,7 @@ export default function EventDetail() {
           {canViewPlanning && <div className="card">
             <h3>People</h3>
             <p><strong>Organiser:</strong> {event.organiserName}</p>
-            <p><strong>Coordinator:</strong> {event.coordinatorName || 'Will be auto-assigned on submit'}</p>
+            <p><strong>Coordinator:</strong> {event.coordinatorName || 'Unassigned'}</p>
           </div>}
 
           {/* SCRUM-18 AC7/AC8: Event Coordinator sees all venue bookings for this event

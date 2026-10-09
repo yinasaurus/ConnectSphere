@@ -66,6 +66,7 @@ async function seed() {
     { email: 'organiser@apex.example', full_name: 'Ben Tan', organisation_id: apex.id, department: null, roles: ['EVENT_ORGANISER'] },
     { email: 'coordinator@connectsphere.sg', full_name: 'Chloe Lim', organisation_id: null, department: 'Event Operations', roles: ['EVENT_COORDINATOR'] },
     { email: 'coordinator2@connectsphere.sg', full_name: 'Daniel Ong', organisation_id: null, department: 'Event Operations', roles: ['EVENT_COORDINATOR'] },
+    { email: 'lead@connectsphere.sg', full_name: 'Ivy Tan', organisation_id: null, department: 'Event Operations', roles: ['EVENT_COORDINATOR_LEAD'] },
     { email: 'venue@connectsphere.sg', full_name: 'Elena Wong', organisation_id: null, department: 'Venues', roles: ['VENUE_STAFF'] },
     { email: 'tech@connectsphere.sg', full_name: 'Farid Hassan', organisation_id: null, department: 'Technical Support', roles: ['TECHNICAL_SUPPORT'] },
     { email: 'hybrid@connectsphere.sg', full_name: 'Gina Koh', organisation_id: null, department: 'Operations', roles: ['EVENT_COORDINATOR', 'VENUE_STAFF'] },
