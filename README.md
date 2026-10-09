@@ -48,7 +48,7 @@ Login looks up the `users` table in Supabase and issues an httpOnly JWT cookie. 
 ## What you can already click through
 
 1. Organiser saves a draft and submits it.
-2. The request is placed in the unassigned queue with status **Submitted** (no Coordinator is assigned automatically). The Event Coordinator Lead assigns a Coordinator later.
+2. The request is placed in the unassigned queue with status **Submitted** (no Coordinator is assigned automatically). The Event Coordinator Lead (`lead@connectsphere.sg`) can open **Unassigned queue** to see event name, organiser, date/time, attendance, and venue/equipment needs, then open the full request and assign a Coordinator.
 3. Coordinator approves (**Approved**), starts planning (**Planning**) and requests a venue, or rejects with a required reason (rejection is not final — resubmit is allowed).
 4. Venue staff approve/reject the booking, optionally giving a reason and a suggested alternative. The event's assigned Coordinator gets an in-app notice naming the event and venue (with the reason and alternative on a rejection). Confirmed bookings block overlapping windows, including setup/teardown.
 5. Venue staff set each venue's setup and turnaround times in minutes ("Teardown" on the Update venue form). Negative or non-numeric values are rejected and the saved values stay.

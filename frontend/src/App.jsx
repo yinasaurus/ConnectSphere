@@ -8,6 +8,7 @@ import Events from './pages/Events';
 import NewEvent from './pages/NewEvent';
 import Drafts from './pages/Drafts';
 import EventDetail from './pages/EventDetail';
+import UnassignedQueue from './pages/UnassignedQueue';
 import VenueBooking from './pages/VenueBooking';
 import CalendarPage from './pages/CalendarPage';
 import Venues from './pages/Venues';
@@ -19,6 +20,10 @@ import { ROLES } from './constants';
 
 const requestRoles = [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR];
 
+/**
+ * Purpose: route table for the SPA.
+ * AC: SCRUM-65 AC1, AC5 — Lead-only `/app/events/unassigned`, then event detail for a queued request.
+ */
 export default function App() {
   return (
     <AuthProvider>
@@ -38,6 +43,15 @@ export default function App() {
             <Route path="events/new" element={<ProtectedRoute allowedRoles={requestRoles}><NewEvent /></ProtectedRoute>} />
             <Route path="events/:id/edit" element={<ProtectedRoute allowedRoles={requestRoles}><NewEvent /></ProtectedRoute>} />
             <Route path="drafts" element={<ProtectedRoute allowedRoles={requestRoles}><Drafts /></ProtectedRoute>} />
+            {/* SCRUM-65 AC1: Lead unassigned queue. Before events/:id so "unassigned" is not an id. */}
+            <Route
+              path="events/unassigned"
+              element={(
+                <ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR_LEAD]}>
+                  <UnassignedQueue />
+                </ProtectedRoute>
+              )}
+            />
             {/* Keep booking requests scoped to an event and available only to coordinators. */}
             <Route path="events/:id/venue-booking" element={<ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR]}><VenueBooking /></ProtectedRoute>} />
             <Route path="events/:id" element={<EventDetail />} />

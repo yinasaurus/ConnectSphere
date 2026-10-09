@@ -117,16 +117,18 @@ function mapEvent(row) {
 
 /**
  * Purpose: decides whether a user may see one event at all.
- * AC: SCRUM-39 AC1 (who the "authorised users" are).
+ * AC: SCRUM-39 AC1 (who the "authorised users" are). SCRUM-65 AC5 — the Lead can open a
+ * queued request to see its full details.
  * Business rule source: Week 4 Q&A, "Coordinator can view other events for planning
  * purpose"; Week 2 Q&A, Organisers can't view events of unrelated clients (requirements
  * document section 8b).
  * Rules: Coordinators, Lead, Venue Staff and Technical Support see every event (Lead so
- * they can open an unassigned Submitted event to assign it, SCRUM-71 AC1/AC6); Organisers see
+ * they can open an unassigned Submitted event to assign it, SCRUM-71 AC1/AC6, and to read
+ * queue details, SCRUM-65 AC5); Organisers see
  * their own organisation's (none if they have no organisation); Attendees see only
  * Confirmed events that take registrations; anyone else sees nothing. No stage is blocked
  * for internal roles.
- * Output: true or false. Never throws.
+ * Output: true or false. Never throws. getEvent treats false as 404 so we do not leak that the row exists.
  */
 function canViewEvent(user, row) {
   if (hasRole(user, ROLES.EVENT_COORDINATOR)
@@ -148,6 +150,7 @@ function canViewEvent(user, row) {
  * Purpose: whether a user's roles allow planning details (attendance, venue needs,
  * equipment, history, comments) rather than the public Attendee view.
  * AC: SCRUM-39 AC1 + AC2 (Attendees keep the public view, agreed decision).
+ *     SCRUM-65 AC4, AC5 — the Lead needs those planning fields on the queue and the detail page.
  *     SCRUM-71 AC1 — Lead is a planning reader so they can assign from the event page.
  * Output: true for Organiser, Coordinator, Lead, Venue Staff or Technical Support; false otherwise.
  */
@@ -185,7 +188,8 @@ async function assertPlanningAccess(user, eventId) {
 
 /**
  * Purpose: constrain an events list query to rows this user is allowed to see.
- * AC: SCRUM-71 AC1 — Lead sees all events, same as other internal staff, so unassigned Submitted ones appear.
+ * AC: SCRUM-65 AC1 — the Lead's queue is not limited to one organiser's organisation.
+ *     SCRUM-71 AC1 — Lead sees all events, same as other internal staff, so unassigned Submitted ones appear.
  * Inputs: supabase query, session user. Output: the same query or a filter. Failure: unknown roles match no rows (id = -1).
  */
 function applyVisibility(query, user) {
@@ -243,6 +247,7 @@ async function listEvents(user, filters = {}) {
  * details shown are the latest.
  * AC: SCRUM-39 AC1 + AC2. SCRUM-28 AC1, AC2 — after submit the organiser sees Submitted
  *     and no Coordinator.
+ *     SCRUM-65 AC5 — the Lead can open any queued request's full details.
  * Inputs: the user and the event id. Output: the event as visibleEvent shapes it.
  * Failure: 404 "Event not found" both when it doesn't exist and when the user may not see
  * it, so outsiders can't tell the two apart.
@@ -484,6 +489,35 @@ function isInUnassignedQueue(event) {
     ? event.coordinatorId
     : event.coordinator_id;
   return status === EVENT_STATUS.SUBMITTED && coordinatorId == null;
+}
+
+/**
+ * Purpose: show the Lead every Submitted request that still has no Coordinator,
+ * with the basic fields needed to choose someone (W7 #5).
+ * AC: SCRUM-65 AC1, AC2, AC3, AC4
+ * Business rule: W7 #5 — the Lead sees the unassigned queue before assigning (SCRUM-71).
+ * Inputs: authenticated Lead. Output: mapped events (name, organiser, times, attendance, venue/equipment needs).
+ * Failure: 403 if the caller is not a Lead. Assigned and Draft rows are never returned.
+ */
+async function listUnassignedQueue(user) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)) {
+    throw httpError(403, 'Only an Event Coordinator Lead can open the unassigned queue', 'FORBIDDEN');
+  }
+
+  const rows = await fetchMany(
+    supabase
+      .from('events')
+      .select(EVENT_SELECT)
+      .eq('status', EVENT_STATUS.SUBMITTED)
+      .is('coordinator_id', null)
+      .order('start_at', { ascending: true })
+  );
+
+  // SQL already asks for Submitted + null coordinator; filter again so AC1–AC3
+  // still hold if extra rows leak through (including in unit tests).
+  return rows
+    .filter((row) => isInUnassignedQueue(row))
+    .map((row) => visibleEvent(user, row));
 }
 
 /**
@@ -1046,4 +1080,5 @@ module.exports = {
   listHistory,
   findMissingSubmissionFields,
   isInUnassignedQueue,
+  listUnassignedQueue,
 };

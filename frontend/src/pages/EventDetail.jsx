@@ -53,6 +53,7 @@ function formatBookingStatus(status) {
  * on a Submitted event that has none.
  * AC: SCRUM-18 AC1-AC9 (each pending booking is decided on its own).
  *     SCRUM-39 AC1 + AC2 (request details, venue booking, equipment requests).
+ *     SCRUM-65 AC5: the Lead can open this page from the unassigned queue and see the full request details.
  *     SCRUM-71 AC1, AC2, AC6 (Lead assign card).
  *     SCRUM-78 AC1-AC3 (the Venue Staff card sends the reason and alternative staff typed, or none).
  * Failure: load errors are shown in place of the event; action errors are shown above it.
@@ -62,6 +63,7 @@ export default function EventDetail() {
   const { id } = useParams();
   const location = useLocation();
   const { user, hasRole } = useAuth();
+  // SCRUM-65 AC5: the Lead needs the same planning fields as other internal staff.
   const isLead = hasRole(ROLES.EVENT_COORDINATOR_LEAD);
   const canViewPlanning = hasRole(
     ROLES.EVENT_ORGANISER,
