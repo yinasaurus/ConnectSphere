@@ -72,6 +72,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Organiser cannot edit after submit; changes go through the coordinator | `events.service` update guard |
 | Confirmed fields are locked (date/time/attendance/venue/equipment) | `SIGNIFICANT_FIELDS` |
 | Submitted requests go to an **unassigned queue** (no auto-assign); the Lead assigns a Coordinator later (SCRUM-28 / W7 #5) | `submitEvent` → `SUBMITTED`, `coordinator_id` null |
+| Lead assigns a Coordinator (SCRUM-71): only a Lead can assign an **active** Coordinator to a **Submitted** event that has none; after that the event has exactly one primary Coordinator and is no longer unassigned; an event that already has a Coordinator cannot be assigned this way (reassignment is SCRUM-31) | `POST /api/events/:id/assign-coordinator` → `assignPrimaryCoordinator`; `GET /api/events/assignable-coordinators` |
 | Coordinators can **view** other events but only **edit** assigned ones | list vs update |
 | Reassignment: current coordinator requests, new coordinator accepts | `/reassign` endpoints |
 | Approve / reject (SCRUM-17): only the **assigned** coordinator decides, nobody while unassigned; reject needs a reason of 10–1000 characters; organiser is notified with the reason; reason kept on the event, in status history and in the audit log | `POST /api/events/:id/decision` → `decideEvent` |
@@ -82,7 +83,9 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Setup and turnaround (SCRUM-59): only Venue Staff set each venue's setup and turnaround minutes ("Teardown" on the form); whole numbers ≥ 0, anything negative, non-numeric or empty is rejected and nothing is saved; new venues start at 30/30. Customer to confirm 0 and "optional" | Update venue form, `setupMinutes` / `teardownMinutes` in `venues.validators.js`, `PATCH /api/venues/:id` |
 | Confirmed bookings block overlapping windows, including setup/teardown | `findConflict` |
 | Maintenance blocks live in `venue_unavailability` | seed has a Studio 3 outage |
-| Confirm requires an approved venue booking | `hasApprovedVenueBooking` |
+| Venue availability view (SCRUM-66): confirmed bookings block start − setup to end + turnaround, active tentative holds block their held period (expired holds don't; no expiry = active), recorded unavailability blocks its times; coordinators, venue and tech staff only | `GET /api/venues/:id/availability` → `getVenueAvailability`, page `/app/venues/availability` |
+| Existing venue bookings for a period (SCRUM-67): confirmed bookings with their occupied window (start − setup to end + turnaround), active tentative holds marked `TENTATIVE_HOLD` with their held period only, expired holds and pending requests left out, each booking only under its own venue; coordinators, venue staff and the coordinator lead only | `GET /api/venues/:id/bookings` → `listVenueBookingsForPeriod`, "Existing bookings" on `/app/venues/availability` |
+| Confirm requires an approved venue booking | `isReadyToConfirm` |
 | Registration after confirmed; FCFS + waitlist notify on withdraw | `registrations.service` |
 | Audit log + in-app notifications | `audit.service` |
 | Booking decision notice (SCRUM-78): when Venue Staff approve or reject, only the event's assigned Coordinator is notified; the notice names the event and venue, and a rejection includes the reason and suggested alternative if staff gave them (no reason line otherwise); nothing is sent while the request is pending | `decideBooking` → `buildBookingDecisionNotice` → `notifyUser`, reason/alternative boxes on the event page |

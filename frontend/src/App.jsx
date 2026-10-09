@@ -11,6 +11,7 @@ import EventDetail from './pages/EventDetail';
 import VenueBooking from './pages/VenueBooking';
 import CalendarPage from './pages/CalendarPage';
 import Venues from './pages/Venues';
+import VenueAvailability from './pages/VenueAvailability';
 import Equipment from './pages/Equipment';
 import Notifications from './pages/Notifications';
 import Profile from './pages/Profile';
@@ -46,6 +47,15 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF]}>
                   <Venues />
+                </ProtectedRoute>
+              }
+            />
+            {/* SCRUM-66 AC6: Event Organisers and Attendees are redirected away. */}
+            <Route
+              path="venues/availability"
+              element={
+                <ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT]}>
+                  <VenueAvailability />
                 </ProtectedRoute>
               }
             />

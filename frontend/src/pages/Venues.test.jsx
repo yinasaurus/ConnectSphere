@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { api } from '../api';
 import { useAuth } from '../auth';
@@ -570,6 +570,21 @@ function mockSearchApi(searchResponse) {
   });
 }
 
+// Search requests stay pending until the test resolves or rejects them, so responses can
+// be made to arrive late or out of order.
+function mockDeferredSearchApi() {
+  const pending = [];
+  api.mockImplementation((path) => {
+    if (path === '/api/venues') return Promise.resolve({ venues: [] });
+    if (path === '/api/venues/bookings') return Promise.resolve({ bookings: [] });
+    if (path.startsWith('/api/venues/search')) {
+      return new Promise((resolve, reject) => pending.push({ resolve, reject }));
+    }
+    return Promise.reject(new Error(`Unexpected call: ${path}`));
+  });
+  return pending;
+}
+
 describe('SCUM-24 venue search results', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -673,6 +688,174 @@ describe('SCUM-24 venue search results', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Search venues' }));
     expect(screen.queryByText('Operating hours: 08:00-22:00')).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCUM-24 AC3, AC4
+   * Scenario: A result has no facilities, accessibility or layouts on file
+   * Setup:    Search returns Bare Room with facilities '', accessibility null, layouts []
+   *           and no operating hours; the coordinator also opens its details
+   * Expected: Card and detail panel both say "None listed"; no layout pills or hours line
+   * Type:     boundary
+   */
+  it('shows "None listed" and no layout pills for a venue with no facilities, accessibility or layouts', async () => {
+    const bareVenue = {
+      id: 2,
+      name: 'Bare Room',
+      location: 'Annex',
+      capacity: 20,
+      facilities: '',
+      accessibility: null,
+      setupMinutes: 30,
+      teardownMinutes: 30,
+      layouts: [],
+    };
+    mockSearchApi({ venues: [bareVenue] });
+    const { container } = render(<Venues />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+    expect(await screen.findByText('Facilities: None listed')).toBeInTheDocument();
+    expect(screen.getByText('Accessibility: None listed')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'View details' }));
+    expect(screen.getAllByText('Facilities: None listed')).toHaveLength(2);
+    expect(screen.getAllByText('Accessibility: None listed')).toHaveLength(2);
+    expect(container.querySelectorAll('.pill')).toHaveLength(0);
+    expect(screen.queryByText(/Operating hours/)).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCUM-24 AC5
+   * Scenario: Coordinator has details open and clicks Clear
+   * Setup:    Search returns Helix Hall; View details is open
+   * Expected: The detail panel and the results are both gone
+   * Type:     normal
+   */
+  it('closes the detail panel and the results when Clear is clicked', async () => {
+    mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
+    render(<Venues />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'View details' }));
+    expect(await screen.findByText('Operating hours: 08:00-22:00')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.queryByText('Operating hours: 08:00-22:00')).not.toBeInTheDocument();
+    expect(screen.queryByText('Helix Hall')).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCUM-24 AC5
+   * Scenario: Coordinator compares two results by opening each one's details
+   * Setup:    Search returns Helix Hall and Orchid Room with different hours and times
+   * Expected: The panel shows the venue that was clicked, and switches when another is clicked
+   * Type:     normal
+   */
+  it('shows the details of whichever result is selected, and switches between results', async () => {
+    const otherVenue = {
+      ...SEARCH_RESULT_VENUE,
+      id: 3,
+      name: 'Orchid Room',
+      operatingHours: '09:00-18:00',
+      setupMinutes: 15,
+      teardownMinutes: 10,
+    };
+    mockSearchApi({ venues: [SEARCH_RESULT_VENUE, otherVenue] });
+    render(<Venues />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+    const [helixButton, orchidButton] = await screen.findAllByRole('button', { name: 'View details' });
+
+    await userEvent.click(orchidButton);
+    expect(screen.getByText('Operating hours: 09:00-18:00')).toBeInTheDocument();
+    expect(screen.getByText('Setup time: 15 min · Turnaround time: 10 min')).toBeInTheDocument();
+    expect(screen.queryByText('Operating hours: 08:00-22:00')).not.toBeInTheDocument();
+
+    await userEvent.click(helixButton);
+    expect(screen.getByText('Operating hours: 08:00-22:00')).toBeInTheDocument();
+    expect(screen.queryByText('Operating hours: 09:00-18:00')).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCUM-24 AC6
+   * Scenario: Coordinator clicks Clear while a search is still loading
+   * Setup:    The search response is held back until after Clear
+   * Expected: The late response is ignored, so no results reappear; Search is usable again
+   * Type:     error
+   */
+  it('ignores a search response that arrives after Clear was pressed', async () => {
+    const pending = mockDeferredSearchApi();
+    render(<Venues />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+    await waitFor(() => expect(pending).toHaveLength(1));
+    await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.getByRole('button', { name: 'Search venues' })).toBeEnabled();
+
+    await act(async () => pending[0].resolve({ venues: [SEARCH_RESULT_VENUE] }));
+    expect(screen.queryByText('Helix Hall')).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCUM-24 AC6
+   * Scenario: Two searches overlap and the older one finishes last
+   * Setup:    The newer search returns capacity 200 first, then the older returns 180
+   * Expected: The page keeps showing 200, not the stale 180
+   * Type:     error
+   */
+  it('keeps the newer results when an older search finishes last', async () => {
+    const pending = mockDeferredSearchApi();
+    const { container } = render(<Venues />);
+    const form = container.querySelector('form');
+
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    await waitFor(() => expect(pending).toHaveLength(2));
+
+    await act(async () => pending[1].resolve({ venues: [{ ...SEARCH_RESULT_VENUE, capacity: 200 }] }));
+    await act(async () => pending[0].resolve({ venues: [SEARCH_RESULT_VENUE] }));
+
+    expect(screen.getByText('Capacity 200')).toBeInTheDocument();
+    expect(screen.queryByText('Capacity 180')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Search venues' })).toBeEnabled();
+  });
+
+  /*
+   * AC:       SCUM-24 AC6
+   * Scenario: The latest search fails
+   * Setup:    The search request is rejected with "Search failed"
+   * Expected: The error is still shown and Search is usable again
+   * Type:     error
+   */
+  it('still shows the error when the latest search fails', async () => {
+    const pending = mockDeferredSearchApi();
+    render(<Venues />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+    await waitFor(() => expect(pending).toHaveLength(1));
+
+    await act(async () => pending[0].reject(new Error('Search failed')));
+    expect(screen.getByText('Search failed')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Search venues' })).toBeEnabled();
+  });
+
+  /*
+   * AC:       SCUM-24 AC6
+   * Scenario: A search fails after the coordinator already clicked Clear
+   * Setup:    The search request is rejected only after Clear
+   * Expected: No error message appears for the abandoned search
+   * Type:     error
+   */
+  it('ignores a failed search that finishes after Clear was pressed', async () => {
+    const pending = mockDeferredSearchApi();
+    render(<Venues />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+    await waitFor(() => expect(pending).toHaveLength(1));
+    await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+    await act(async () => pending[0].reject(new Error('Search failed')));
+    expect(screen.queryByText('Search failed')).not.toBeInTheDocument();
   });
 });
 

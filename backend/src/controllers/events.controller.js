@@ -111,6 +111,30 @@ const acceptReassign = asyncHandler(async (req, res) => {
   res.json({ event });
 });
 
+/**
+ * Purpose: return active Coordinators for the Lead's assign dropdown.
+ * AC: SCRUM-71 AC1, AC2
+ * Inputs: authenticated Lead. Output: { coordinators }. Failure: 403 if not Lead.
+ */
+const listAssignableCoordinators = asyncHandler(async (req, res) => {
+  const coordinators = await eventsService.listAssignableCoordinators(req.user);
+  res.json({ coordinators });
+});
+
+/**
+ * Purpose: assign one primary Coordinator to a Submitted event that has none.
+ * AC: SCRUM-71 AC1-AC6
+ * Inputs: event id, body.coordinatorId. Output: { event }. Failure: 403/404/409 from the service.
+ */
+const assignCoordinator = asyncHandler(async (req, res) => {
+  const event = await eventsService.assignPrimaryCoordinator(
+    req.user,
+    req.params.id,
+    req.body.coordinatorId
+  );
+  res.json({ event });
+});
+
 const requestClarification = asyncHandler(async (req, res) => {
   const event = await eventsService.requestClarification(
     req.user,
@@ -144,6 +168,8 @@ module.exports = {
   history,
   requestReassign,
   acceptReassign,
+  listAssignableCoordinators,
+  assignCoordinator,
   requestClarification,
   respondClarification,
 };

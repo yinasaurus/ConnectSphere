@@ -37,6 +37,7 @@ All demo passwords: `Password123!`
 | organiser@apex.example | Event Organiser (Apex) — cannot see Acme events |
 | coordinator@connectsphere.sg | Event Coordinator |
 | coordinator2@connectsphere.sg | Event Coordinator (for load-balanced assignment) |
+| lead@connectsphere.sg | Event Coordinator Lead |
 | venue@connectsphere.sg | Venue Staff |
 | tech@connectsphere.sg | Technical Support |
 | hybrid@connectsphere.sg | Coordinator **and** Venue Staff |
@@ -52,8 +53,9 @@ Login looks up the `users` table in Supabase and issues an httpOnly JWT cookie. 
 4. Venue staff approve/reject the booking, optionally giving a reason and a suggested alternative. The event's assigned Coordinator gets an in-app notice naming the event and venue (with the reason and alternative on a rejection). Confirmed bookings block overlapping windows, including setup/teardown.
 5. Venue staff set each venue's setup and turnaround times in minutes ("Teardown" on the Update venue form). Negative or non-numeric values are rejected and the saved values stay.
 6. Coordinator can confirm only after an approved venue booking. Throughout Planning and Confirmed, internal staff and the Organiser can open the event to see its attendance, date/time, venue (needs and booking) and equipment (notes and requests).
-7. Attendees can register / withdraw once the event is confirmed.
-8. In-app notifications and status history are written along the way.
+7. Coordinators, venue staff and technical support can check a venue's availability for any date/time range under **Venue availability** (confirmed bookings incl. setup/turnaround, active tentative holds and maintenance blocks are shown as unavailable). Coordinators and venue staff also get an **Existing bookings** list for the same period, showing each confirmed booking's occupied window and each active tentative hold.
+8. Attendees can register / withdraw once the event is confirmed.
+9. In-app notifications and status history are written along the way.
 
 ## Project layout
 

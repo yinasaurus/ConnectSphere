@@ -228,6 +228,265 @@ async function searchVenues(filters = {}) {
   });
 }
 
+// SCRUM-66: the three things that can make a venue unavailable. Sent to the
+// frontend as `reasons[].type` so it can explain why a period is blocked.
+const AVAILABILITY_BLOCK = {
+  BOOKING: 'BOOKING',
+  TENTATIVE_HOLD: 'TENTATIVE_HOLD',
+  UNAVAILABILITY: 'UNAVAILABILITY',
+};
+
+// AC2 + AC3: a hold is active until its expiry; at or after the expiry it no longer
+// blocks the venue (Week 7 change #4). A hold with no expiry recorded is treated as
+// active: hold creation with an expiry (SCRUM-75) isn't built yet, and an undated
+// hold shouldn't free the venue.
+function isActiveHold(booking, now) {
+  if (!booking.hold_expires_at) return true;
+  return new Date(booking.hold_expires_at) > now;
+}
+
+// Turns the database rows into one list of blocked windows ({ type, start, end, ... }).
+// Rows with any other status (e.g. PENDING) produce no block, so they show as available.
+function toAvailabilityBlocks(bookingRows, unavailabilityRows, now) {
+  const blocks = [];
+  bookingRows.forEach((booking) => {
+    // AC1: a confirmed booking blocks start - setup to end + turnaround. Each booking
+    // uses its own recorded setup/teardown, the same rule as SCRUM-23 search.
+    if (booking.status === BOOKING_STATUS.APPROVED) {
+      const { occupiedStart, occupiedEnd } = computeOccupiedWindow(
+        booking.start_at,
+        booking.end_at,
+        booking.setup_minutes,
+        booking.teardown_minutes
+      );
+      blocks.push({
+        type: AVAILABILITY_BLOCK.BOOKING,
+        id: booking.id,
+        label: booking.events?.name || 'Confirmed booking',
+        start: occupiedStart,
+        end: occupiedEnd,
+      });
+    } else if (booking.status === BOOKING_STATUS.TENTATIVE && isActiveHold(booking, now)) {
+      // AC2: an active hold blocks only its held period (no setup/turnaround padding).
+      // AC3: an expired hold never reaches here, so it doesn't block anything.
+      blocks.push({
+        type: AVAILABILITY_BLOCK.TENTATIVE_HOLD,
+        id: booking.id,
+        label: booking.events?.name || 'Tentative hold',
+        start: new Date(booking.start_at),
+        end: new Date(booking.end_at),
+        expiresAt: booking.hold_expires_at || null,
+      });
+    }
+  });
+  // AC4: recorded unavailability (maintenance etc.) blocks exactly its recorded times.
+  unavailabilityRows.forEach((period) => {
+    blocks.push({
+      type: AVAILABILITY_BLOCK.UNAVAILABILITY,
+      id: period.id,
+      label: period.reason,
+      start: new Date(period.start_at),
+      end: new Date(period.end_at),
+    });
+  });
+  return blocks;
+}
+
+// Shapes a block for the API response. Times are the block's full window, not
+// clipped to the requested range, so the user sees when it really starts and ends.
+function toReason(block) {
+  const reason = {
+    type: block.type,
+    id: block.id,
+    label: block.label,
+    startAt: block.start.toISOString(),
+    endAt: block.end.toISOString(),
+  };
+  if (block.type === AVAILABILITY_BLOCK.TENTATIVE_HOLD) reason.expiresAt = block.expiresAt;
+  return reason;
+}
+
+// Splits [from, to) into consecutive periods. A period is unavailable while any
+// block covers it; adjacent periods with the same status are merged.
+//
+// Example (range 08:00-14:00, booking occupying 09:30-12:45):
+//   08:00-09:30 available | 09:30-12:45 unavailable (BOOKING) | 12:45-14:00 available
+function buildAvailabilityTimeline(from, to, blocks) {
+  // Blocks that only touch the range edge don't overlap it (see windowsOverlap).
+  const inRange = blocks.filter((block) => windowsOverlap(from, to, block.start, block.end));
+
+  // Every point where the status could change: the range ends, plus each block's
+  // start and end, clipped so nothing falls outside the requested range.
+  const points = new Set([from.getTime(), to.getTime()]);
+  inRange.forEach((block) => {
+    points.add(Math.max(block.start.getTime(), from.getTime()));
+    points.add(Math.min(block.end.getTime(), to.getTime()));
+  });
+  const sorted = [...points].sort((a, b) => a - b);
+
+  const periods = [];
+  for (let i = 0; i < sorted.length - 1; i += 1) {
+    const start = new Date(sorted[i]);
+    const end = new Date(sorted[i + 1]);
+    // AC5: a slice with no block covering it is available.
+    const covering = inRange.filter((block) => windowsOverlap(start, end, block.start, block.end));
+    const available = covering.length === 0;
+    const previous = periods[periods.length - 1];
+
+    // Same status as the previous slice: extend it instead of starting a new row,
+    // and add any new reasons (one block can span several slices, so skip repeats).
+    if (previous && previous.available === available) {
+      previous.endAt = end.toISOString();
+      covering.forEach((block) => {
+        const seen = previous.reasons.some((r) => r.type === block.type && r.id === block.id);
+        if (!seen) previous.reasons.push(toReason(block));
+      });
+    } else {
+      periods.push({
+        startAt: start.toISOString(),
+        endAt: end.toISOString(),
+        available,
+        reasons: covering.map(toReason),
+      });
+    }
+  }
+  return periods;
+}
+
+/**
+ * SCRUM-66: a venue's availability across [from, to). Confirmed bookings block
+ * their occupied window (setup + turnaround), active tentative holds block their
+ * held period, and recorded unavailability blocks its dates/times. Everything
+ * else is available. PENDING requests are not shown as blocking.
+ *
+ * `now` decides which holds have expired; it is a parameter so tests can fix the time.
+ * Returns { venue, from, to, periods: [{ startAt, endAt, available, reasons }] }.
+ */
+async function getVenueAvailability(venueId, { from, to } = {}, now = new Date()) {
+  if (!from || !to) {
+    throw httpError(400, 'from and to are required', 'VALIDATION_ERROR');
+  }
+  const rangeStart = new Date(from);
+  const rangeEnd = new Date(to);
+  if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) {
+    throw httpError(400, 'from and to must be valid dates', 'VALIDATION_ERROR');
+  }
+  if (rangeStart >= rangeEnd) {
+    throw httpError(400, 'from must be before to', 'VALIDATION_ERROR');
+  }
+
+  const venue = await fetchOne(supabase.from('venues').select('id, name').eq('id', venueId));
+  if (!venue) throw httpError(404, 'Venue not found', 'NOT_FOUND');
+
+  const [bookingRows, unavailabilityRows] = await Promise.all([
+    // Not filtered by time in the query: setup/turnaround padding can pull a booking
+    // that starts or ends outside the range into it, so overlap is checked in code.
+    // `*` (not a column list) so this still works before hold_expires_at is migrated.
+    fetchMany(
+      supabase
+        .from('venue_bookings')
+        .select('*, events ( name )')
+        .eq('venue_id', venueId)
+        .in('status', [BOOKING_STATUS.APPROVED, BOOKING_STATUS.TENTATIVE])
+    ),
+    // Unavailability has no padding, so only periods overlapping the range are fetched.
+    fetchMany(
+      supabase
+        .from('venue_unavailability')
+        .select('id, reason, start_at, end_at')
+        .eq('venue_id', venueId)
+        .lt('start_at', rangeEnd.toISOString())
+        .gt('end_at', rangeStart.toISOString())
+    ),
+  ]);
+
+  const blocks = toAvailabilityBlocks(bookingRows, unavailabilityRows, now);
+  return {
+    venue: { id: venue.id, name: venue.name },
+    from: rangeStart.toISOString(),
+    to: rangeEnd.toISOString(),
+    periods: buildAvailabilityTimeline(rangeStart, rangeEnd, blocks),
+  };
+}
+
+/**
+ * SCRUM-67: the bookings already committed at one venue in [from, to).
+ * Confirmed bookings come back with their occupied window (start - setup to
+ * end + turnaround). Active tentative holds come back as type TENTATIVE_HOLD with
+ * their held period as the occupied window. Expired holds and PENDING requests
+ * are left out. A booking is included when its occupied window overlaps the period.
+ *
+ * `now` decides which holds have expired; it is a parameter so tests can fix the time.
+ * Returns { venue, from, to, bookings: [...] } sorted by occupied start.
+ */
+async function listVenueBookingsForPeriod(venueId, { from, to } = {}, now = new Date()) {
+  if (!from || !to) {
+    throw httpError(400, 'from and to are required', 'VALIDATION_ERROR');
+  }
+  const rangeStart = new Date(from);
+  const rangeEnd = new Date(to);
+  if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) {
+    throw httpError(400, 'from and to must be valid dates', 'VALIDATION_ERROR');
+  }
+  if (rangeStart >= rangeEnd) {
+    throw httpError(400, 'from must be before to', 'VALIDATION_ERROR');
+  }
+
+  const venue = await fetchOne(supabase.from('venues').select('id, name').eq('id', venueId));
+  if (!venue) throw httpError(404, 'Venue not found', 'NOT_FOUND');
+
+  // Not filtered by time in the query, for the same reason as getVenueAvailability:
+  // setup/turnaround padding can pull a booking from outside the period into it.
+  const rows = await fetchMany(
+    supabase
+      .from('venue_bookings')
+      .select('*, events ( name )')
+      .eq('venue_id', venueId)
+      .in('status', [BOOKING_STATUS.APPROVED, BOOKING_STATUS.TENTATIVE])
+  );
+
+  const bookings = rows
+    // AC4: only this venue's rows. An event booked at several venues has one row per
+    // venue, so each booking appears under its own venue and nowhere else.
+    .filter((row) => String(row.venue_id) === String(venue.id))
+    .filter((row) => row.status === BOOKING_STATUS.APPROVED || row.status === BOOKING_STATUS.TENTATIVE)
+    .map((row) => {
+      const isHold = row.status === BOOKING_STATUS.TENTATIVE;
+      // AC3: an expired hold doesn't block the venue, so it isn't returned at all.
+      if (isHold && !isActiveHold(row, now)) return null;
+      // AC1: confirmed bookings are padded; AC2: holds keep their held period.
+      const occupied = isHold
+        ? { occupiedStart: new Date(row.start_at), occupiedEnd: new Date(row.end_at) }
+        : computeOccupiedWindow(row.start_at, row.end_at, row.setup_minutes, row.teardown_minutes);
+      return { row, isHold, ...occupied };
+    })
+    .filter((entry) => entry
+      && windowsOverlap(rangeStart, rangeEnd, entry.occupiedStart, entry.occupiedEnd))
+    .sort((a, b) => a.occupiedStart - b.occupiedStart)
+    .map(({ row, isHold, occupiedStart, occupiedEnd }) => ({
+      id: row.id,
+      eventId: row.event_id,
+      eventName: row.events?.name || null,
+      // AC2: the type tells a hold apart from a confirmed booking.
+      type: isHold ? AVAILABILITY_BLOCK.TENTATIVE_HOLD : AVAILABILITY_BLOCK.BOOKING,
+      status: row.status,
+      startAt: new Date(row.start_at).toISOString(),
+      endAt: new Date(row.end_at).toISOString(),
+      setupMinutes: isHold ? null : row.setup_minutes,
+      teardownMinutes: isHold ? null : row.teardown_minutes,
+      occupiedStartAt: occupiedStart.toISOString(),
+      occupiedEndAt: occupiedEnd.toISOString(),
+      holdExpiresAt: isHold ? row.hold_expires_at || null : null,
+    }));
+
+  return {
+    venue: { id: venue.id, name: venue.name },
+    from: rangeStart.toISOString(),
+    to: rangeEnd.toISOString(),
+    bookings,
+  };
+}
+
 async function createVenue(user, payload) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can manage the catalogue', 'FORBIDDEN');
@@ -650,6 +909,8 @@ async function blockVenue(user, payload) {
 module.exports = {
   listVenues,
   searchVenues,
+  getVenueAvailability,
+  listVenueBookingsForPeriod,
   createVenue,
   updateVenue,
   listBookings,
