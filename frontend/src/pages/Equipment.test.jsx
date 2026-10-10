@@ -19,12 +19,16 @@ const REQUEST = {
   status: 'PENDING',
 };
 
+const WINDOW = { from: '2026-11-12T09:00:00.000Z', to: '2026-11-12T17:00:00.000Z' };
+const CHECKED_WINDOW = `${new Date(WINDOW.from).toLocaleString()} – ${new Date(WINDOW.to).toLocaleString()}`;
+
 const SUFFICIENT = {
   sufficient: true,
   indication: 'SUFFICIENT',
   requestedQuantity: 2,
   availableQuantity: 6,
   equipment: { name: 'Wireless handheld mic', type: 'AUDIO' },
+  ...WINDOW,
 };
 
 function asRole(...roles) {
@@ -52,13 +56,15 @@ describe('SCRUM-21 Equipment availability on the request list', () => {
    * AC: SCRUM-21 AC5, AC7
    * Scenario: Tech opens Equipment and a pending request can be fulfilled.
    * Setup: GET requests returns one PENDING mic × 2; availability returns sufficient with 6 free.
-   * Expected: The page asks for that request's availability and shows Sufficient with the numbers.
+   * Expected: The page asks for that request's availability and shows Sufficient with the numbers
+   * and the checked from–to window (AC1).
    * Type: normal
    */
   it('AC5/AC7: shows Sufficient when the request can be fulfilled', async () => {
     mockLists();
     render(<Equipment />);
     expect(await screen.findByText(/Sufficient — 6 free, 2 needed/i)).toBeInTheDocument();
+    expect(screen.getByText(CHECKED_WINDOW)).toBeInTheDocument();
     expect(api).toHaveBeenCalledWith('/api/equipment/requests/20/availability');
   });
 
@@ -80,6 +86,7 @@ describe('SCRUM-21 Equipment availability on the request list', () => {
           requestedQuantity: 2,
           availableQuantity: 1,
           equipment: { name: 'Wireless handheld mic' },
+          ...WINDOW,
         };
       }
       throw new Error(`Unexpected ${path}`);
@@ -106,6 +113,7 @@ describe('SCRUM-21 Equipment availability on the request list', () => {
           requestedQuantity: 2,
           availableQuantity: 0,
           equipment: { name: 'Wireless handheld mic' },
+          ...WINDOW,
         };
       }
       throw new Error(`Unexpected ${path}`);
@@ -137,9 +145,31 @@ describe('SCRUM-21 Equipment availability on the request list', () => {
       requestedQuantity: 2,
       availableQuantity: 0,
       equipment: { name: 'Wireless handheld mic' },
+      ...WINDOW,
     };
     await userEvent.setup().click(screen.getByRole('button', { name: /check availability/i }));
     expect(await screen.findByText(/Insufficient — 0 free, 2 needed/i)).toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-21 AC6, AC7
+   * Scenario: The availability call fails (no event times, or the API errors).
+   * Setup: GET availability throws.
+   * Expected: The error is shown. Sufficient is not shown.
+   * Type: error
+   */
+  it('AC6/AC7: shows the API error when the availability check fails', async () => {
+    api.mockImplementation(async (path) => {
+      if (path === '/api/equipment') return { equipment: [] };
+      if (path === '/api/equipment/requests') return { requests: [REQUEST] };
+      if (path === '/api/equipment/requests/20/availability') {
+        throw new Error('The event has no date and time to check against');
+      }
+      throw new Error(`Unexpected ${path}`);
+    });
+    render(<Equipment />);
+    expect(await screen.findByText(/The event has no date and time to check against/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Sufficient/i)).not.toBeInTheDocument();
   });
 
   /*

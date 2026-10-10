@@ -210,6 +210,38 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
   });
 
   /*
+   * AC: SCRUM-21 AC2, AC6
+   * Scenario: The catalogue item is damaged, so none of it is currently available.
+   * Setup: status DAMAGED, quantity 8, no reservations.
+   * Expected: available 0, indication UNAVAILABLE, not sufficient.
+   * Type: error
+   */
+  it('AC2/AC6: damaged stock is not treated as available', async () => {
+    fetchOne.mockResolvedValue({ ...MIC, status: 'DAMAGED' });
+    fetchMany.mockResolvedValue([]);
+    const result = await check();
+    expect(result.availableQuantity).toBe(0);
+    expect(result.sufficient).toBe(false);
+    expect(result.indication).toBe('UNAVAILABLE');
+  });
+
+  /*
+   * AC: SCRUM-21 AC2, AC6
+   * Scenario: The catalogue row itself is marked RESERVED (not in the available pool).
+   * Setup: status RESERVED, quantity 8, no reservation rows.
+   * Expected: available 0, indication UNAVAILABLE — only AVAILABLE catalogue stock is in the pool.
+   * Type: error
+   */
+  it('AC2/AC6: catalogue status RESERVED is not treated as available', async () => {
+    fetchOne.mockResolvedValue({ ...MIC, status: 'RESERVED' });
+    fetchMany.mockResolvedValue([]);
+    const result = await check();
+    expect(result.availableQuantity).toBe(0);
+    expect(result.sufficient).toBe(false);
+    expect(result.indication).toBe('UNAVAILABLE');
+  });
+
+  /*
    * AC: SCRUM-21 AC3
    * Scenario: A reservation exists for a cancelled event that used to overlap.
    * Setup: RESERVED qty 8 but event status CANCELLED.
@@ -324,11 +356,11 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
   /*
    * AC: SCRUM-21 AC1
    * Scenario: Required inputs are missing or illegal.
-   * Setup: each call omits or breaks one AC1 field.
+   * Setup: each call omits or breaks one AC1 field (equipmentId, quantity, from/to).
    * Expected: 400 for each.
    * Type: error
    */
-  it('AC1: refuses a check that is missing type, quantity, or a valid window', async () => {
+  it('AC1: refuses a check that is missing equipmentId, quantity, or a valid window', async () => {
     await expect(equipmentService.checkEquipmentAvailability(TECH, { quantity: 2, ...WINDOW }))
       .rejects.toMatchObject({ status: 400 });
     await expect(equipmentService.checkEquipmentAvailability(TECH, { equipmentId: 1, quantity: 0, ...WINDOW }))
@@ -487,5 +519,34 @@ describe('SCRUM-21 availability HTTP', () => {
     expect(adHoc.status).toBe(403);
     const byRequest = await request(app).get('/api/equipment/requests/20/availability');
     expect(byRequest.status).toBe(403);
+  });
+
+  /*
+   * AC: SCRUM-21 AC1
+   * Scenario: Tech calls the ad-hoc route without equipmentId.
+   * Setup: quantity and window only.
+   * Expected: 400.
+   * Type: error
+   */
+  it('AC1: missing query fields return 400', async () => {
+    mockQuery();
+    const res = await request(app).get('/api/equipment/availability')
+      .query({ quantity: 2, from: WINDOW.from, to: WINDOW.to });
+    expect(res.status).toBe(400);
+  });
+
+  /*
+   * AC: SCRUM-21 AC1
+   * Scenario: Tech checks an id that is not in the catalogue.
+   * Setup: fetchOne returns null.
+   * Expected: 404.
+   * Type: error
+   */
+  it('AC1: unknown catalogue item returns 404', async () => {
+    mockQuery();
+    fetchOne.mockResolvedValue(null);
+    const res = await request(app).get('/api/equipment/availability')
+      .query({ equipmentId: 99, quantity: 2, from: WINDOW.from, to: WINDOW.to });
+    expect(res.status).toBe(404);
   });
 });

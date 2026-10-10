@@ -1,31 +1,55 @@
 const equipmentService = require('../services/equipment.service');
 const { asyncHandler } = require('../utils/asyncHandler');
 
+/**
+ * Purpose: GET /api/equipment — list the lightweight catalogue.
+ * AC: SCRUM-21 uses these rows as the pool (type, quantity, status).
+ */
 const list = asyncHandler(async (req, res) => {
   const equipment = await equipmentService.listEquipment();
   res.json({ equipment });
 });
 
+/**
+ * Purpose: POST /api/equipment — Technical Support creates a catalogue item.
+ * Business rule: W4 — Tech maintains the catalogue.
+ */
 const create = asyncHandler(async (req, res) => {
   const item = await equipmentService.upsertEquipment(req.user, req.body);
   res.status(201).json({ equipment: item });
 });
 
+/**
+ * Purpose: PATCH /api/equipment/:id — Technical Support updates a catalogue item.
+ * Business rule: W4.
+ */
 const update = asyncHandler(async (req, res) => {
   const item = await equipmentService.upsertEquipment(req.user, req.body, req.params.id);
   res.json({ equipment: item });
 });
 
+/**
+ * Purpose: GET /api/equipment/requests — list reservation requests Tech arranges from.
+ * AC: SCRUM-21 AC7
+ */
 const requests = asyncHandler(async (req, res) => {
   const rows = await equipmentService.listRequests(req.query.eventId);
   res.json({ requests: rows });
 });
 
+/**
+ * Purpose: POST /api/equipment/requests — Coordinator records equipment needed.
+ * Business rule: briefing Equipment Request Management.
+ */
 const createRequest = asyncHandler(async (req, res) => {
   const request = await equipmentService.createRequest(req.user, req.body);
   res.status(201).json({ request });
 });
 
+/**
+ * Purpose: POST /api/equipment/requests/:id/decision — reserve or mark unavailable.
+ * Business rule: briefing Equipment Reservation. SCRUM-21 does not change this decision.
+ */
 const decideRequest = asyncHandler(async (req, res) => {
   const request = await equipmentService.decideRequest(req.user, req.params.id, req.body);
   res.json({ request });

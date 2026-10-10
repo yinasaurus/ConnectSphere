@@ -168,6 +168,7 @@ function parseQuantity(value) {
  * Purpose: two event windows clash when they overlap in time (touching ends do not).
  * AC: SCRUM-21 AC3 — incompatible means the same limited kit would be needed at once.
  * Business rule: briefing Equipment Reservation; W7 setup/turnaround is venues only.
+ * Inputs: startA, endA, startB, endB (Date). Output: true if the interiors overlap.
  */
 function windowsOverlap(startA, endA, startB, endB) {
   return startA < endB && startB < endA;
