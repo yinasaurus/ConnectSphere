@@ -31,4 +31,39 @@ const decideRequest = asyncHandler(async (req, res) => {
   res.json({ request });
 });
 
-module.exports = { list, create, update, requests, createRequest, decideRequest };
+/**
+ * Purpose: GET /api/equipment/availability — ad-hoc check for an item, qty and window.
+ * AC: SCRUM-21 AC1–AC6
+ * Inputs: query.equipmentId, query.quantity, query.from, query.to
+ * Output: 200 availability payload. 403/400/404 from the service.
+ */
+const availability = asyncHandler(async (req, res) => {
+  const result = await equipmentService.checkEquipmentAvailability(req.user, {
+    equipmentId: req.query.equipmentId,
+    quantity: req.query.quantity,
+    from: req.query.from,
+    to: req.query.to,
+  });
+  res.json(result);
+});
+
+/**
+ * Purpose: GET /api/equipment/requests/:id/availability — check a stored request.
+ * AC: SCRUM-21 AC7
+ * Inputs: request id. Output: 200 availability payload including requestId.
+ */
+const requestAvailability = asyncHandler(async (req, res) => {
+  const result = await equipmentService.checkRequestAvailability(req.user, req.params.id);
+  res.json(result);
+});
+
+module.exports = {
+  list,
+  create,
+  update,
+  requests,
+  createRequest,
+  decideRequest,
+  availability,
+  requestAvailability,
+};
