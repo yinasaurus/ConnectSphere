@@ -202,9 +202,36 @@ describe('SCRUM-8 decideRequest (service)', () => {
 
   /*
    * AC: SCRUM-8 AC2
+   * Scenario: Another event reserved all eight mics but that event is cancelled.
+   * Setup: RESERVED qty 8 on a CANCELLED event that overlaps this window.
+   * Expected: not committed — reserve succeeds (same formula as SCRUM-21).
+   * Type: boundary
+   */
+  it('AC2: a cancelled event reservation does not block this reserve', async () => {
+    fetchOne
+      .mockResolvedValueOnce(PENDING)
+      .mockResolvedValueOnce(EVENT)
+      .mockResolvedValueOnce(MIC);
+    fetchMany.mockResolvedValue([
+      overlappingReservation({
+        quantity: 8,
+        events: { ...overlappingReservation().events, status: 'CANCELLED' },
+      }),
+    ]);
+
+    const result = await equipmentService.decideRequest(TECH, 20, { approve: true });
+    expect(result.status).toBe('RESERVED');
+    expect(insertOne).toHaveBeenCalledWith(
+      'equipment_reservations',
+      expect.objectContaining({ event_id: 8, quantity: 2 })
+    );
+  });
+
+  /*
+   * AC: SCRUM-8 AC2
    * Scenario: The catalogue item is in maintenance, so operational inventory is zero.
    * Setup: status MAINTENANCE, quantity 8, no reservations.
-   * Expected: 409. Damaged / maintenance stock is not in the pool.
+   * Expected: 409. Maintenance stock is not in the operational pool.
    * Type: error
    */
   it('AC2: refuses reserve when the catalogue item is not operational', async () => {
@@ -381,5 +408,71 @@ describe('SCRUM-8 reservation HTTP', () => {
       .send({ approve: true });
     expect(res.status).toBe(403);
     expect(insertOne).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC: SCRUM-8 AC1, AC2
+   * Scenario: Tech POSTs approve on a request with no catalogue item.
+   * Setup: equipment_id null.
+   * Expected: 400. No reservation body.
+   * Type: error
+   */
+  it('AC1/AC2: missing catalogue item returns 400', async () => {
+    fetchOne
+      .mockResolvedValueOnce({ ...PENDING, equipment_id: null })
+      .mockResolvedValueOnce(EVENT);
+    const res = await request(app)
+      .post('/api/equipment/requests/20/decision')
+      .send({ approve: true });
+    expect(res.status).toBe(400);
+    expect(res.body.request).toBeUndefined();
+  });
+
+  /*
+   * AC: SCRUM-8 AC2
+   * Scenario: Tech POSTs approve when the event has no date/time.
+   * Setup: event start/end null.
+   * Expected: 400.
+   * Type: error
+   */
+  it('AC2: missing event times return 400', async () => {
+    fetchOne
+      .mockResolvedValueOnce(PENDING)
+      .mockResolvedValueOnce({ ...EVENT, start_at: null, end_at: null });
+    const res = await request(app)
+      .post('/api/equipment/requests/20/decision')
+      .send({ approve: true });
+    expect(res.status).toBe(400);
+  });
+
+  /*
+   * AC: SCRUM-8 AC1
+   * Scenario: Tech POSTs approve for an id that is not a request.
+   * Setup: fetchOne null.
+   * Expected: 404.
+   * Type: error
+   */
+  it('AC1: unknown request returns 404', async () => {
+    fetchOne.mockResolvedValue(null);
+    const res = await request(app)
+      .post('/api/equipment/requests/99/decision')
+      .send({ approve: true });
+    expect(res.status).toBe(404);
+  });
+
+  /*
+   * AC: SCRUM-8 AC1
+   * Scenario: Tech POSTs approve on a request that is already reserved.
+   * Setup: request status RESERVED.
+   * Expected: 409 ALREADY_DECIDED.
+   * Type: conflict
+   */
+  it('AC1: already decided request returns 409', async () => {
+    fetchOne.mockResolvedValue({ ...PENDING, status: 'RESERVED' });
+    const res = await request(app)
+      .post('/api/equipment/requests/20/decision')
+      .send({ approve: true });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('ALREADY_DECIDED');
   });
 });
