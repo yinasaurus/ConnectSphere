@@ -188,3 +188,79 @@ describe('SCRUM-21 Equipment availability on the request list', () => {
     expect(screen.queryByRole('button', { name: /check availability/i })).not.toBeInTheDocument();
   });
 });
+
+describe('SCRUM-8 Equipment reserve on the request list', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    asRole('TECHNICAL_SUPPORT');
+  });
+
+  /*
+   * AC: SCRUM-8 AC1
+   * Scenario: Tech clicks Reserve when the request can be fulfilled.
+   * Setup: Lists load; POST decision approve true succeeds; reload returns RESERVED.
+   * Expected: The decision is posted for that request and the row leaves PENDING.
+   * Type: normal
+   */
+  it('AC1: Reserve posts a confirmation for that request', async () => {
+    api.mockImplementation(async (path, options = {}) => {
+      if (path === '/api/equipment') return { equipment: [] };
+      if (path === '/api/equipment/requests') {
+        if (options.method === 'POST') throw new Error(`Unexpected POST ${path}`);
+        return { requests: [REQUEST] };
+      }
+      if (path === '/api/equipment/requests/20/availability') return SUFFICIENT;
+      if (path === '/api/equipment/requests/20/decision') {
+        expect(options.method).toBe('POST');
+        expect(options.body).toEqual({ approve: true });
+        return { request: { ...REQUEST, status: 'RESERVED' } };
+      }
+      throw new Error(`Unexpected ${path}`);
+    });
+    render(<Equipment />);
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^reserve$/i }));
+    expect(api).toHaveBeenCalledWith('/api/equipment/requests/20/decision', {
+      method: 'POST',
+      body: { approve: true },
+    });
+  });
+
+  /*
+   * AC: SCRUM-8 AC2
+   * Scenario: Tech clicks Reserve when leftover stock is below the request.
+   * Setup: POST decision throws the 409 message from the API.
+   * Expected: That message is shown. The request stays PENDING (Reserve still there).
+   * Type: error
+   */
+  it('AC2: shows the API error and keeps the request pending when reserve is blocked', async () => {
+    api.mockImplementation(async (path, options = {}) => {
+      if (path === '/api/equipment') return { equipment: [] };
+      if (path === '/api/equipment/requests') return { requests: [REQUEST] };
+      if (path === '/api/equipment/requests/20/availability') return SUFFICIENT;
+      if (path === '/api/equipment/requests/20/decision' && options.body?.approve) {
+        throw new Error('Requested quantity exceeds available equipment for this event (1 free, 2 needed)');
+      }
+      throw new Error(`Unexpected ${path}`);
+    });
+    render(<Equipment />);
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^reserve$/i }));
+    expect(await screen.findByText(/Requested quantity exceeds available equipment for this event/i)).toBeInTheDocument();
+    expect(screen.getByText('PENDING')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^reserve$/i })).toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-8 AC3
+   * Scenario: A Coordinator opens Equipment.
+   * Setup: Coordinator role; lists load.
+   * Expected: No Reserve button — only Tech may create a reservation.
+   * Type: error
+   */
+  it('AC3: Coordinators do not see Reserve', async () => {
+    asRole('EVENT_COORDINATOR');
+    mockLists();
+    render(<Equipment />);
+    expect(await screen.findByText(/Wireless handheld mic/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^reserve$/i })).not.toBeInTheDocument();
+  });
+});
