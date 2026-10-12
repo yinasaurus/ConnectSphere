@@ -203,16 +203,20 @@ describe('SCRUM-8 Equipment reserve on the request list', () => {
    * Type: normal
    */
   it('AC1: Reserve posts a confirmation for that request', async () => {
+    let reserved = false;
     api.mockImplementation(async (path, options = {}) => {
       if (path === '/api/equipment') return { equipment: [] };
       if (path === '/api/equipment/requests') {
         if (options.method === 'POST') throw new Error(`Unexpected POST ${path}`);
-        return { requests: [REQUEST] };
+        return {
+          requests: [reserved ? { ...REQUEST, status: 'RESERVED' } : REQUEST],
+        };
       }
       if (path === '/api/equipment/requests/20/availability') return SUFFICIENT;
       if (path === '/api/equipment/requests/20/decision') {
         expect(options.method).toBe('POST');
         expect(options.body).toEqual({ approve: true });
+        reserved = true;
         return { request: { ...REQUEST, status: 'RESERVED' } };
       }
       throw new Error(`Unexpected ${path}`);
@@ -223,6 +227,9 @@ describe('SCRUM-8 Equipment reserve on the request list', () => {
       method: 'POST',
       body: { approve: true },
     });
+    expect(await screen.findByText('RESERVED')).toBeInTheDocument();
+    expect(screen.queryByText('PENDING')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^reserve$/i })).not.toBeInTheDocument();
   });
 
   /*
