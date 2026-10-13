@@ -220,6 +220,58 @@ describe('SCRUM-34 createChangeRequest', () => {
       .rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
     expect(db.insertOne).not.toHaveBeenCalled();
   });
+
+  /*
+   * AC:       SCRUM-34 AC2
+   * Scenario: Organiser sends a start that is not a real timestamp.
+   * Setup:    startAt is the string "not-a-date".
+   * Expected: 400 before insert, so a junk window cannot be stored.
+   * Type:     negative
+   */
+  it('AC2: an invalid date is refused', async () => {
+    await expect(service.createChangeRequest(organiser, 3, { startAt: 'not-a-date' }))
+      .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(db.insertOne).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-34 AC2
+   * Scenario: Organiser sends attendance 0 (not a usable headcount).
+   * Expected: 400; nothing is inserted.
+   * Type:     boundary
+   */
+  it('AC2: attendance below 1 is refused', async () => {
+    await expect(service.createChangeRequest(organiser, 3, { expectedAttendance: 0 }))
+      .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(db.insertOne).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-34 AC1
+   * Scenario: Organiser proposes only a new start, after the event's existing end.
+   * Setup:    Event ends 17:00; payload startAt is 18:00 the same day.
+   * Expected: 400 so the pending row cannot hold an impossible window.
+   * Type:     negative
+   */
+  it('AC1: a proposed start after the event end is refused', async () => {
+    await expect(service.createChangeRequest(organiser, 3, {
+      startAt: '2026-11-10T18:00:00.000Z',
+    })).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(db.insertOne).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-34 AC1
+   * Scenario: Organiser of another organisation guesses this event id.
+   * Expected: 404, same as getEvent, so the row is not revealed.
+   * Type:     security
+   */
+  it('AC1: a hidden event is 404', async () => {
+    const stranger = { id: 99, organisationId: 99, roles: [ROLES.EVENT_ORGANISER] };
+    await expect(service.createChangeRequest(stranger, 3, { expectedAttendance: 80 }))
+      .rejects.toMatchObject({ status: 404, code: 'NOT_FOUND' });
+    expect(db.insertOne).not.toHaveBeenCalled();
+  });
 });
 
 describe('SCRUM-35 decideChangeRequest', () => {
@@ -253,10 +305,21 @@ describe('SCRUM-35 decideChangeRequest', () => {
     expect(db.updateById).toHaveBeenCalledWith(
       'event_change_requests',
       50,
-      expect.objectContaining({ status: 'APPROVED', decided_by: 2 })
+      expect.objectContaining({
+        status: 'APPROVED',
+        decided_by: 2,
+        decided_at: expect.any(String),
+      })
     );
     const eventPatch = db.updateById.mock.calls.find((call) => call[0] === 'events')[2];
     expect(eventPatch.status).toBeUndefined();
+    expect(audit.writeAudit).toHaveBeenCalledWith(
+      2,
+      'CHANGE_REQUEST_APPROVED',
+      'event_change_request',
+      50,
+      expect.objectContaining({ eventId: 3 })
+    );
     expect(audit.notifyUser).not.toHaveBeenCalled();
   });
 
@@ -314,10 +377,19 @@ describe('SCRUM-35 decideChangeRequest', () => {
       50,
       expect.objectContaining({
         status: 'REJECTED',
+        decided_by: 2,
+        decided_at: expect.any(String),
         decision_reason: 'Venue already booked that week',
       })
     );
     expect(db.updateById).not.toHaveBeenCalledWith('events', expect.anything(), expect.anything());
+    expect(audit.writeAudit).toHaveBeenCalledWith(
+      2,
+      'CHANGE_REQUEST_REJECTED',
+      'event_change_request',
+      50,
+      expect.objectContaining({ eventId: 3, reason: 'Venue already booked that week' })
+    );
   });
 
   /*
@@ -351,21 +423,74 @@ describe('SCRUM-35 decideChangeRequest', () => {
       .rejects.toMatchObject({ status: 409, code: 'ALREADY_DECIDED' });
     expect(db.updateById).not.toHaveBeenCalled();
   });
+
+  /*
+   * AC:       SCRUM-35 AC1
+   * Scenario: Decision path for a request id that does not exist, or belongs to another event.
+   * Expected: 404; the event is not patched.
+   * Type:     negative
+   */
+  it('AC1: a missing change request is 404', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(null);
+    await expect(service.decideChangeRequest(coordinator, 3, 50, { approve: true }))
+      .rejects.toMatchObject({ status: 404, code: 'NOT_FOUND' });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-35 AC1
+   * Scenario: Request id exists but its event_id is not this event.
+   * Expected: 404, so a coordinator cannot decide another event's request via this URL.
+   * Type:     security
+   */
+  it('AC1: a change request for another event is 404', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({ event_id: 99 }));
+    await expect(service.decideChangeRequest(coordinator, 3, 50, { approve: true }))
+      .rejects.toMatchObject({ status: 404, code: 'NOT_FOUND' });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
 });
 
 describe('SCRUM-34/35 listChangeRequests', () => {
   /*
-   * AC:       SCRUM-34 AC1 / SCRUM-35 AC1
-   * Scenario: Owner and assigned coordinator list requests; another coordinator cannot.
-   * Type:     security
+   * AC:       SCRUM-34 AC1
+   * Scenario: Owning organiser lists change requests for their event.
+   * Setup:    One PENDING row for event 3.
+   * Expected: That row is returned (organiser can see what they submitted).
+   * Type:     normal
    */
-  it('owner and assigned coordinator can list requests', async () => {
+  it('owner can list requests', async () => {
     db.fetchMany.mockResolvedValue([pendingRequest()]);
     const rows = await service.listChangeRequests(organiser, 3);
     expect(rows).toHaveLength(1);
     expect(rows[0].id).toBe(50);
   });
 
+  /*
+   * AC:       SCRUM-35 AC1
+   * Scenario: Assigned coordinator lists change requests for an event they manage.
+   * Setup:    Same PENDING row; caller is coordinator 2, who is assigned.
+   * Expected: The row is returned so they can decide.
+   * Type:     normal
+   */
+  it('assigned coordinator can list requests', async () => {
+    db.fetchMany.mockResolvedValue([pendingRequest()]);
+    const rows = await service.listChangeRequests(coordinator, 3);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(50);
+  });
+
+  /*
+   * AC:       SCRUM-35 AC1
+   * Scenario: Another coordinator opens the same event.
+   * Setup:    coordinator_id is 2; caller is 9.
+   * Expected: 403; they do not receive the request body.
+   * Type:     security
+   */
   it('another coordinator cannot list change requests', async () => {
     await expect(service.listChangeRequests(otherCoordinator, 3))
       .rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
@@ -384,9 +509,16 @@ describe('SCRUM-34/35 HTTP routes', () => {
       is_active: true,
       organisation_id: 10,
     });
-    db.fetchMany.mockResolvedValue([{ role }]);
+    db.fetchMany.mockResolvedValueOnce([{ role }]);
   }
 
+  /*
+   * AC:       SCRUM-34 AC1
+   * Scenario: Organiser posts a permitted change through Express.
+   * Setup:    Session cookie for user 1; no pending request.
+   * Expected: 201 PENDING; a row is inserted.
+   * Type:     normal
+   */
   it('organiser can POST a change request (201)', async () => {
     asUser(1, ROLES.EVENT_ORGANISER);
     db.fetchOne
@@ -403,6 +535,12 @@ describe('SCRUM-34/35 HTTP routes', () => {
     expect(db.insertOne).toHaveBeenCalled();
   });
 
+  /*
+   * AC:       SCRUM-34 AC1
+   * Scenario: Coordinator hits the create route (requireRole Organiser).
+   * Expected: 403 before insert.
+   * Type:     security
+   */
   it('coordinator cannot POST a change request (403)', async () => {
     asUser(2, ROLES.EVENT_COORDINATOR);
 
@@ -415,6 +553,12 @@ describe('SCRUM-34/35 HTTP routes', () => {
     expect(db.insertOne).not.toHaveBeenCalled();
   });
 
+  /*
+   * AC:       SCRUM-35 AC1 + AC2
+   * Scenario: Assigned coordinator approves through the decision route.
+   * Expected: 200 APPROVED.
+   * Type:     normal
+   */
   it('assigned coordinator can approve through the API (200)', async () => {
     asUser(2, ROLES.EVENT_COORDINATOR);
     db.fetchOne
@@ -430,6 +574,12 @@ describe('SCRUM-34/35 HTTP routes', () => {
     expect(res.body.changeRequest.status).toBe('APPROVED');
   });
 
+  /*
+   * AC:       SCRUM-35 AC1
+   * Scenario: Organiser hits the decision route (requireRole Coordinator).
+   * Expected: 403; no writes.
+   * Type:     security
+   */
   it('organiser cannot call the decision endpoint (403)', async () => {
     asUser(1, ROLES.EVENT_ORGANISER);
 
@@ -442,11 +592,56 @@ describe('SCRUM-34/35 HTTP routes', () => {
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
+  /*
+   * AC:       SCRUM-34 AC1
+   * Scenario: No session cookie on create.
+   * Expected: 401; nothing is inserted.
+   * Type:     security
+   */
   it('a request without a session is rejected with 401', async () => {
     const res = await request(app)
       .post('/api/events/3/change-requests')
       .send({ expectedAttendance: 80 });
     expect(res.status).toBe(401);
     expect(db.insertOne).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-35 AC1
+   * Scenario: Assigned coordinator lists change requests over HTTP.
+   * Setup:    Auth user 2; event assigned to 2; one PENDING row.
+   * Expected: 200 with that row (controller GET path).
+   * Type:     normal
+   */
+  it('assigned coordinator can GET change requests (200)', async () => {
+    asUser(2, ROLES.EVENT_COORDINATOR);
+    db.fetchOne.mockResolvedValueOnce(event);
+    db.fetchMany.mockResolvedValueOnce([pendingRequest()]);
+
+    const res = await request(app)
+      .get('/api/events/3/change-requests')
+      .set('Cookie', `${env.sessionCookieName}=${coordinatorToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.changeRequests).toHaveLength(1);
+    expect(res.body.changeRequests[0].id).toBe(50);
+  });
+
+  /*
+   * AC:       SCRUM-35 AC1
+   * Scenario: Another coordinator GETs the same event's change requests.
+   * Expected: 403.
+   * Type:     security
+   */
+  it('another coordinator cannot GET change requests (403)', async () => {
+    const otherToken = jwt.sign({ sub: 9 }, env.jwtSecret);
+    asUser(9, ROLES.EVENT_COORDINATOR);
+    db.fetchOne.mockResolvedValueOnce(event);
+
+    const res = await request(app)
+      .get('/api/events/3/change-requests')
+      .set('Cookie', `${env.sessionCookieName}=${otherToken}`);
+
+    expect(res.status).toBe(403);
   });
 });
