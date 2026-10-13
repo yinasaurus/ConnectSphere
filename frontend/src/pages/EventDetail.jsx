@@ -62,6 +62,7 @@ function formatBookingStatus(status) {
  */
 const CHANGE_BLOCKED_STATUSES = ['DRAFT', 'CANCELLED', 'REJECTED', 'COMPLETED'];
 
+/** Purpose: blank organiser change-request form. AC: SCRUM-34 AC1. */
 function emptyChangeForm() {
   return {
     startAt: '',
@@ -72,6 +73,11 @@ function emptyChangeForm() {
   };
 }
 
+/**
+ * Purpose: send only filled permitted fields (date/time as ISO).
+ * AC: SCRUM-34 AC2
+ * Empty boxes are omitted so a blank form cannot be posted.
+ */
 function buildChangePayload(form) {
   const body = {};
   if (form.startAt) body.startAt = new Date(form.startAt).toISOString();

@@ -1100,6 +1100,11 @@ const CHANGE_REQUEST_BLOCKED_STATUSES = [
   EVENT_STATUS.COMPLETED,
 ];
 
+/**
+ * Purpose: camelCase API shape for an event_change_requests row.
+ * AC: SCRUM-34 AC1, SCRUM-35 AC1
+ * Input: a database row or null. Output: the mapped request, or null.
+ */
 function mapChangeRequest(row) {
   if (!row) return null;
   return {
@@ -1120,6 +1125,11 @@ function mapChangeRequest(row) {
   };
 }
 
+/**
+ * Purpose: load the events row if this user may know it exists.
+ * AC: SCRUM-34 AC1, SCRUM-35 AC1
+ * Failure: 404 when missing or hidden (same as getEvent, so we do not leak other clients' events).
+ */
 async function loadVisibleEventRow(user, id) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
   if (!existing || !canViewEvent(user, existing)) {
@@ -1128,11 +1138,20 @@ async function loadVisibleEventRow(user, id) {
   return existing;
 }
 
+/**
+ * Purpose: owner organiser or assigned coordinator may see and act on change requests.
+ * AC: SCRUM-35 AC1 (events they manage); other coordinators are not included.
+ */
 function canAccessChangeRequests(user, event) {
   if (event.organiser_id === user.id) return true;
   return event.coordinator_id === user.id && hasRole(user, ROLES.EVENT_COORDINATOR);
 }
 
+/**
+ * Purpose: refuse anyone who is not the owner or assigned coordinator.
+ * AC: SCRUM-35 AC1
+ * Failure: 403 FORBIDDEN, event unchanged.
+ */
 function assertChangeRequestViewer(user, event) {
   if (!canAccessChangeRequests(user, event)) {
     throw httpError(
@@ -1143,6 +1162,11 @@ function assertChangeRequestViewer(user, event) {
   }
 }
 
+/**
+ * Purpose: accept an omitted date, or a real timestamp; reject unparseable strings.
+ * AC: SCRUM-34 AC2
+ * Failure: 400 VALIDATION_ERROR.
+ */
 function parseOptionalDate(value, field) {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
@@ -1153,6 +1177,11 @@ function parseOptionalDate(value, field) {
   return date;
 }
 
+/**
+ * Purpose: accept an omitted attendance, or an integer ≥ 1.
+ * AC: SCRUM-34 AC2
+ * Failure: 400 VALIDATION_ERROR.
+ */
 function parseOptionalAttendance(value) {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
@@ -1168,12 +1197,21 @@ function parseOptionalAttendance(value) {
   return n;
 }
 
+/**
+ * Purpose: pass through omitted vs provided venue/equipment requirement text.
+ * AC: SCRUM-34 AC2
+ */
 function parseOptionalText(value) {
   if (value === undefined) return undefined;
   if (value === null) return null;
   return String(value);
 }
 
+/**
+ * Purpose: keep only permitted change-request fields and require at least one.
+ * AC: SCRUM-34 AC2
+ * Failure: 400 when the body is empty or contains a field that is not allowed.
+ */
 function parseChangeRequestPayload(payload = {}) {
   const unknown = Object.keys(payload).filter(
     (key) => payload[key] !== undefined && !CHANGE_REQUEST_FIELDS.includes(key)
@@ -1213,6 +1251,11 @@ function parseChangeRequestPayload(payload = {}) {
   };
 }
 
+/**
+ * Purpose: copy non-null proposed columns onto the event, then check the resulting window.
+ * AC: SCRUM-35 AC2
+ * Failure: 400 if the merged start is not before the merged end.
+ */
 function proposedEventPatch(request, existing) {
   const patch = { updated_at: new Date().toISOString() };
   if (request.start_at != null) patch.start_at = request.start_at;
@@ -1253,13 +1296,10 @@ async function listChangeRequests(user, eventId) {
  * Output: the pending change request.
  * Failure: 404 missing/hidden event; 403 not the owner; 409 draft/cancelled/rejected/
  *     completed, unassigned Submitted, or a pending request already exists; 400 unknown
- *     or empty fields.
+ *     or empty fields, or a proposed time that is not before the other end of the window.
  */
 async function createChangeRequest(user, eventId, payload) {
   const fields = parseChangeRequestPayload(payload);
-  if (fields.start_at && fields.end_at) {
-    validateDateRange(fields.start_at, fields.end_at);
-  }
 
   const event = await loadVisibleEventRow(user, eventId);
   if (event.organiser_id !== user.id) {
@@ -1279,6 +1319,10 @@ async function createChangeRequest(user, eventId, payload) {
       'NO_COORDINATOR'
     );
   }
+
+  const nextStart = fields.start_at != null ? fields.start_at : event.start_at;
+  const nextEnd = fields.end_at != null ? fields.end_at : event.end_at;
+  validateDateRange(nextStart, nextEnd);
 
   const pending = await fetchOne(
     supabase.from('event_change_requests')
