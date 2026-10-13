@@ -71,6 +71,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Confirmed can revert to Planning after a major change | `CONFIRMED → PLANNING` |
 | Organiser cannot edit after submit; changes go through the coordinator | `events.service` update guard |
 | Confirmed fields are locked (date/time/attendance/venue/equipment) | `SIGNIFICANT_FIELDS` |
+| Change requests (SCRUM-34 / SCRUM-35): owning Organiser proposes date/time, attendance, venue requirements and/or equipment requirements after a Coordinator is assigned (not Draft/Cancelled/Rejected/Completed; one PENDING per event). Assigned Coordinator approves (fields copied onto the event, including Confirmed; status is not moved) or rejects (event unchanged, optional reason). Other coordinators 403. No notification in this story. | `event_change_requests`; `POST/GET /api/events/:id/change-requests`; `POST /api/events/:id/change-requests/:requestId/decision` → EventDetail |
 | Submitted requests go to an **unassigned queue** (no auto-assign); the Lead assigns a Coordinator later (SCRUM-28 / W7 #5) | `submitEvent` → `SUBMITTED`, `coordinator_id` null |
 | Lead views every Submitted unassigned request (name, organiser, date/time, attendance, venue/equipment) and can open full details (SCRUM-65 / W7 #5) | `GET /api/events/unassigned-queue` → `UnassignedQueue` |
 | Lead assigns a Coordinator (SCRUM-71): only a Lead can assign an **active** Coordinator to a **Submitted** event that has none; after that the event has exactly one primary Coordinator and is no longer unassigned; an event that already has a Coordinator cannot be assigned this way (reassignment is SCRUM-31) | `POST /api/events/:id/assign-coordinator` → `assignPrimaryCoordinator`; `GET /api/events/assignable-coordinators` |
@@ -102,7 +103,7 @@ Do not treat missing screens as forgotten requirements. They are waiting for Wee
 - Email / reminder scheduler
 - Document uploads (table exists: `event_documents`)
 - Programme / multi-session editor (table exists: `event_sessions`)
-- Full change-request workflow UI
+- Email of change-request decisions (in-app notify skipped for SCRUM-34/35)
 - Export/print of equipment lists (explicitly not core)
 - Complex coordinator routing by experience (not required)
 - Attendee self-registration of accounts
@@ -118,8 +119,7 @@ Once the customer names Release 1, likely extensions:
 2. Equipment request from the event page (API already exists)
 3. Tentative venue holds vs confirmed bookings
 4. Registration open/close controls for the organiser
-5. Change-request record instead of editing confirmed events
-6. Richer calendar (per-venue toggle)
+5. Richer calendar (per-venue toggle)
 
 ## How to add a feature without making a mess
 
