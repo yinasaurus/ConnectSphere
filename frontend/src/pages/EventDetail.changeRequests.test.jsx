@@ -2,7 +2,7 @@
  * SCRUM-34: organiser requests a change on the event page.
  * SCRUM-35: assigned coordinator approves or rejects it.
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import EventDetail from './EventDetail';
@@ -84,7 +84,8 @@ describe('SCRUM-34 organiser change request form', () => {
   /*
    * AC:       SCRUM-34 AC1 + AC2
    * Scenario: Organiser on a Planning event with an assigned coordinator submits permitted fields.
-   * Expected: POST /api/events/3/change-requests with only those fields.
+   * Setup:    datetime-local start/end plus attendance, venue and equipment notes.
+   * Expected: POST includes ISO start/end and the other permitted fields only.
    * Type:     normal
    */
   it('US34-F01 (AC1+AC2): organiser submits date, attendance, venue and equipment changes', async () => {
@@ -94,12 +95,16 @@ describe('SCRUM-34 organiser change request form', () => {
     const user = userEvent.setup();
 
     expect(await screen.findByRole('heading', { name: 'Request a change' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Proposed start'), { target: { value: '2026-11-20T09:00' } });
+    fireEvent.change(screen.getByLabelText('Proposed end'), { target: { value: '2026-11-20T17:00' } });
     await user.type(screen.getByLabelText('Proposed attendance'), '80');
     await user.type(screen.getByLabelText('Proposed venue requirements'), 'Banquet');
     await user.type(screen.getByLabelText('Proposed equipment requirements'), '4 mics');
     await user.click(screen.getByRole('button', { name: 'Submit change request' }));
 
     expect(posted).toEqual({
+      startAt: new Date('2026-11-20T09:00').toISOString(),
+      endAt: new Date('2026-11-20T17:00').toISOString(),
       expectedAttendance: 80,
       venueRequirements: 'Banquet',
       equipmentNotes: '4 mics',
@@ -113,6 +118,7 @@ describe('SCRUM-34 organiser change request form', () => {
   /*
    * AC:       SCRUM-34 AC1
    * Scenario: Organiser opens a Draft — they should edit the draft, not file a change request.
+   * Setup:    status DRAFT, assigned coordinator still present on the fixture.
    * Expected: The change-request form is not shown.
    * Type:     negative
    */
@@ -126,6 +132,7 @@ describe('SCRUM-34 organiser change request form', () => {
   /*
    * AC:       SCRUM-34 AC1
    * Scenario: Submitted event still has no coordinator.
+   * Setup:    status SUBMITTED, coordinatorId null.
    * Expected: No change-request form until a coordinator is assigned.
    * Type:     negative
    */
@@ -139,6 +146,7 @@ describe('SCRUM-34 organiser change request form', () => {
   /*
    * AC:       SCRUM-34 AC1
    * Scenario: Confirmed event — organiser still requests a change rather than editing directly.
+   * Setup:    status CONFIRMED, coordinator assigned.
    * Expected: The form is shown.
    * Type:     normal
    */
@@ -147,12 +155,27 @@ describe('SCRUM-34 organiser change request form', () => {
     renderAs({ id: 1, roles: ['EVENT_ORGANISER'] });
     expect(await screen.findByRole('heading', { name: 'Request a change' })).toBeInTheDocument();
   });
+
+  /*
+   * AC:       SCRUM-34 AC1
+   * Scenario: A PENDING change request already exists.
+   * Setup:    GET change-requests returns one PENDING row.
+   * Expected: The form is hidden (one pending at a time); the list is shown instead.
+   * Type:     negative
+   */
+  it('US34-F05 (AC1): pending request hides the organiser form', async () => {
+    mockApi({ changeRequests: [PENDING] });
+    renderAs({ id: 1, roles: ['EVENT_ORGANISER'] });
+    expect(await screen.findByRole('heading', { name: 'Change requests' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Request a change' })).not.toBeInTheDocument();
+  });
 });
 
 describe('SCRUM-35 coordinator decide on the event page', () => {
   /*
    * AC:       SCRUM-35 AC1 + AC2
    * Scenario: Assigned coordinator approves the pending request.
+   * Setup:    GET returns PENDING with proposed attendance 80.
    * Expected: POST decision { approve: true }.
    * Type:     normal
    */
@@ -172,9 +195,10 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
   });
 
   /*
-   * AC:       SCRUM-35 AC1 + AC2
+   * AC:       SCRUM-35 AC2 + AC3
    * Scenario: Assigned coordinator rejects with an optional reason.
-   * Expected: POST { approve: false, reason }.
+   * Setup:    Same PENDING row; reason typed.
+   * Expected: POST { approve: false, reason } so the decision is recorded.
    * Type:     normal
    */
   it('US35-F02 (AC2): assigned coordinator can reject with an optional reason', async () => {
@@ -195,6 +219,7 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
   /*
    * AC:       SCRUM-35 AC1
    * Scenario: Another coordinator opens the event.
+   * Setup:    user 9; event assigned to 2. The page does not fetch CRs for them.
    * Expected: No approve/reject change buttons (API would 403).
    * Type:     security
    */
