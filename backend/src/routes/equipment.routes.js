@@ -27,6 +27,10 @@ router.get(
   requireRole(ROLES.TECHNICAL_SUPPORT),
   controller.requestAvailability
 );
+/**
+ * Purpose: Tech reserves a pending request for its event, or marks it unavailable.
+ * AC: SCRUM-8 AC1–AC3. requireRole is the HTTP half of AC3; the service also checks.
+ */
 router.post('/requests/:id/decision', requireRole(ROLES.TECHNICAL_SUPPORT), controller.decideRequest);
 
 module.exports = router;

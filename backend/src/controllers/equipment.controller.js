@@ -48,7 +48,8 @@ const createRequest = asyncHandler(async (req, res) => {
 
 /**
  * Purpose: POST /api/equipment/requests/:id/decision — reserve or mark unavailable.
- * Business rule: briefing Equipment Reservation. SCRUM-21 does not change this decision.
+ * AC: SCRUM-8 AC1–AC3. Body { approve, reason }. 200 updated request;
+ *   409 if stock is short or already decided; 403 if not Tech.
  */
 const decideRequest = asyncHandler(async (req, res) => {
   const request = await equipmentService.decideRequest(req.user, req.params.id, req.body);

@@ -5,8 +5,8 @@ import { ROLES } from '../constants';
 
 /**
  * Purpose: catalogue plus reservation requests. Technical Support can check whether
- * a pending request can be fulfilled at the event's date and time before they reserve.
- * AC: SCRUM-21 AC5, AC6, AC7
+ * a pending request can be fulfilled, then reserve it for that event or mark it unavailable.
+ * AC: SCRUM-21 AC5, AC6, AC7; SCRUM-8 AC1, AC2 (Reserve is blocked when stock is short).
  */
 
 /**
@@ -85,6 +85,22 @@ export default function Equipment() {
     reload().catch((err) => setError(err.message));
   }, [reload]);
 
+  /**
+   * Purpose: confirm a reservation for this pending request's event.
+   * AC: SCRUM-8 AC1, AC2. The API refuses when free stock is below the request;
+   *   that message is shown and the request stays pending.
+   * Inputs: request id. Output: none — reloads on success, setError on failure.
+   */
+  const reserveRequest = useCallback(async (requestId) => {
+    try {
+      setError('');
+      await api(`/api/equipment/requests/${requestId}/decision`, { method: 'POST', body: { approve: true } });
+      await reload();
+    } catch (err) {
+      setError(err.message);
+    }
+  }, [reload]);
+
   return (
     <>
       <div className="topbar">
@@ -157,7 +173,7 @@ export default function Equipment() {
                   >
                     Check availability
                   </button>
-                  <button className="btn" onClick={() => api(`/api/equipment/requests/${request.id}/decision`, { method: 'POST', body: { approve: true } }).then(reload)}>Reserve</button>
+                  <button className="btn" type="button" onClick={() => reserveRequest(request.id)}>Reserve</button>
                   <button className="btn danger" onClick={() => api(`/api/equipment/requests/${request.id}/decision`, { method: 'POST', body: { approve: false, reason: 'Insufficient stock' } }).then(reload)}>Unavailable</button>
                 </div>
               )}

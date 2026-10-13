@@ -85,10 +85,16 @@ async function createRequest(user, payload) {
 }
 
 /**
- * Purpose: Technical Support reserves or marks a request unavailable.
- * Business rule: briefing Equipment Reservation. SCRUM-21 does not change this decision.
+ * Purpose: Technical Support reserves kit for a pending request, or marks it unavailable.
+ * AC: SCRUM-8 AC1 (write a reservation tied to the event; available qty falls because
+ *   that row is committed), AC2 (refuse reserve when the SCRUM-21 check is not sufficient),
+ *   AC3 (Tech only).
+ * Business rule: briefing Equipment Reservation; Week 2 — Tech reviews the request,
+ *   checks, then reserves. Unavailable is not a reservation (AC2 applies only to confirm).
  * Inputs: user, request id, { approve, reason }. Output: updated request.
- * Failure: 403 if not Tech; 404 if the request is missing.
+ * Failure: 403 if not Tech; 404 if missing; 409 ALREADY_DECIDED if not PENDING;
+ *   400 if approve but no catalogue item or event times; 409 INSUFFICIENT_EQUIPMENT
+ *   if free stock is below the requested qty. Catalogue quantity is not decremented.
  */
 async function decideRequest(user, id, decision) {
   if (!hasRole(user, ROLES.TECHNICAL_SUPPORT)) {
@@ -97,6 +103,40 @@ async function decideRequest(user, id, decision) {
 
   const request = await fetchOne(supabase.from('equipment_requests').select('*').eq('id', id));
   if (!request) throw httpError(404, 'Equipment request not found', 'NOT_FOUND');
+
+  if (request.status !== 'PENDING') {
+    throw httpError(
+      409,
+      `This equipment request has already been ${String(request.status).toLowerCase()} and cannot be changed`,
+      'ALREADY_DECIDED'
+    );
+  }
+
+  let event = await fetchOne(supabase.from('events').select('*').eq('id', request.event_id));
+
+  // AC2: confirm only after operational inventory minus overlapping reservations is enough.
+  if (decision.approve) {
+    if (!request.equipment_id) {
+      throw httpError(400, 'This request has no catalogue item to reserve', 'VALIDATION_ERROR');
+    }
+    if (!event?.start_at || !event?.end_at) {
+      throw httpError(400, 'The event has no date and time to check against', 'VALIDATION_ERROR');
+    }
+    const check = await checkEquipmentAvailability(user, {
+      equipmentId: request.equipment_id,
+      quantity: request.quantity,
+      from: event.start_at,
+      to: event.end_at,
+      excludeEventId: request.event_id,
+    });
+    if (!check.sufficient) {
+      throw httpError(
+        409,
+        `Requested quantity exceeds available equipment for this event (${check.availableQuantity} free, ${check.requestedQuantity} needed)`,
+        'INSUFFICIENT_EQUIPMENT'
+      );
+    }
+  }
 
   const status = decision.approve ? 'RESERVED' : 'UNAVAILABLE';
   const updated = await updateById('equipment_requests', id, {
@@ -115,7 +155,6 @@ async function decideRequest(user, id, decision) {
     });
   }
 
-  const event = await fetchOne(supabase.from('events').select('*').eq('id', request.event_id));
   if (event?.coordinator_id) {
     await notifyUser(
       event.coordinator_id,
