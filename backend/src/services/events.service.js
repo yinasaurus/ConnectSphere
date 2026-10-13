@@ -7,6 +7,8 @@ const {
   MIN_REJECTION_REASON_LENGTH,
   SIGNIFICANT_FIELDS,
   BOOKING_STATUS,
+  CHANGE_REQUEST_STATUS,
+  CHANGE_REQUEST_FIELDS,
 } = require('../constants/statuses');
 const { REJECTION_REASON_MESSAGE } = require('../validators/events.validators');
 const { httpError } = require('../middleware/errorHandler');
@@ -1091,6 +1093,277 @@ async function respondClarification(user, id, response, amendments = {}) {
   return getEvent(user, id);
 }
 
+const CHANGE_REQUEST_BLOCKED_STATUSES = [
+  EVENT_STATUS.DRAFT,
+  EVENT_STATUS.CANCELLED,
+  EVENT_STATUS.REJECTED,
+  EVENT_STATUS.COMPLETED,
+];
+
+function mapChangeRequest(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    requestedBy: row.requested_by,
+    decidedBy: row.decided_by,
+    status: row.status,
+    startAt: row.start_at,
+    endAt: row.end_at,
+    expectedAttendance: row.expected_attendance,
+    venueRequirements: row.venue_requirements,
+    equipmentNotes: row.equipment_notes,
+    decisionReason: row.decision_reason,
+    decidedAt: row.decided_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function loadVisibleEventRow(user, id) {
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
+  if (!existing || !canViewEvent(user, existing)) {
+    throw httpError(404, 'Event not found', 'NOT_FOUND');
+  }
+  return existing;
+}
+
+function canAccessChangeRequests(user, event) {
+  if (event.organiser_id === user.id) return true;
+  return event.coordinator_id === user.id && hasRole(user, ROLES.EVENT_COORDINATOR);
+}
+
+function assertChangeRequestViewer(user, event) {
+  if (!canAccessChangeRequests(user, event)) {
+    throw httpError(
+      403,
+      'Only the organiser and assigned coordinator can view change requests',
+      'FORBIDDEN'
+    );
+  }
+}
+
+function parseOptionalDate(value, field) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw httpError(400, `Invalid ${field}`, 'VALIDATION_ERROR', { fields: [field] });
+  }
+  return date;
+}
+
+function parseOptionalAttendance(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) {
+    throw httpError(
+      400,
+      'Expected attendance must be a whole number of at least 1',
+      'VALIDATION_ERROR',
+      { fields: ['expectedAttendance'] }
+    );
+  }
+  return n;
+}
+
+function parseOptionalText(value) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return String(value);
+}
+
+function parseChangeRequestPayload(payload = {}) {
+  const unknown = Object.keys(payload).filter(
+    (key) => payload[key] !== undefined && !CHANGE_REQUEST_FIELDS.includes(key)
+  );
+  if (unknown.length) {
+    throw httpError(
+      400,
+      'Only date, time, expected attendance, venue requirements and equipment requirements can be requested',
+      'VALIDATION_ERROR',
+      { fields: unknown }
+    );
+  }
+
+  const startAt = parseOptionalDate(payload.startAt, 'startAt');
+  const endAt = parseOptionalDate(payload.endAt, 'endAt');
+  const expectedAttendance = parseOptionalAttendance(payload.expectedAttendance);
+  const venueRequirements = parseOptionalText(payload.venueRequirements);
+  const equipmentNotes = parseOptionalText(payload.equipmentNotes);
+
+  const provided = [startAt, endAt, expectedAttendance, venueRequirements, equipmentNotes]
+    .some((value) => value !== undefined);
+  if (!provided) {
+    throw httpError(
+      400,
+      'At least one permitted field is required',
+      'VALIDATION_ERROR',
+      { fields: CHANGE_REQUEST_FIELDS }
+    );
+  }
+
+  return {
+    start_at: startAt === undefined ? null : startAt,
+    end_at: endAt === undefined ? null : endAt,
+    expected_attendance: expectedAttendance === undefined ? null : expectedAttendance,
+    venue_requirements: venueRequirements === undefined ? null : venueRequirements,
+    equipment_notes: equipmentNotes === undefined ? null : equipmentNotes,
+  };
+}
+
+function proposedEventPatch(request, existing) {
+  const patch = { updated_at: new Date().toISOString() };
+  if (request.start_at != null) patch.start_at = request.start_at;
+  if (request.end_at != null) patch.end_at = request.end_at;
+  if (request.expected_attendance != null) patch.expected_attendance = request.expected_attendance;
+  if (request.venue_requirements != null) patch.venue_requirements = request.venue_requirements;
+  if (request.equipment_notes != null) patch.equipment_notes = request.equipment_notes;
+  const nextStart = patch.start_at !== undefined ? patch.start_at : existing.start_at;
+  const nextEnd = patch.end_at !== undefined ? patch.end_at : existing.end_at;
+  validateDateRange(nextStart, nextEnd);
+  return patch;
+}
+
+/**
+ * Purpose: list change requests for one event. Only the owning organiser and the assigned
+ * coordinator may see them; other coordinators are refused.
+ * AC: SCRUM-34 AC1, SCRUM-35 AC1
+ * Output: mapped change-request rows, newest first.
+ * Failure: 404 if the event is missing or hidden; 403 if the caller is not owner or assignee.
+ */
+async function listChangeRequests(user, eventId) {
+  const event = await loadVisibleEventRow(user, eventId);
+  assertChangeRequestViewer(user, event);
+  const rows = await fetchMany(
+    supabase.from('event_change_requests')
+      .select('*')
+      .eq('event_id', event.id)
+      .order('created_at', { ascending: false })
+  );
+  return rows.map(mapChangeRequest);
+}
+
+/**
+ * Purpose: organiser asks the assigned coordinator to change permitted event fields.
+ * AC: SCRUM-34 AC1 (organiser requests a change), AC2 (only date/time, attendance,
+ *     venue requirements, equipment requirements).
+ * Inputs: session user, event id, payload of permitted fields.
+ * Output: the pending change request.
+ * Failure: 404 missing/hidden event; 403 not the owner; 409 draft/cancelled/rejected/
+ *     completed, unassigned Submitted, or a pending request already exists; 400 unknown
+ *     or empty fields.
+ */
+async function createChangeRequest(user, eventId, payload) {
+  const fields = parseChangeRequestPayload(payload);
+  if (fields.start_at && fields.end_at) {
+    validateDateRange(fields.start_at, fields.end_at);
+  }
+
+  const event = await loadVisibleEventRow(user, eventId);
+  if (event.organiser_id !== user.id) {
+    throw httpError(403, 'Only the event organiser can request a change', 'FORBIDDEN');
+  }
+  if (CHANGE_REQUEST_BLOCKED_STATUSES.includes(event.status)) {
+    throw httpError(
+      409,
+      `Change requests are not allowed while the event is ${event.status}`,
+      'CHANGE_NOT_ALLOWED'
+    );
+  }
+  if (!event.coordinator_id) {
+    throw httpError(
+      409,
+      'A coordinator must be assigned before a change request can be submitted',
+      'NO_COORDINATOR'
+    );
+  }
+
+  const pending = await fetchOne(
+    supabase.from('event_change_requests')
+      .select('id')
+      .eq('event_id', event.id)
+      .eq('status', CHANGE_REQUEST_STATUS.PENDING)
+  );
+  if (pending) {
+    throw httpError(
+      409,
+      'This event already has a pending change request',
+      'PENDING_CHANGE_EXISTS'
+    );
+  }
+
+  const created = await insertOne('event_change_requests', {
+    event_id: event.id,
+    requested_by: user.id,
+    status: CHANGE_REQUEST_STATUS.PENDING,
+    ...fields,
+  });
+  await writeAudit(user.id, 'CHANGE_REQUEST_CREATED', 'event_change_request', created.id, {
+    eventId: event.id,
+    fields: Object.keys(payload || {}).filter((key) => payload[key] !== undefined),
+  });
+  return mapChangeRequest(created);
+}
+
+/**
+ * Purpose: assigned coordinator approves (copies proposed fields onto the event, including
+ * Confirmed) or rejects (event unchanged). Event status is not moved.
+ * AC: SCRUM-35 AC1 (assigned coordinator decides), AC2 (approve applies the change).
+ * Inputs: user, event id, request id, { approve, reason? }.
+ * Output: the decided change request.
+ * Failure: 404 missing; 403 not the assigned coordinator; 409 already decided.
+ */
+async function decideChangeRequest(user, eventId, requestId, { approve, reason } = {}) {
+  const event = await loadVisibleEventRow(user, eventId);
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR) || event.coordinator_id !== user.id) {
+    throw httpError(
+      403,
+      'Only the assigned coordinator can review this change request',
+      'FORBIDDEN'
+    );
+  }
+
+  const request = await fetchOne(
+    supabase.from('event_change_requests').select('*').eq('id', requestId)
+  );
+  if (!request || Number(request.event_id) !== Number(event.id)) {
+    throw httpError(404, 'Change request not found', 'NOT_FOUND');
+  }
+  if (request.status !== CHANGE_REQUEST_STATUS.PENDING) {
+    throw httpError(409, 'This change request has already been decided', 'ALREADY_DECIDED');
+  }
+
+  const now = new Date().toISOString();
+  const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+  const decided = approve === true || approve === 'true';
+
+  if (decided) {
+    const eventPatch = proposedEventPatch(request, event);
+    // Bypass updateEvent so Confirmed SIGNIFICANT_FIELDS stay locked to direct edits
+    // but an approved change request can still apply date/time/attendance/requirements.
+    await updateById('events', event.id, eventPatch);
+  }
+
+  const crPatch = {
+    status: decided ? CHANGE_REQUEST_STATUS.APPROVED : CHANGE_REQUEST_STATUS.REJECTED,
+    decided_by: user.id,
+    decided_at: now,
+    decision_reason: trimmedReason || null,
+    updated_at: now,
+  };
+  const updated = await updateById('event_change_requests', request.id, crPatch);
+  await writeAudit(
+    user.id,
+    decided ? 'CHANGE_REQUEST_APPROVED' : 'CHANGE_REQUEST_REJECTED',
+    'event_change_request',
+    request.id,
+    { eventId: event.id, reason: trimmedReason || null }
+  );
+  return mapChangeRequest(updated || { ...request, ...crPatch });
+}
+
 module.exports = {
   listEvents,
   getEvent,
@@ -1113,4 +1386,7 @@ module.exports = {
   findMissingSubmissionFields,
   isInUnassignedQueue,
   listUnassignedQueue,
+  listChangeRequests,
+  createChangeRequest,
+  decideChangeRequest,
 };

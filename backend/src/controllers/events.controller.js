@@ -181,6 +181,43 @@ const respondClarification = asyncHandler(async (req, res) => {
   res.json({ event });
 });
 
+/**
+ * Purpose: GET /api/events/:id/change-requests for the owner organiser and assigned coordinator.
+ * AC: SCRUM-34 AC1, SCRUM-35 AC1
+ */
+const listChangeRequests = asyncHandler(async (req, res) => {
+  const changeRequests = await eventsService.listChangeRequests(req.user, req.params.id);
+  res.json({ changeRequests });
+});
+
+/**
+ * Purpose: POST /api/events/:id/change-requests. Organiser proposes permitted field changes.
+ * AC: SCRUM-34 AC1, AC2
+ */
+const createChangeRequest = asyncHandler(async (req, res) => {
+  const changeRequest = await eventsService.createChangeRequest(
+    req.user,
+    req.params.id,
+    req.body
+  );
+  res.status(201).json({ changeRequest });
+});
+
+/**
+ * Purpose: POST /api/events/:id/change-requests/:requestId/decision. Assigned coordinator
+ * approves (applies fields) or rejects (event unchanged).
+ * AC: SCRUM-35 AC1, AC2
+ */
+const decideChangeRequest = asyncHandler(async (req, res) => {
+  const changeRequest = await eventsService.decideChangeRequest(
+    req.user,
+    req.params.id,
+    req.params.requestId,
+    { approve: req.body.approve, reason: req.body.reason }
+  );
+  res.json({ changeRequest });
+});
+
 module.exports = {
   list,
   listUnassignedQueue,
@@ -200,4 +237,7 @@ module.exports = {
   assignCoordinator,
   requestClarification,
   respondClarification,
+  listChangeRequests,
+  createChangeRequest,
+  decideChangeRequest,
 };
