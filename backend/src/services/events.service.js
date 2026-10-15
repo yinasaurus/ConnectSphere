@@ -278,7 +278,7 @@ async function getEvent(user, id) {
 
 /**
  * Purpose: the venue bookings for one event (venue name and status), shown with its details.
- * AC: SCRUM-39 AC2 (venue). SCRUM-42 AC3 — includes needs_review so the event page can show
+ * AC: SCRUM-39 AC2 (venue). SCRUM-42 AC2 — includes needs_review so the event page can show
  *     "Requires review" without changing the booking status.
  * Attendees only get APPROVED bookings. Failure: 404 from getEvent, before bookings are read.
  */
@@ -330,7 +330,7 @@ async function listVenueBookings(user, eventId) {
  * AC: SCRUM-39 AC2 (equipment requirement), AC1 (only users allowed to see the event).
  * Inputs: the signed-in user and the event id.
  * Output: [{ id, event_id, equipment_id, equipment_name, quantity, status, needs_review }], newest first.
- *     SCRUM-42 AC3 — needs_review is the review flag, not a status.
+ *     SCRUM-42 AC2 — needs_review is the review flag, not a status.
  * Failure: 403 for roles without planning access (Attendees get the public view only);
  * 404 if the event doesn't exist or the user can't see it (e.g. another organisation),
  * checked before any equipment is read.

@@ -1,6 +1,7 @@
 /**
- * SCRUM-42 AC3: EventDetail shows "Requires review" on flagged venue bookings and
+ * SCRUM-42 AC2: EventDetail shows "Requires review" on flagged venue bookings and
  * equipment requests. The existing status badge is unchanged.
+ * SCRUM-42 AC3: unflagged / non-critical rows do not show the label.
  */
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -55,7 +56,7 @@ beforeEach(() => {
 
 describe('SCRUM-42 Requires review on EventDetail', () => {
   /*
-   * AC:       SCRUM-42 AC3
+   * AC:       SCRUM-42 AC2
    * Scenario: A flagged approved booking and a flagged pending equipment request.
    * Setup:    Coordinator; booking needs_review true, status APPROVED; equipment
    *           needs_review true, status PENDING.

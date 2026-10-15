@@ -7,8 +7,9 @@
  *   SCRUM-41 AC2  Name / purpose / description are not critical.
  *   SCRUM-41 AC3  80 → 150 is a change; 80 → 80 is not; a decrease is still a change.
  *   SCRUM-42 AC1  Affected active venue bookings and equipment requests get needs_review.
- *   SCRUM-42 AC2  W4 — the system only flags; nothing is auto-cancelled.
- *   SCRUM-42 AC3  EventDetail shows "Requires review" (API exposes needs_review).
+ *   SCRUM-42 AC2  Marks affected rows needs_review (W4: flag only, nothing cancelled);
+ *                 EventDetail shows "Requires review".
+ *   SCRUM-42 AC3  Does not trigger a review for non-critical changes.
  *   SCRUM-42 AC4  W7 #3 — one booking's window does not automatically flag another.
  *   SCRUM-36 AC5  Approve of a change request runs the same flag after the event write.
  */
