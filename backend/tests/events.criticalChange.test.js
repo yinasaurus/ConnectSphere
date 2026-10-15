@@ -237,6 +237,38 @@ describe('SCRUM-42 flagArrangementsForReview', () => {
   });
 
   /*
+   * AC:       SCRUM-42 AC4 (W7 #3) / SCRUM-41 AC3
+   * Scenario: Attendance 80 → 150 with two approved bookings at different venues.
+   * Setup:    Booking 7 at a 50-capacity room; booking 8 at a 200-capacity room.
+   * Expected: Only the room that cannot hold 150 is flagged; neither status is patched.
+   * Type:     normal
+   */
+  it('AC4: only the over-capacity booking is flagged when two rooms exist', async () => {
+    db.fetchMany
+      .mockResolvedValueOnce([
+        booking({ id: 7, venue_id: 8 }),
+        booking({ id: 8, venue_id: 9 }),
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { id: 8, capacity: 50 },
+        { id: 9, capacity: 200 },
+      ]);
+
+    const result = await flagArrangementsForReview(
+      user,
+      eventRow(),
+      eventRow({ expected_attendance: 150 })
+    );
+
+    expect(result.flaggedBookingIds).toEqual([7]);
+    expect(db.updateById).toHaveBeenCalledWith('venue_bookings', 7, expect.objectContaining({ needs_review: true }));
+    expect(db.updateById).not.toHaveBeenCalledWith('venue_bookings', 8, expect.anything());
+    const bookingPatch = db.updateById.mock.calls.find((call) => call[0] === 'venue_bookings')[2];
+    expect(bookingPatch.status).toBeUndefined();
+  });
+
+  /*
    * AC:       SCRUM-42 AC4 (W7 #3)
    * Scenario: Event date/time moves; two approved bookings exist.
    * Setup:    Booking 7 matches the previous slot; booking 8 is a different window.
