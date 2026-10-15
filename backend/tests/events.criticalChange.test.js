@@ -296,6 +296,37 @@ describe('SCRUM-42 flagArrangementsForReview', () => {
   });
 
   /*
+   * AC:       SCRUM-42 AC3
+   * Scenario: A date change affects only the previous-slot booking.
+   * Setup:    Booking 7 matches the old slot; booking 8 is a different window and already
+   *           has needs_review true.
+   * Expected: Booking 8 is not written, so its existing flag is not cleared.
+   * Type:     boundary
+   */
+  it('AC3: an unaffected booking is not updated, even if it was already flagged', async () => {
+    db.fetchMany
+      .mockResolvedValueOnce([
+        booking({ id: 7 }),
+        booking({
+          id: 8,
+          start_at: OTHER_SLOT.start_at,
+          end_at: OTHER_SLOT.end_at,
+          needs_review: true,
+        }),
+      ])
+      .mockResolvedValueOnce([]);
+
+    await flagArrangementsForReview(
+      user,
+      eventRow(),
+      eventRow({ start_at: OTHER_SLOT.start_at, end_at: OTHER_SLOT.end_at })
+    );
+
+    expect(db.updateById).toHaveBeenCalledWith('venue_bookings', 7, expect.objectContaining({ needs_review: true }));
+    expect(db.updateById).not.toHaveBeenCalledWith('venue_bookings', 8, expect.anything());
+  });
+
+  /*
    * AC:       SCRUM-42 AC1
    * Scenario: Date change with REJECTED / CANCELLED bookings and UNAVAILABLE equipment.
    * Setup:    Those rows are in the event lists alongside one active booking.
