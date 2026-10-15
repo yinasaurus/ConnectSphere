@@ -1251,6 +1251,11 @@ function parseChangeRequestPayload(payload = {}) {
   };
 }
 
+/**
+ * Purpose: the event columns a change request may copy, with the API names used in the
+ * AC4 audit (previous / new per included field).
+ * AC: SCRUM-36 AC1, AC4
+ */
 const CHANGE_APPLY_FIELDS = [
   { column: 'start_at', field: 'startAt' },
   { column: 'end_at', field: 'endAt' },
@@ -1280,8 +1285,9 @@ function proposedEventPatch(request, existing) {
 /**
  * Purpose: refuse approve when the requested values themselves are not usable, before any
  * event write. Existing event values that were not requested are not re-checked.
- * AC: SCRUM-36 AC2 (attendance ≤ 0, start in the past). End-before-start is checked in
- *     proposedEventPatch after this, using the merged window.
+ * AC: SCRUM-36 AC2 (attendance ≤ 0 or not a whole number, start in the past, unparseable
+ *     start or end). End-before-start is checked in proposedEventPatch after this, using
+ *     the merged window.
  * Inputs: the pending change-request row; `now` so tests can fix the clock.
  * Failure: 400 VALIDATION_ERROR; caller must not write the event or mark the request decided.
  */
@@ -1291,7 +1297,7 @@ function assertRequestedValuesApprovable(request, now) {
     if (!Number.isInteger(n) || n <= 0) {
       throw httpError(
         400,
-        'A change request cannot be approved with attendance of 0 or less',
+        'A change request cannot be approved with an invalid attendance (must be a whole number of at least 1)',
         'VALIDATION_ERROR',
         { fields: ['expectedAttendance'] }
       );
@@ -1313,6 +1319,17 @@ function assertRequestedValuesApprovable(request, now) {
         'A change request cannot be approved with a start date/time in the past',
         'VALIDATION_ERROR',
         { fields: ['startAt'] }
+      );
+    }
+  }
+  if (request.end_at != null) {
+    const end = new Date(request.end_at);
+    if (Number.isNaN(end.getTime())) {
+      throw httpError(
+        400,
+        'A change request cannot be approved with an invalid end date/time',
+        'VALIDATION_ERROR',
+        { fields: ['endAt'] }
       );
     }
   }
