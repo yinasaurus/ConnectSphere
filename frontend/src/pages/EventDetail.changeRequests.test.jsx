@@ -1,6 +1,7 @@
 /**
  * SCRUM-34: organiser requests a change on the event page.
  * SCRUM-35: assigned coordinator approves or rejects it.
+ * SCRUM-36 AC2: approve 400 (invalid requested values) is shown on the page.
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -35,7 +36,7 @@ const PENDING = {
   equipmentNotes: '4 mics',
 };
 
-function mockApi({ event = EVENT, changeRequests = [], onCreate, onDecide } = {}) {
+function mockApi({ event = EVENT, changeRequests = [], onCreate, onDecide, decideError } = {}) {
   api.mockImplementation(async (path, options = {}) => {
     if (path === '/api/events/3') return { event };
     if (path === '/api/events/3/history') return { history: [] };
@@ -49,6 +50,11 @@ function mockApi({ event = EVENT, changeRequests = [], onCreate, onDecide } = {}
     }
     if (path === '/api/events/3/change-requests') return { changeRequests };
     if (path === '/api/events/3/change-requests/50/decision' && options.method === 'POST') {
+      if (decideError) {
+        const err = new Error(decideError);
+        err.code = 'VALIDATION_ERROR';
+        throw err;
+      }
       if (onDecide) onDecide(options.body);
       return {
         changeRequest: {
@@ -223,6 +229,27 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
    * Expected: No approve/reject change buttons (API would 403).
    * Type:     security
    */
+  /*
+   * AC:       SCRUM-36 AC2
+   * Scenario: Assigned coordinator approves, but the API refuses invalid requested values.
+   * Setup:    Decision POST throws VALIDATION_ERROR with the server message (start in the past).
+   * Expected: That message is shown in the page alert so the coordinator sees why approve failed.
+   * Type:     error
+   */
+  it('US36-F01 (AC2): approve error from the API is shown on the event page', async () => {
+    mockApi({
+      changeRequests: [PENDING],
+      decideError: 'A change request cannot be approved with a start date/time in the past',
+    });
+    renderAs({ id: 2, roles: ['EVENT_COORDINATOR'] });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Approve change' }));
+    expect(await screen.findByText(
+      'A change request cannot be approved with a start date/time in the past'
+    )).toBeInTheDocument();
+  });
+
   it('US35-F03 (AC1): another coordinator does not see decide actions', async () => {
     mockApi({ changeRequests: [PENDING] });
     renderAs({ id: 9, roles: ['EVENT_COORDINATOR'] });
