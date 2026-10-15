@@ -784,7 +784,8 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
 
     await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
 
-    const metadata = audit.writeAudit.mock.calls[0][4];
+    const approved = audit.writeAudit.mock.calls.find((call) => call[1] === 'CHANGE_REQUEST_APPROVED');
+    const metadata = approved[4];
     expect(metadata.fields.find((row) => row.field === 'startAt')).toEqual({
       field: 'startAt',
       previous: existingStart.toISOString(),
@@ -805,7 +806,8 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
 
     await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
 
-    const metadata = audit.writeAudit.mock.calls[0][4];
+    const approved = audit.writeAudit.mock.calls.find((call) => call[1] === 'CHANGE_REQUEST_APPROVED');
+    const metadata = approved[4];
     expect(metadata.fields).toEqual([
       { field: 'expectedAttendance', previous: 40, next: 80 },
     ]);

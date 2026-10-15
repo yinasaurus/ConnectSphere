@@ -1463,8 +1463,9 @@ async function createChangeRequest(user, eventId, payload) {
  *     requested values cannot be approved — request stays PENDING), AC3 (reject does not
  *     touch the event), AC4 (who/when plus previous and new values on approve), AC6
  *     (organiser is notified either way).
- *     SCRUM-36 AC5 / SCRUM-41 / SCRUM-42: after approve, affected venue/equipment rows
- *     get needs_review (flag only; status unchanged).
+ *     SCRUM-36 AC5 / SCRUM-41 / SCRUM-42: after the event write and before the request is
+ *     marked APPROVED, affected venue/equipment rows get needs_review (flag only; status
+ *     unchanged). If flagging fails, the request stays PENDING so approve can be retried.
  * Inputs: user, event id, request id, { approve, reason? }.
  * Output: the decided change request.
  * Failure: 404 missing; 403 not the assigned coordinator; 409 already decided; 400 when
@@ -1502,6 +1503,8 @@ async function decideChangeRequest(user, eventId, requestId, { approve, reason }
     // Bypass updateEvent so Confirmed SIGNIFICANT_FIELDS stay locked to direct edits
     // but an approved change request can still apply date/time/attendance/requirements.
     await updateById('events', event.id, eventPatch);
+    // Flag before APPROVED so a DB error here leaves the request PENDING (retryable).
+    await flagArrangementsForReview(user, event, { ...event, ...eventPatch });
   }
 
   const crPatch = {
@@ -1528,9 +1531,6 @@ async function decideChangeRequest(user, eventId, requestId, { approve, reason }
       : { eventId: event.id, reason: trimmedReason || null }
   );
   await notifyChangeRequestDecision(event, decided, trimmedReason);
-  if (eventPatch) {
-    await flagArrangementsForReview(user, event, { ...event, ...eventPatch });
-  }
   return mapChangeRequest(updated || { ...request, ...crPatch });
 }
 
