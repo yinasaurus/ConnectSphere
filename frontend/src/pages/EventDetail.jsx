@@ -453,11 +453,13 @@ export default function EventDetail() {
                         value={changeRejectReasons[row.id] || ''}
                         onChange={(e) => setChangeRejectReasons((prev) => ({ ...prev, [row.id]: e.target.value }))}
                       />
+                      {/* SCRUM-36 AC2: page-level run() so a 400 (invalid requested values)
+                          shows in the alert above the event, not only in Coordinator actions. */}
                       <div className="actions">
                         <button
                           className="btn"
                           type="button"
-                          onClick={() => runCoordinatorAction(() => api(
+                          onClick={() => run(() => api(
                             `/api/events/${id}/change-requests/${row.id}/decision`,
                             { method: 'POST', body: { approve: true } }
                           ))}
@@ -467,7 +469,7 @@ export default function EventDetail() {
                         <button
                           className="btn danger"
                           type="button"
-                          onClick={() => runCoordinatorAction(() => api(
+                          onClick={() => run(() => api(
                             `/api/events/${id}/change-requests/${row.id}/decision`,
                             {
                               method: 'POST',
