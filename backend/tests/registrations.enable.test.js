@@ -363,16 +363,52 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
   });
 
   /*
-   * AC: SCRUM-63 AC5 (agreed extra rule)
-   * Scenario: The close date is moved earlier. Closing early is deferred, so this is refused.
-   * Expected: 409 CLOSE_EARLIER; the close date is unchanged.
+   * AC: SCRUM-63 AC5 (changed 15 Oct: closing earlier is allowed)
+   * Scenario: The close date is moved earlier but stays after the open date (1 Nov 09:00).
+   * Expected: saved, including one millisecond after the open time.
+   * Type: normal / boundary
+   */
+  it.each([
+    ['a few days earlier', '2026-11-05T09:00:00.000Z'],
+    ['to one millisecond after the open time', '2026-11-01T09:00:00.001Z'],
+  ])('US63-B17: the close date can be moved %s', async (_label, earlier) => {
+    const result = await service.changeRegistrationSettings(assigned, 3, { closesAt: earlier });
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
+      registration_closes_at: earlier,
+    }));
+    expect(result.registrationClosesAt).toBe(earlier);
+  });
+
+  /*
+   * AC: SCRUM-63 AC3, AC5
+   * Scenario: The close date is moved to the open time or before it.
+   * Expected: 400 INVALID_WINDOW; the close date is unchanged.
+   * Type: boundary / error
+   */
+  it.each([
+    ['exactly the open time', OPENS],
+    ['before the open time', '2026-10-30T09:00:00.000Z'],
+  ])('US63-B17a: the close date cannot be moved to %s', async (_label, closesAt) => {
+    await expectRejected(
+      service.changeRegistrationSettings(assigned, 3, { closesAt }),
+      400,
+      'INVALID_WINDOW'
+    );
+    expect(event.registration_closes_at).toBe(CLOSES);
+  });
+
+  /*
+   * AC: SCRUM-63 AC5
+   * Scenario: Registration is already open (opened 10 Oct) and the close date is moved earlier to a time already passed.
+   * Expected: 400 CLOSE_IN_PAST; the close date is unchanged.
    * Type: error
    */
-  it('US63-B17: the close date cannot be moved earlier', async () => {
+  it('US63-B17b: the close date cannot be moved earlier into the past', async () => {
+    event = enabledEvent({ registration_opens_at: '2026-10-10T09:00:00.000Z' });
     await expectRejected(
-      service.changeRegistrationSettings(assigned, 3, { closesAt: '2026-11-05T09:00:00.000Z' }),
-      409,
-      'CLOSE_EARLIER'
+      service.changeRegistrationSettings(assigned, 3, { closesAt: '2026-10-15T09:00:00.000Z' }),
+      400,
+      'CLOSE_IN_PAST'
     );
     expect(event.registration_closes_at).toBe(CLOSES);
   });
@@ -732,10 +768,10 @@ describe('SCRUM-63 registration routes', () => {
     const res = await request(app)
       .patch('/api/events/3/registration')
       .set('Cookie', `${env.sessionCookieName}=${token}`)
-      .send({ closesAt: '2026-11-05T09:00:00.000Z' });
+      .send({ closesAt: '2026-10-30T09:00:00.000Z' });
 
-    expect(res.status).toBe(409);
-    expect(res.body.error).toBe('CLOSE_EARLIER');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('INVALID_WINDOW');
     expect(db.updateById).not.toHaveBeenCalled();
   });
 });

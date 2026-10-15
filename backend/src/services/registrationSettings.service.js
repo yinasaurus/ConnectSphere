@@ -195,12 +195,12 @@ async function enableRegistration(user, eventId, body = {}) {
 
 /**
  * Purpose: the assigned Coordinator changes registration that is already enabled: move the
- *   close date later (extension) and/or change the maximum capacity.
- * AC: SCRUM-63 AC4, AC5, AC6, AC7, and the agreed extra rules that the close cannot move
- *   earlier and the open date cannot change once enabled.
+ *   close date (earlier or later, but still after the open date) and/or change the capacity.
+ * AC: SCRUM-63 AC4, AC5, AC6, AC7, and the agreed extra rule that the open date cannot change
+ *   once enabled.
  * Inputs: user, event id, { closesAt?, capacity? }.
- * Output: the saved settings. Failure: 403/404 as above; 409 if not enabled, close moved
- *   earlier or capacity below registrations; 400 for bad values. Nothing is written on failure.
+ * Output: the saved settings. Failure: 403/404 as above; 409 if not enabled or capacity
+ *   below registrations; 400 if the close is not after the open; 400 for bad values. Nothing is written on failure.
  */
 async function changeRegistrationSettings(user, eventId, body = {}) {
   const event = await loadEventForAssignedCoordinator(user, eventId);
@@ -220,8 +220,8 @@ async function changeRegistrationSettings(user, eventId, body = {}) {
   if (body.closesAt !== undefined) {
     const closesAt = parseDateTime(body.closesAt);
     if (!closesAt) throw httpError(400, 'Close must be a valid date and time', 'INVALID_DATE');
-    if (closesAt < new Date(event.registration_closes_at)) {
-      throw httpError(409, 'The close date and time can only be moved later', 'CLOSE_EARLIER');
+    if (closesAt <= new Date(event.registration_opens_at)) {
+      throw httpError(400, 'The close date and time must be after the open date and time', 'INVALID_WINDOW');
     }
     assertWindowFitsEvent(event, closesAt);
     patch.registration_closes_at = closesAt.toISOString();

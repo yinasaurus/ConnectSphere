@@ -92,7 +92,7 @@ describe('SCRUM-63 RegistrationSettingsCard', () => {
   it('US63-F05: sends only the new close date when capacity is left empty', async () => {
     const onRun = jest.fn();
     render(<RegistrationSettingsCard event={enabledEvent} onRun={onRun} />);
-    await userEvent.type(screen.getByLabelText('New close date and time (later only)'), '2026-11-10T09:00');
+    await userEvent.type(screen.getByLabelText('New close date and time (after registration opens)'), '2026-11-10T09:00');
     await userEvent.click(screen.getByRole('button', { name: 'Save registration changes' }));
 
     expect(onRun.mock.calls[0][0].body).toEqual({

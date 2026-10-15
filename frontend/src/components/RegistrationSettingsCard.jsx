@@ -73,7 +73,7 @@ export default function RegistrationSettingsCard({ event, onRun }) {
       <p><strong>Opens:</strong> {new Date(event.registrationOpensAt).toLocaleString()}</p>
       <p><strong>Closes:</strong> {new Date(event.registrationClosesAt).toLocaleString()}</p>
       <p><strong>Maximum capacity:</strong> {event.registrationCapacity}</p>
-      <label htmlFor="registration-new-closes-at">New close date and time (later only)</label>
+      <label htmlFor="registration-new-closes-at">New close date and time (after registration opens)</label>
       <input id="registration-new-closes-at" type="datetime-local" value={closesAt} onChange={(e) => setClosesAt(e.target.value)} />
       <label htmlFor="registration-new-capacity">New maximum capacity</label>
       <input id="registration-new-capacity" type="number" min="1" max={event.expectedAttendance || undefined} step="1" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
