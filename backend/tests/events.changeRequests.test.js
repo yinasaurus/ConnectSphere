@@ -286,6 +286,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Scenario: Assigned coordinator approves a pending request on a Planning event.
    * Setup:    Request proposes new times, attendance, venue and equipment notes.
    * Expected: Those columns are written onto the event; status stays PLANNING; request APPROVED.
+   *           The organiser is notified (SCRUM-36 AC6).
    * Type:     normal
    */
   it('AC1+AC2: assigned coordinator approve copies proposed fields and leaves status', async () => {
@@ -372,6 +373,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * AC:       SCRUM-35 AC2
    * Scenario: Assigned coordinator rejects, optionally with a reason.
    * Expected: Request REJECTED with the reason; events table is not written.
+   *           The organiser is notified (SCRUM-36 AC6).
    * Type:     normal
    */
   it('AC2: reject leaves the event unchanged and stores an optional reason', async () => {
@@ -570,6 +572,24 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
       .mockResolvedValueOnce(pendingRequest({ start_at: 'not-a-date' }));
+
+    await expect(service.decideChangeRequest(coordinator, 3, 50, { approve: true }))
+      .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-36 AC2
+   * Scenario: Stored end is not a real timestamp.
+   * Setup:    end_at is "not-a-date"; start is a valid future time.
+   * Expected: 400 before any write — junk ends must not be copied onto the event
+   *           (validateDateRange used to skip NaN and let the patch through).
+   * Type:     error
+   */
+  it('AC2: an invalid end date cannot be approved', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({ end_at: 'not-a-date' }));
 
     await expect(service.decideChangeRequest(coordinator, 3, 50, { approve: true }))
       .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
