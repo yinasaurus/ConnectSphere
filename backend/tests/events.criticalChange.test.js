@@ -136,6 +136,7 @@ describe('SCRUM-41 classify critical vs non-critical', () => {
   /*
    * AC:       SCRUM-41 AC1
    * Scenario: Date/time, venue text, requested venue or equipment notes change.
+   * Setup:    Previous event at the default slot / notes; each next row changes one column.
    * Expected: Each is reported as critical.
    * Type:     normal
    */
@@ -150,6 +151,7 @@ describe('SCRUM-41 classify critical vs non-critical', () => {
   /*
    * AC:       SCRUM-41 AC2
    * Scenario: Only the event name, purpose or description is edited.
+   * Setup:    Same critical columns as the previous row; only name, purpose and description differ.
    * Expected: Not critical.
    * Type:     normal
    */
@@ -162,6 +164,7 @@ describe('SCRUM-41 AC3 venue capacity vs new attendance', () => {
   /*
    * AC:       SCRUM-41 AC3
    * Scenario: Compare venue capacity to the new headcount.
+   * Setup:    Capacities 100, 150, 200 and null against attendance 150.
    * Expected: Below the new figure is affected; equal capacity can hold it; missing capacity
    *           is treated as unknown and therefore affected.
    * Type:     boundary
@@ -265,7 +268,7 @@ describe('SCRUM-42 flagArrangementsForReview', () => {
    * Scenario: Date change with REJECTED / CANCELLED bookings and UNAVAILABLE equipment.
    * Setup:    Those rows are in the event lists alongside one active booking.
    * Expected: Only the active booking is flagged; inactive equipment is not.
-   * Type:     error / boundary
+   * Type:     boundary
    */
   it('AC1: rejected, cancelled and unavailable rows are not flagged', async () => {
     db.fetchMany
@@ -358,8 +361,9 @@ describe('SCRUM-42 flagArrangementsForReview', () => {
   });
 
   /*
-   * AC:       SCRUM-41 AC2 / SCRUM-42 AC1
+   * AC:       SCRUM-41 AC2 / SCRUM-42 AC3
    * Scenario: A non-critical name change.
+   * Setup:    Previous and next differ only on name; no booking rows are loaded.
    * Expected: No booking/equipment writes and no CRITICAL_CHANGE audit.
    * Type:     normal
    */
@@ -381,6 +385,7 @@ describe('SCRUM-41 / SCRUM-42 updateEvent hook', () => {
   /*
    * AC:       SCRUM-41 AC2
    * Scenario: Assigned coordinator edits only the event name.
+   * Setup:    PLANNING event assigned to coordinator 2; payload is { name }.
    * Expected: Event is updated; venue_bookings and equipment_requests are not written.
    * Type:     normal
    */

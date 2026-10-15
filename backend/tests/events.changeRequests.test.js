@@ -814,12 +814,12 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC5 / SCRUM-41 AC3 / SCRUM-42 AC1 + AC4
+   * AC:       SCRUM-36 AC5 / SCRUM-41 AC3 / SCRUM-42 AC1 + AC2
    * Scenario: Approve an attendance-only change that a booked room cannot hold.
    * Setup:    Attendance 40 → 80; one APPROVED booking at a 50-capacity venue; one PENDING
-   *           equipment request. Rejected rows are not in the lists.
+   *           equipment request.
    * Expected: Event and request are written; the booking and equipment row get needs_review
-   *           true; their status is not in the patch (W4 / W7 #3).
+   *           true; their status is not in the patch (W4).
    * Type:     normal
    */
   it('AC5: approve flags over-capacity venue booking and equipment for review', async () => {
