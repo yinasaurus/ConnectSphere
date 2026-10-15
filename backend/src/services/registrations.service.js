@@ -5,6 +5,7 @@ const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
 const { notifyUser } = require('./audit.service');
 const { countActiveRegistrations } = require('./registrationSettings.service');
+const { getEvent } = require('./events.service');
 
 async function listForEvent(user, eventId) {
   const event = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
@@ -92,6 +93,60 @@ async function register(user, eventId) {
   return { registration, placesLeft: capacity - taken - 1 };
 }
 
+/**
+ * Purpose: where registration stands for one event, as one word the page can explain.
+ * AC: SCRUM-51 AC1 (eligibility to register). Same rules as register() so the page and the
+ *   server agree: not enabled, before the window, after it, full, or open.
+ * Inputs: the events row, places taken, the current time.
+ * Output: 'NOT_OPEN' | 'NOT_YET_OPEN' | 'CLOSED' | 'FULL' | 'OPEN'.
+ */
+function registrationState(event, taken, now) {
+  if (event.status !== EVENT_STATUS.CONFIRMED || !event.registration_open) return 'NOT_OPEN';
+  if (now < new Date(event.registration_opens_at)) return 'NOT_YET_OPEN';
+  if (now >= new Date(event.registration_closes_at)) return 'CLOSED';
+  if (taken >= Number(event.registration_capacity)) return 'FULL';
+  return 'OPEN';
+}
+
+/**
+ * Purpose: the event's registration details and the caller's own registration status.
+ * AC: SCRUM-51 AC1 (event information: window, capacity, places left, whether registration is
+ *   open), AC2 (the Attendee's own current status).
+ * Inputs: user, event id. Visibility is the same as viewing the event (getEvent).
+ * Output: { state, opensAt, closesAt, capacity, placesLeft, myRegistration }.
+ *   myRegistration is the caller's latest registration ({ status, registeredAt, withdrawnAt })
+ *   or null if they never registered. Failure: 404 if the caller cannot view the event.
+ */
+async function getRegistrationStatus(user, eventId) {
+  await getEvent(user, eventId);
+  const event = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
+
+  const enabled = Boolean(event.registration_open);
+  const taken = enabled ? Number(await countActiveRegistrations(eventId)) : 0;
+  const capacity = enabled ? Number(event.registration_capacity) : null;
+
+  const mine = await fetchMany(
+    supabase
+      .from('registrations')
+      .select('*')
+      .eq('event_id', eventId)
+      .eq('attendee_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+  );
+
+  return {
+    state: registrationState(event, taken, new Date()),
+    opensAt: enabled ? event.registration_opens_at : null,
+    closesAt: enabled ? event.registration_closes_at : null,
+    capacity,
+    placesLeft: enabled ? Math.max(capacity - taken, 0) : null,
+    myRegistration: mine[0]
+      ? { status: mine[0].status, registeredAt: mine[0].created_at, withdrawnAt: mine[0].withdrawn_at || null }
+      : null,
+  };
+}
+
 async function withdraw(user, eventId) {
   const rows = await fetchMany(
     supabase
@@ -134,4 +189,4 @@ async function withdraw(user, eventId) {
   return updated;
 }
 
-module.exports = { listForEvent, register, withdraw };
+module.exports = { listForEvent, register, withdraw, getRegistrationStatus, registrationState };

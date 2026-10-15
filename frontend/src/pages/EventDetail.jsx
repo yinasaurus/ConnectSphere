@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import ConflictModal from '../components/ConflictModal';
 import EventDecisionPanel from '../components/EventDecisionPanel';
+import AttendeeRegistrationCard from '../components/AttendeeRegistrationCard';
 import RegistrationSettingsCard from '../components/RegistrationSettingsCard';
 import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
@@ -67,6 +68,7 @@ export default function EventDetail() {
   const { user, hasRole } = useAuth();
   // SCRUM-65 AC5: the Lead needs the same planning fields as other internal staff.
   const isLead = hasRole(ROLES.EVENT_COORDINATOR_LEAD);
+  const isAttendee = hasRole(ROLES.ATTENDEE);
   const canViewPlanning = hasRole(
     ROLES.EVENT_ORGANISER,
     ROLES.EVENT_COORDINATOR,
@@ -92,6 +94,7 @@ export default function EventDetail() {
   const [error, setError] = useState('');
   const [coordinatorError, setCoordinatorError] = useState('');
   const [message, setMessage] = useState('');
+  const [registrationStatus, setRegistrationStatus] = useState(null);
   const [showClarificationInput, setShowClarificationInput] = useState(false);
   const [clarificationNotes, setClarificationNotes] = useState('');
   const [showRespondForm, setShowRespondForm] = useState(false);
@@ -102,7 +105,7 @@ export default function EventDetail() {
   // venues and equipment requests; other roles never request planning data they aren't
   // allowed to see. A Lead also loads the active-Coordinator list when this event is still unassigned.
   const reload = useCallback(async () => {
-    const [eventRes, historyRes, commentRes, venueRes, bookingRes, equipmentRes] = await Promise.all([
+    const [eventRes, historyRes, commentRes, venueRes, bookingRes, equipmentRes, statusRes] = await Promise.all([
       api(`/api/events/${id}`),
       canViewPlanning ? api(`/api/events/${id}/history`) : Promise.resolve({ history: [] }),
       canViewPlanning ? api(`/api/comments/${id}`) : Promise.resolve({ comments: [] }),
@@ -114,8 +117,13 @@ export default function EventDetail() {
       canViewPlanning
         ? api(`/api/events/${id}/equipment-requests`).catch((err) => ({ requests: [], loadError: err.message }))
         : Promise.resolve({ requests: [] }),
+      // SCRUM-51: an Attendee's registration details and own status; a failure only hides that card's details.
+      isAttendee
+        ? api(`/api/events/${id}/registration-status`).catch(() => ({ registrationStatus: null }))
+        : Promise.resolve({ registrationStatus: null }),
     ]);
     setEvent(eventRes.event);
+    setRegistrationStatus(statusRes.registrationStatus || null);
     setHistory(historyRes.history || []);
     setComments(commentRes.comments || []);
     setVenues(venueRes.venues || []);
@@ -128,7 +136,7 @@ export default function EventDetail() {
     } else {
       setAssignableCoordinators([]);
     }
-  }, [id, canViewPlanning, isLead]);
+  }, [id, canViewPlanning, isLead, isAttendee]);
 
   useEffect(() => {
     const refresh = () => reload().catch((err) => setError(err.message));
@@ -513,24 +521,16 @@ export default function EventDetail() {
             />
           )}
 
-          {hasRole(ROLES.ATTENDEE) && event.status === 'CONFIRMED' && (
-            <div className="card actions">
-              {/* SCRUM-52: the server checks the window, capacity and duplicates; the button shows when registration is enabled. */}
-              {event.registrationOpen ? (
-                <button
-                  className="btn"
-                  onClick={() => run(async () => {
-                    const { placesLeft } = await api(`/api/events/${id}/registrations`, { method: 'POST' });
-                    return `Registered. ${placesLeft} ${placesLeft === 1 ? 'place' : 'places'} left.`;
-                  })}
-                >
-                  Register
-                </button>
-              ) : (
-                <p className="muted">Registration is not open for this event.</p>
-              )}
-              <button className="btn ghost" onClick={() => run(() => api(`/api/events/${id}/registrations/withdraw`, { method: 'POST' }))}>Withdraw</button>
-            </div>
+          {/* SCRUM-51: registration details and the Attendee's own status; SCRUM-52/53 buttons inside. */}
+          {isAttendee && (
+            <AttendeeRegistrationCard
+              status={registrationStatus}
+              onRegister={() => run(async () => {
+                const { placesLeft } = await api(`/api/events/${id}/registrations`, { method: 'POST' });
+                return `Registered. ${placesLeft} ${placesLeft === 1 ? 'place' : 'places'} left.`;
+              })}
+              onWithdraw={() => run(() => api(`/api/events/${id}/registrations/withdraw`, { method: 'POST' }))}
+            />
           )}
 
           {canViewPlanning && <div className="card">
