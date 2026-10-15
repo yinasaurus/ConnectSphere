@@ -81,6 +81,7 @@ describe('event-specific venue booking access', () => {
         id: 7, event_id: 3, venue_id: 2, status: 'APPROVED',
         start_at: '2026-10-11T10:00:00Z', end_at: '2026-10-11T12:00:00Z',
         setup_minutes: 30, teardown_minutes: 45, created_at: '2026-10-05T12:00:00Z',
+        needs_review: false,
         venue_name: 'Hall',
         venue_details: {
           capacity: 100,

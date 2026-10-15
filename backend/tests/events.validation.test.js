@@ -49,7 +49,13 @@ describe('event start/end date range validation', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    db.supabase.from.mockReturnValue({ select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), order: jest.fn().mockReturnThis() });
+    db.supabase.from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      in: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+    });
+    db.fetchMany.mockResolvedValue([]);
     db.fetchOne.mockImplementation(async () => ({ id: 99, organiser_id: 1, organisation_id: 10, status: 'DRAFT', name: 'Event' }));
     db.insertOne.mockImplementation(async () => ({ id: 99 }));
     db.updateById.mockImplementation(async () => ({ id: 99 }));
