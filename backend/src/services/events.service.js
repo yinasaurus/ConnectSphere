@@ -439,6 +439,21 @@ async function updateEvent(user, id, payload) {
     throw httpError(403, 'Coordinators can only edit events assigned to them', 'FORBIDDEN');
   }
 
+  // SCRUM-63: opening registration, its window, and capacity once open must go through
+  // enableRegistration / changeRegistrationSettings so AC1-AC6 are always checked.
+  const registrationLocked = ['registrationOpen', 'registrationOpensAt', 'registrationClosesAt']
+    .filter((field) => payload[field] !== undefined);
+  if (existing.registration_open && payload.registrationCapacity !== undefined) {
+    registrationLocked.push('registrationCapacity');
+  }
+  if (registrationLocked.length) {
+    throw httpError(
+      409,
+      'Registration settings are changed through the registration actions, not a general edit',
+      'REGISTRATION_SETTINGS_LOCKED'
+    );
+  }
+
   const patch = toEventPatch(payload);
   const nextStart = 'start_at' in patch ? patch.start_at : existing.start_at;
   const nextEnd = 'end_at' in patch ? patch.end_at : existing.end_at;

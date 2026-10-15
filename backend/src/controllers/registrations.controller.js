@@ -1,4 +1,5 @@
 const registrationsService = require('../services/registrations.service');
+const registrationSettings = require('../services/registrationSettings.service');
 const { asyncHandler } = require('../utils/asyncHandler');
 
 const list = asyncHandler(async (req, res) => {
@@ -16,4 +17,16 @@ const withdraw = asyncHandler(async (req, res) => {
   res.json({ registration });
 });
 
-module.exports = { list, register, withdraw };
+// SCRUM-63: the assigned Coordinator opens registration (window + capacity).
+const enable = asyncHandler(async (req, res) => {
+  const settings = await registrationSettings.enableRegistration(req.user, req.params.id, req.body);
+  res.json({ settings });
+});
+
+// SCRUM-63 AC5, AC6: extend the close date or change capacity after registration is enabled.
+const changeSettings = asyncHandler(async (req, res) => {
+  const settings = await registrationSettings.changeRegistrationSettings(req.user, req.params.id, req.body);
+  res.json({ settings });
+});
+
+module.exports = { list, register, withdraw, enable, changeSettings };
