@@ -28,6 +28,9 @@ const ACTIVE_EQUIPMENT_STATUSES = new Set(['PENDING', 'RESERVED']);
 /**
  * Purpose: compare two stored values of one kind so "80" and 80 are the same attendance.
  * AC: SCRUM-41 AC1
+ * Inputs: kind ('time' | 'number' | 'text'), left and right stored values.
+ * Output: true when they represent the same value. null/undefined only match each other.
+ * Failure: unparseable timestamps fall back to string equality instead of throwing.
  */
 function valuesEqual(kind, left, right) {
   if (left == null && right == null) return true;
@@ -47,6 +50,7 @@ function valuesEqual(kind, left, right) {
  * and the row after. Unchanged critical fields are not a change.
  * AC: SCRUM-41 AC1, AC2, AC3 (80 → 150 is a change; 80 → 80 is not)
  * Inputs: previous and next event rows (snake_case). Output: API field names that changed.
+ * Failure: missing previous or next returns [] (not a critical change).
  */
 function changedCriticalFields(previous, next) {
   if (!previous || !next) return [];
@@ -58,6 +62,7 @@ function changedCriticalFields(previous, next) {
 /**
  * Purpose: a booking is "for the old event slot" when its window is the previous start/end.
  * AC: SCRUM-42 AC4 (W7 #3 — a second booking with different times is not automatically affected)
+ * Inputs: booking row (start_at, end_at), previous event row. Output: true when both match.
  */
 function bookingMatchesPreviousSlot(booking, previous) {
   return valuesEqual('time', booking.start_at, previous.start_at)
@@ -68,6 +73,7 @@ function bookingMatchesPreviousSlot(booking, previous) {
  * Purpose: venue capacity below the new headcount cannot hold the event; missing capacity
  * is treated as unknown and therefore affected.
  * AC: SCRUM-41 AC3, SCRUM-42 AC1 (80 → 150 flags rooms that cannot take 150)
+ * Inputs: venue.capacity, next expected_attendance. Output: true when the room cannot hold it.
  */
 function venueCannotHoldAttendance(capacity, attendance) {
   if (capacity == null || capacity === '') return true;
@@ -78,6 +84,9 @@ function venueCannotHoldAttendance(capacity, attendance) {
  * Purpose: pick which active venue bookings and equipment requests need reassessment for
  * this set of critical fields. Status of a row is never changed here.
  * AC: SCRUM-42 AC1, AC4; W7 #3
+ * Inputs: changed field names, previous/next event rows, booking and request lists, venuesById.
+ * Output: { flaggedBookingIds, flaggedRequestIds }. Inactive statuses are omitted.
+ * Failure: never throws; unknown venue capacity is treated as affected.
  */
 function selectAffected({ fields, previous, next, bookings, venuesById, requests }) {
   const flaggedBookings = new Set();
