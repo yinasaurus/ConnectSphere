@@ -15,6 +15,7 @@ const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
 const { assertTransition, assertSubStateTransition } = require('../domain/statusMachine');
 const { writeAudit, notifyUser } = require('./audit.service');
+const { flagArrangementsForReview } = require('./criticalChange.service');
 
 const EVENT_SELECT = `
   *,
@@ -277,8 +278,8 @@ async function getEvent(user, id) {
 
 /**
  * Purpose: the venue bookings for one event (venue name and status), shown with its details.
- * AC: SCRUM-39 AC2 (venue).
- * Inputs: the user and the event id. Output: [{ id, event_id, venue_id, status, venue_name }].
+ * AC: SCRUM-39 AC2 (venue). SCRUM-42 AC3 — includes needs_review so the event page can show
+ *     "Requires review" without changing the booking status.
  * Attendees only get APPROVED bookings. Failure: 404 from getEvent, before bookings are read.
  */
 async function listVenueBookings(user, eventId) {
@@ -288,7 +289,7 @@ async function listVenueBookings(user, eventId) {
       // Return saved timing values so each event request can show its own occupied window.
       // Include venue capabilities so suitability remains assessable for inactive historical venues.
       // Include decision reason and alternative suggestion for planning roles (SCRUM-18 AC7).
-      .select('id, event_id, venue_id, status, start_at, end_at, setup_minutes, teardown_minutes, created_at, decision_reason, alternative_suggestion, venues ( name, capacity, facilities, accessibility, venue_layouts ( layout ) )')
+      .select('id, event_id, venue_id, status, start_at, end_at, setup_minutes, teardown_minutes, created_at, decision_reason, alternative_suggestion, needs_review, venues ( name, capacity, facilities, accessibility, venue_layouts ( layout ) )')
       .eq('event_id', event.id)
       .order('created_at', { ascending: false });
   if (!canViewPlanning(user)) query = query.eq('status', 'APPROVED');
@@ -305,6 +306,7 @@ async function listVenueBookings(user, eventId) {
       setup_minutes: row.setup_minutes,
       teardown_minutes: row.teardown_minutes,
       created_at: row.created_at,
+      needs_review: Boolean(row.needs_review),
       venue_name: row.venues?.name || null,
       // Return only catalogue attributes needed to assess this request's venue independently.
       venue_details: row.venues ? {
@@ -327,7 +329,8 @@ async function listVenueBookings(user, eventId) {
  * event details so authorised users can see its equipment requirement in one place.
  * AC: SCRUM-39 AC2 (equipment requirement), AC1 (only users allowed to see the event).
  * Inputs: the signed-in user and the event id.
- * Output: [{ id, event_id, equipment_id, equipment_name, quantity, status }], newest first.
+ * Output: [{ id, event_id, equipment_id, equipment_name, quantity, status, needs_review }], newest first.
+ *     SCRUM-42 AC3 — needs_review is the review flag, not a status.
  * Failure: 403 for roles without planning access (Attendees get the public view only);
  * 404 if the event doesn't exist or the user can't see it (e.g. another organisation),
  * checked before any equipment is read.
@@ -337,7 +340,7 @@ async function listEquipmentRequests(user, eventId) {
   const event = await getEvent(user, eventId);
   const rows = await fetchMany(
     supabase.from('equipment_requests')
-      .select('id, event_id, equipment_id, quantity, status, equipment ( name )')
+      .select('id, event_id, equipment_id, quantity, status, needs_review, equipment ( name )')
       .eq('event_id', event.id)
       .order('id', { ascending: false })
   );
@@ -349,6 +352,7 @@ async function listEquipmentRequests(user, eventId) {
     equipment_name: row.equipment?.name || null,
     quantity: row.quantity,
     status: row.status,
+    needs_review: Boolean(row.needs_review),
   }));
 }
 
@@ -398,6 +402,8 @@ async function createEvent(user, payload) {
  * Purpose: patch an event the organiser still owns as a draft, or the assigned coordinator may edit.
  * AC: SCRUM-28 AC4 — saving more draft fields does not submit or place the request in the queue.
  *     SCRUM-54 AC5, AC6, AC7 — a Coordinator who is not assigned is refused and the row is unchanged.
+ *     SCRUM-41 / SCRUM-42 — after a successful write, critical field changes flag affected
+ *     venue/equipment rows for review (status unchanged).
  * Inputs: user, event id, payload of fields to change
  * Outputs: mapped event after the patch
  * Failure: 404 if missing; 403 FORBIDDEN with no event body when the coordinator is not assigned;
@@ -449,6 +455,8 @@ async function updateEvent(user, id, payload) {
   patch.updated_at = new Date().toISOString();
   await updateById('events', id, patch);
   await writeAudit(user.id, 'EVENT_UPDATED', 'event', id, payload);
+  // SCRUM-41 / SCRUM-42: after a real write, flag affected venue/equipment if a critical field changed.
+  await flagArrangementsForReview(user, existing, { ...existing, ...patch });
   return getEvent(user, id);
 }
 
@@ -1455,8 +1463,8 @@ async function createChangeRequest(user, eventId, payload) {
  *     requested values cannot be approved — request stays PENDING), AC3 (reject does not
  *     touch the event), AC4 (who/when plus previous and new values on approve), AC6
  *     (organiser is notified either way).
- *     SCRUM-36 AC5: flagging venue/equipment arrangements for review reuses SCRUM-41/42.
- *     Those stories are not built yet, so approve does not invent a review flag.
+ *     SCRUM-36 AC5 / SCRUM-41 / SCRUM-42: after approve, affected venue/equipment rows
+ *     get needs_review (flag only; status unchanged).
  * Inputs: user, event id, request id, { approve, reason? }.
  * Output: the decided change request.
  * Failure: 404 missing; 403 not the assigned coordinator; 409 already decided; 400 when
@@ -1486,10 +1494,11 @@ async function decideChangeRequest(user, eventId, requestId, { approve, reason }
   const nowIso = now.toISOString();
   const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
   const decided = approve === true || approve === 'true';
+  let eventPatch = null;
 
   if (decided) {
     assertRequestedValuesApprovable(request, now);
-    const eventPatch = proposedEventPatch(request, event);
+    eventPatch = proposedEventPatch(request, event);
     // Bypass updateEvent so Confirmed SIGNIFICANT_FIELDS stay locked to direct edits
     // but an approved change request can still apply date/time/attendance/requirements.
     await updateById('events', event.id, eventPatch);
@@ -1519,6 +1528,9 @@ async function decideChangeRequest(user, eventId, requestId, { approve, reason }
       : { eventId: event.id, reason: trimmedReason || null }
   );
   await notifyChangeRequestDecision(event, decided, trimmedReason);
+  if (eventPatch) {
+    await flagArrangementsForReview(user, event, { ...event, ...eventPatch });
+  }
   return mapChangeRequest(updated || { ...request, ...crPatch });
 }
 
