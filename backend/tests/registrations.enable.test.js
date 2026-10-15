@@ -32,8 +32,11 @@ const otherCoordinator = { id: 7, roles: [ROLES.EVENT_COORDINATOR] };
 const attendee = { id: 30, roles: [ROLES.ATTENDEE] };
 const organiser = { id: 1, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] };
 
+// A fixed "now" so the tests give the same result whatever day they run.
+const NOW = new Date('2026-10-20T09:00:00.000Z');
 const OPENS = '2026-11-01T09:00:00.000Z';
 const CLOSES = '2026-11-08T09:00:00.000Z';
+const EVENT_STARTS = '2026-11-12T09:00:00.000Z';
 const valid = () => ({ opensAt: OPENS, closesAt: CLOSES, capacity: 50 });
 
 let event;
@@ -45,6 +48,9 @@ function confirmedEvent(overrides = {}) {
     organisation_id: 10,
     coordinator_id: 2,
     status: 'CONFIRMED',
+    start_at: EVENT_STARTS,
+    end_at: '2026-11-12T13:00:00.000Z',
+    expected_attendance: 120,
     registration_required: true,
     registration_open: false,
     registration_opens_at: null,
@@ -66,6 +72,7 @@ function enabledEvent(overrides = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] }).setSystemTime(NOW);
   event = confirmedEvent();
   const builder = {
     select: jest.fn().mockReturnThis(),
@@ -79,6 +86,10 @@ beforeEach(() => {
     Object.assign(event, patch);
     return event;
   });
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 /** Shared check for every "rejected" test: an error AND nothing written. */
@@ -503,6 +514,146 @@ describe('SCRUM-63 general event edit cannot bypass the registration rules', () 
       409,
       'REGISTRATION_SETTINGS_LOCKED'
     );
+  });
+});
+
+describe('SCRUM-63 registration window and capacity fit the event (review on PR #28)', () => {
+  /*
+   * AC: SCRUM-63 AC3 (review on PR #28)
+   * Scenario: The event has already started or ended (the first click-through: event on 12 Oct,
+   *   registration saved for 13 to 16 Oct).
+   * Expected: 409 EVENT_STARTED and nothing written.
+   * Type: error
+   */
+  it.each([
+    ['has already ended', { start_at: '2026-10-12T13:31:00.000Z', end_at: '2026-10-12T13:33:00.000Z' }],
+    ['starts right now', { start_at: NOW.toISOString() }],
+  ])('US63-B27: registration cannot be enabled when the event %s', async (_label, dates) => {
+    event = confirmedEvent(dates);
+    await expectRejected(
+      service.enableRegistration(assigned, 3, {
+        opensAt: '2026-10-21T09:00:00.000Z', closesAt: '2026-10-24T09:00:00.000Z', capacity: 50,
+      }),
+      409,
+      'EVENT_STARTED'
+    );
+  });
+
+  /*
+   * AC: SCRUM-63 AC3 (review on PR #28)
+   * Scenario: The close time is after the event starts, including a window entirely after the event.
+   * Expected: 400 CLOSES_AFTER_EVENT_START and nothing written.
+   * Type: error / boundary
+   */
+  it.each([
+    ['one millisecond after the event starts', OPENS, '2026-11-12T09:00:00.001Z'],
+    ['after the event has finished', '2026-11-13T09:00:00.000Z', '2026-11-16T09:00:00.000Z'],
+  ])('US63-B28: registration cannot close %s', async (_label, opensAt, closesAt) => {
+    await expectRejected(
+      service.enableRegistration(assigned, 3, { opensAt, closesAt, capacity: 50 }),
+      400,
+      'CLOSES_AFTER_EVENT_START'
+    );
+  });
+
+  it('US63-B29: registration can close exactly when the event starts', async () => {
+    await service.enableRegistration(assigned, 3, { opensAt: OPENS, closesAt: EVENT_STARTS, capacity: 50 });
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
+      registration_closes_at: EVENT_STARTS,
+    }));
+  });
+
+  /*
+   * AC: SCRUM-63 AC3
+   * Scenario: The whole window is already in the past (close is now or earlier).
+   * Expected: 400 CLOSE_IN_PAST and nothing written.
+   * Type: boundary
+   */
+  it.each([
+    ['exactly now', NOW.toISOString()],
+    ['yesterday', '2026-10-19T09:00:00.000Z'],
+  ])('US63-B30: registration cannot close %s', async (_label, closesAt) => {
+    await expectRejected(
+      service.enableRegistration(assigned, 3, { opensAt: '2026-10-01T09:00:00.000Z', closesAt, capacity: 50 }),
+      400,
+      'CLOSE_IN_PAST'
+    );
+  });
+
+  /*
+   * AC: SCRUM-63 AC5 (review on PR #28)
+   * Scenario: An extension pushes the close time past the event start, or the event has started.
+   * Expected: refused; the close date stays as it was.
+   * Type: error
+   */
+  it('US63-B31: the close date cannot be extended past the event start', async () => {
+    event = enabledEvent();
+    await expectRejected(
+      service.changeRegistrationSettings(assigned, 3, { closesAt: '2026-11-13T09:00:00.000Z' }),
+      400,
+      'CLOSES_AFTER_EVENT_START'
+    );
+    expect(event.registration_closes_at).toBe(CLOSES);
+  });
+
+  it('US63-B32: the close date cannot be changed once the event has started', async () => {
+    event = enabledEvent();
+    jest.setSystemTime(new Date('2026-11-12T10:00:00.000Z'));
+    await expectRejected(
+      service.changeRegistrationSettings(assigned, 3, { closesAt: '2026-11-20T09:00:00.000Z' }),
+      409,
+      'EVENT_STARTED'
+    );
+  });
+
+  /*
+   * AC: SCRUM-63 AC4 (review on PR #28)
+   * Scenario: Capacity is checked against the event's expected attendance (the Scrum 26 case:
+   *   capacity 100 on an event expecting 40).
+   * Expected: above attendance is refused (400 CAPACITY_ABOVE_ATTENDANCE); equal is allowed.
+   * Type: error / boundary
+   */
+  it('US63-B33: capacity above the expected attendance is refused when enabling', async () => {
+    event = confirmedEvent({ expected_attendance: 40 });
+    await expectRejected(
+      service.enableRegistration(assigned, 3, { ...valid(), capacity: 100 }),
+      400,
+      'CAPACITY_ABOVE_ATTENDANCE'
+    );
+    await expect(service.enableRegistration(assigned, 3, { ...valid(), capacity: 41 }))
+      .rejects.toMatchObject({ message: 'Maximum capacity cannot be more than the expected attendance of 40' });
+  });
+
+  it('US63-B34: capacity equal to the expected attendance is allowed', async () => {
+    event = confirmedEvent({ expected_attendance: 40 });
+    await service.enableRegistration(assigned, 3, { ...valid(), capacity: 40 });
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
+      registration_capacity: 40,
+    }));
+  });
+
+  it('US63-B35: capacity above the expected attendance is refused when changing', async () => {
+    event = enabledEvent({ expected_attendance: 40, registration_capacity: 40 });
+    await expectRejected(
+      service.changeRegistrationSettings(assigned, 3, { capacity: 100 }),
+      400,
+      'CAPACITY_ABOVE_ATTENDANCE'
+    );
+    expect(event.registration_capacity).toBe(40);
+  });
+
+  /*
+   * AC: SCRUM-63 AC4
+   * Scenario: The Organiser never recorded an expected attendance, or the event has no start time.
+   * Expected: no attendance limit and no start-time limit; the other rules still apply.
+   * Type: normal
+   */
+  it('US63-B36: no attendance or start time recorded means no limit from them', async () => {
+    event = confirmedEvent({ expected_attendance: null, start_at: null, end_at: null });
+    await service.enableRegistration(assigned, 3, {
+      opensAt: OPENS, closesAt: '2027-01-01T09:00:00.000Z', capacity: 500,
+    });
+    expect(db.updateById).toHaveBeenCalledTimes(1);
   });
 });
 
