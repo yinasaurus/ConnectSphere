@@ -158,6 +158,36 @@ describe('SCRUM-41 classify critical vs non-critical', () => {
   it('AC2: name, purpose and description are not critical', () => {
     expect(changedCriticalFields(eventRow(), eventRow({ name: 'Renamed', purpose: 'New', description: 'New' }))).toEqual([]);
   });
+
+  /*
+   * AC:       SCRUM-41 AC1
+   * Scenario: Stored start/end values are not parseable as dates.
+   * Setup:    Previous start_at is the same garbage string as next, then a different string.
+   * Expected: Equal unparseable values are not a change; different ones are.
+   * Type:     boundary
+   */
+  it('AC1: unparseable timestamps compare as strings', () => {
+    expect(changedCriticalFields(
+      eventRow({ start_at: 'not-a-date' }),
+      eventRow({ start_at: 'not-a-date' })
+    )).toEqual([]);
+    expect(changedCriticalFields(
+      eventRow({ start_at: 'not-a-date' }),
+      eventRow({ start_at: 'also-bad' })
+    )).toEqual(['startAt']);
+  });
+
+  /*
+   * AC:       SCRUM-41 AC1
+   * Scenario: Classification is asked without a previous or next row.
+   * Setup:    null previous, or null next.
+   * Expected: No critical fields (nothing to compare).
+   * Type:     error
+   */
+  it('AC1: missing previous or next is not a critical change', () => {
+    expect(changedCriticalFields(null, eventRow())).toEqual([]);
+    expect(changedCriticalFields(eventRow(), null)).toEqual([]);
+  });
 });
 
 describe('SCRUM-41 AC3 venue capacity vs new attendance', () => {
@@ -440,6 +470,28 @@ describe('SCRUM-42 flagArrangementsForReview', () => {
     expect(result.critical).toBe(false);
     expect(db.fetchMany).not.toHaveBeenCalled();
     expect(db.updateById).not.toHaveBeenCalled();
+    expect(audit.writeAudit).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-42 AC2
+   * Scenario: A critical change is classified when the caller has no user id.
+   * Setup:    Equipment notes change; user is {}.
+   * Expected: Affected equipment is still flagged; no CRITICAL_CHANGE audit row.
+   * Type:     boundary
+   */
+  it('AC2: a change without a user id still flags rows and skips the audit', async () => {
+    db.fetchMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([requestRow()]);
+
+    const result = await flagArrangementsForReview(
+      {},
+      eventRow(),
+      eventRow({ equipment_notes: '4 mics' })
+    );
+
+    expect(result.flaggedRequestIds).toEqual([12]);
     expect(audit.writeAudit).not.toHaveBeenCalled();
   });
 });
