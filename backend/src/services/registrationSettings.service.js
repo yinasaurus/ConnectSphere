@@ -206,6 +206,7 @@ async function changeRegistrationSettings(user, eventId, body = {}) {
 module.exports = {
   enableRegistration,
   changeRegistrationSettings,
+  countActiveRegistrations,
   parseCapacity,
   parseDateTime,
 };

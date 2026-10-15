@@ -586,7 +586,8 @@ it('US64-F03: the organiser does not see the Open for review button', async () =
 it('loads an attendee event without requesting restricted planning data', async () => {
   useAuth.mockReturnValue({ user: { id: 8 }, hasRole: (...roles) => roles.includes('ATTENDEE') });
   api.mockImplementation(async (path) => {
-    if (path === '/api/events/3') return { event: { id: 3, name: 'Public event', status: 'CONFIRMED' } };
+    // SCRUM-52: the Register button shows once the Coordinator has opened registration.
+    if (path === '/api/events/3') return { event: { id: 3, name: 'Public event', status: 'CONFIRMED', registrationOpen: true } };
     if (path === '/api/events/3/venue-bookings') return { bookings: [] };
     throw new Error('Forbidden planning information');
   });

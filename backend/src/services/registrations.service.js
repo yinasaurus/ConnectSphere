@@ -1,9 +1,10 @@
-const { supabase, fetchOne, fetchMany, fetchCount, insertOne, updateById } = require('../config/db');
+const { supabase, fetchOne, fetchMany, insertOne, updateById } = require('../config/db');
 const { ROLES } = require('../constants/roles');
 const { EVENT_STATUS, REGISTRATION_STATUS } = require('../constants/statuses');
 const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
 const { notifyUser } = require('./audit.service');
+const { countActiveRegistrations } = require('./registrationSettings.service');
 
 async function listForEvent(user, eventId) {
   const event = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
@@ -34,18 +35,34 @@ async function listForEvent(user, eventId) {
   }));
 }
 
+/**
+ * Purpose: an Attendee registers for a Confirmed event while its registration window is open.
+ * AC: SCRUM-52 AC1 (register), AC2 (each registration takes one place), AC3 (not open: wrong
+ *   status, not enabled, before the window or after it), AC4 (full), AC5 (no duplicate).
+ * Business rule: hard capacity cap. Going over capacity is at the Organiser's discretion
+ *   outside the system (W4), so a full event refuses rather than waitlisting.
+ * Inputs: user, event id.
+ * Output: { registration, placesLeft }. Failure: 403 not an Attendee; 404 no event;
+ *   409 NOT_OPEN / NOT_YET_OPEN / REGISTRATION_CLOSED / ALREADY_REGISTERED / EVENT_FULL.
+ *   On failure nothing is written.
+ */
 async function register(user, eventId) {
-  if (!hasRole(user, ROLES.ATTENDEE) && !hasRole(user, ROLES.EVENT_ORGANISER)) {
+  if (!hasRole(user, ROLES.ATTENDEE)) {
     throw httpError(403, 'Only attendees can register', 'FORBIDDEN');
   }
 
   const event = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
   if (!event) throw httpError(404, 'Event not found', 'NOT_FOUND');
-  if (event.status !== EVENT_STATUS.CONFIRMED) {
-    throw httpError(409, 'Registration opens after the event is confirmed', 'NOT_OPEN');
+  if (event.status !== EVENT_STATUS.CONFIRMED || !event.registration_open) {
+    throw httpError(409, 'This event is not open for registration', 'NOT_OPEN');
   }
-  if (event.registration_required && !event.registration_open) {
-    throw httpError(409, 'The organiser has not opened registration yet', 'NOT_OPEN');
+
+  const now = new Date();
+  if (now < new Date(event.registration_opens_at)) {
+    throw httpError(409, 'Registration for this event has not opened yet', 'NOT_YET_OPEN');
+  }
+  if (now >= new Date(event.registration_closes_at)) {
+    throw httpError(409, 'Registration for this event has closed', 'REGISTRATION_CLOSED');
   }
 
   const existingRows = await fetchMany(
@@ -57,26 +74,22 @@ async function register(user, eventId) {
       .neq('status', REGISTRATION_STATUS.WITHDRAWN)
       .limit(1)
   );
-  if (existingRows[0]) throw httpError(409, 'You are already registered or waitlisted', 'ALREADY_REGISTERED');
+  if (existingRows[0]) throw httpError(409, 'You are already registered for this event', 'ALREADY_REGISTERED');
 
-  const count = await fetchCount(
-    supabase
-      .from('registrations')
-      .select('*', { count: 'exact', head: true })
-      .eq('event_id', eventId)
-      .eq('status', REGISTRATION_STATUS.REGISTERED)
-  );
+  // Same meaning of "taken" as SCRUM-63's capacity check: every registration not withdrawn.
+  const taken = Number(await countActiveRegistrations(eventId));
+  const capacity = Number(event.registration_capacity);
+  if (taken >= capacity) {
+    throw httpError(409, 'This event is full', 'EVENT_FULL');
+  }
 
-  const capacity = event.registration_capacity || event.expected_attendance;
-  const isFull = capacity && Number(count) >= Number(capacity);
-  const status = isFull ? REGISTRATION_STATUS.WAITLISTED : REGISTRATION_STATUS.REGISTERED;
-
-  return insertOne('registrations', {
+  const registration = await insertOne('registrations', {
     event_id: eventId,
     attendee_id: user.id,
-    status,
-    waitlist_position: isFull ? Number(count) - Number(capacity) + 1 : null,
+    status: REGISTRATION_STATUS.REGISTERED,
+    waitlist_position: null,
   });
+  return { registration, placesLeft: capacity - taken - 1 };
 }
 
 async function withdraw(user, eventId) {
