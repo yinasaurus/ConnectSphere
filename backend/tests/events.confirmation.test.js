@@ -88,8 +88,8 @@ async function expectBlocked(promise, status, code) {
 
 /*
  * Purpose: reset the in-memory event workflow and database doubles for each scenario.
- * AC: SCRUM-73 AC1–AC9 — tests begin from an isolated, assigned Planning event.
- * Inputs: none. Output: a Planning event with one approved active booking.
+ * AC: SCRUM-73 AC1–AC9 — tests begin from an isolated, assigned Preparation event.
+ * Inputs: none. Output: a Preparation event with one approved active booking.
  * Failure: none; Jest mocks are cleared before each test.
  */
 beforeEach(() => {
@@ -100,7 +100,7 @@ beforeEach(() => {
     organisation_id: 10,
     coordinator_id: 2,
     name: 'Workshop',
-    status: 'PLANNING',
+    status: 'PREPARATION',
   };
   tables = {
     events: [event],
@@ -117,7 +117,10 @@ beforeEach(() => {
   };
 
   db.supabase.from.mockImplementation(queryFor);
-  db.fetchOne.mockImplementation(async (query) => matchingRows(query)[0] || null);
+  db.fetchOne.mockImplementation(async (query) => {
+    const row = matchingRows(query)[0];
+    return row ? { ...row } : null;  // Return a copy to avoid mutation issues
+  });
   db.fetchMany.mockImplementation(async (query) => matchingRows(query));
   db.updateById.mockImplementation(async (table, id, patch) => {
     const row = (tables[table] || []).find((item) => String(item.id) === String(id));
@@ -134,11 +137,11 @@ describe('SCRUM-73 event confirmation service rules', () => {
   /*
    * Purpose: confirm an assigned Coordinator's event when all arrangements are ready.
    * AC: SCRUM-73 AC8–AC9 — no equipment request is valid and success changes status to Confirmed.
-   * Inputs: assigned Coordinator, Planning event, approved active venue booking, no equipment.
+   * Inputs: assigned Coordinator, Preparation event, approved active venue booking, no equipment.
    * Output: confirmed event, status history, audit entry, and organiser notification.
    * Failure: any unmet prerequisite rejects without confirming.
    */
-  it('confirms a Planning event with an approved venue booking and no equipment requested', async () => {
+  it('confirms a Preparation event with an approved venue booking and no equipment requested', async () => {
     const result = await events.confirmEvent(coordinator, 3);
 
     expect(result.status).toBe('CONFIRMED');
@@ -150,7 +153,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
     );
     expect(db.insertOne).toHaveBeenCalledWith(
       'event_status_history',
-      expect.objectContaining({ from_status: 'PLANNING', to_status: 'CONFIRMED' })
+      expect.objectContaining({ from_status: 'PREPARATION', to_status: 'CONFIRMED' })
     );
     expect(audit.notifyUser).toHaveBeenCalledWith(
       1,
@@ -188,9 +191,9 @@ describe('SCRUM-73 event confirmation service rules', () => {
   });
 
   /*
-   * Purpose: allow confirmation only from the Planning status.
+   * Purpose: allow confirmation only from the Preparation status.
    * AC: SCRUM-73 AC2, AC7 — other lifecycle states are rejected without mutation.
-   * Inputs: each non-Planning state in the event lifecycle.
+   * Inputs: each non-Preparation state in the event lifecycle.
    * Output: 409 INVALID_STATUS and unchanged event state.
    * Failure: fails if any other status is accepted.
    */
@@ -200,7 +203,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
     'UNDER_REVIEW',
     'APPROVED',
     'AWAITING_SAFETY_CHECK',
-    'PREPARATION',
+    'PLANNING',
     'CONFIRMED',
     'COMPLETED',
     'CANCELLED',
@@ -213,7 +216,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Purpose: require at least one non-cancelled venue booking.
    * AC: SCRUM-73 AC3, AC7 — no booking and cancelled-only bookings both block confirmation.
    * Inputs: an empty booking list or one cancelled booking.
-   * Output: 409 NOT_READY_TO_CONFIRM without changing the Planning status.
+   * Output: 409 NOT_READY_TO_CONFIRM without changing the Preparation status.
    * Failure: fails if cancelled bookings count as active arrangements.
    */
   it.each([
@@ -232,7 +235,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Purpose: require every non-cancelled venue booking to be approved.
    * AC: SCRUM-73 AC4, AC7 — one pending booking blocks even when another is approved.
    * Inputs: approved, pending, and cancelled bookings for the same event.
-   * Output: 409 with the event still Planning; cancelled bookings are ignored.
+   * Output: 409 with the event still Preparation; cancelled bookings are ignored.
    * Failure: fails if an unapproved active booking is ignored or cancellation blocks approval.
    */
   it('blocks a pending booking while ignoring a cancelled booking', async () => {
@@ -252,7 +255,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Purpose: ignore cancelled bookings when all remaining venue bookings are approved.
    * AC: SCRUM-73 AC4, AC7 — cancelled bookings do not prevent confirmation.
    * Inputs: one approved booking and one cancelled booking.
-   * Output: successful transition from Planning to Confirmed.
+   * Output: successful transition from Preparation to Confirmed.
    * Failure: fails if a cancelled booking is treated as an outstanding arrangement.
    */
   it('confirms when every active booking is approved and other bookings are cancelled', async () => {
@@ -332,7 +335,7 @@ describe('SCRUM-73 Safety Officer workflow', () => {
    * Purpose: prevent a Coordinator from starting preparation before the Safety Officer check.
    * AC: mandatory safety requirement — only the approved safety-check workflow may proceed.
    * Inputs: assigned Coordinator attempts AWAITING_SAFETY_CHECK to PREPARATION.
-   * Output: 409 SAFETY_CHECK_REQUIRED and unchanged status.
+   * Output: 409 SAFETY_CHECK_NOT_APPROVED and unchanged status.
    * Failure: fails if the Coordinator can bypass the Safety Officer check.
    */
   it('blocks a direct move to Preparation before the Safety Officer check', async () => {
@@ -341,7 +344,7 @@ describe('SCRUM-73 Safety Officer workflow', () => {
     await expectBlocked(
       events.changeStatus(coordinator, 3, 'PREPARATION'),
       409,
-      'SAFETY_CHECK_REQUIRED'
+      'SAFETY_CHECK_NOT_APPROVED'
     );
   });
 
@@ -371,14 +374,15 @@ describe('SCRUM-73 Safety Officer workflow', () => {
   });
 
   /*
-   * Purpose: confirm an event only after the Safety Officer approves its final check.
-   * AC: additional requirement 1 — after all approvals, including the Safety Officer check,
-   * the event status moves to Confirmed.
+   * Purpose: move an event to Preparation after the Safety Officer approves the safety check.
+   * AC: additional requirement 1, 2 — Safety Officer approval moves event to PREPARATION so
+   * the Coordinator can then separately confirm it. The safety check is a prerequisite for
+   * confirmation, not the confirmation itself.
    * Inputs: Safety Officer approval for event 3 awaiting its safety check.
-   * Output: event status CONFIRMED, with approval recorded and coordinator notified.
-   * Failure: fails if an approval does not complete confirmation.
+   * Output: event status PREPARATION, with approval recorded and coordinator notified.
+   * Failure: fails if an approval does not move to PREPARATION.
    */
-  it('moves the event to Confirmed after the Safety Officer approves the final check', async () => {
+  it('moves the event to Preparation after the Safety Officer approves the safety check', async () => {
     event.status = 'AWAITING_SAFETY_CHECK';
 
     const result = await access.recordSafetyCheck(
@@ -387,12 +391,12 @@ describe('SCRUM-73 Safety Officer workflow', () => {
       { approved: true, outcome: 'All safety requirements met' }
     );
 
-    expect(event.status).toBe('CONFIRMED');
+    expect(event.status).toBe('PREPARATION');
     expect(result).toMatchObject({ eventId: 3, approved: true });
     expect(db.updateById).toHaveBeenCalledWith(
       'events',
       3,
-      expect.objectContaining({ status: 'CONFIRMED' })
+      expect.objectContaining({ status: 'PREPARATION' })
     );
   });
 });

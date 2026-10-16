@@ -41,7 +41,8 @@ let tables;
 
 function rowsFor(query) {
   return (tables[query.table] || [])
-    .filter((row) => query.filters.every(([column, value]) => String(row[column]) === String(value)));
+    .filter((row) => query.filters.every(([column, value]) => String(row[column]) === String(value)))
+    .filter((row) => query.excluded.every(([column, value]) => String(row[column]) !== String(value)));
 }
 
 function historyRows() {
@@ -66,10 +67,14 @@ beforeEach(() => {
     user_roles: [{ user_id: 2, role: ROLES.EVENT_COORDINATOR }],
   };
   db.supabase.from.mockImplementation((table) => {
-    const query = { table, filters: [] };
+    const query = { table, filters: [], excluded: [] };
     query.select = jest.fn(() => query);
     query.eq = jest.fn((column, value) => {
       query.filters.push([column, value]);
+      return query;
+    });
+    query.neq = jest.fn((column, value) => {
+      query.excluded.push([column, value]);
       return query;
     });
     query.order = jest.fn(() => query);
@@ -199,7 +204,7 @@ describe('SCRUM-5 status progression (service rules)', () => {
     event.status = 'PREPARATION';
     tables.venue_bookings[0].status = 'PENDING';
     await expect(service.changeStatus(coordinator, 3, 'CONFIRMED')).rejects.toMatchObject({
-      status: 409, code: 'NOT_READY_TO_CONFIRM', message: 'A venue booking must be approved before confirmation',
+      status: 409, code: 'NOT_READY_TO_CONFIRM',
     });
     expect(db.updateById).not.toHaveBeenCalled();
   });

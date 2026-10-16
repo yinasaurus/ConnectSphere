@@ -103,10 +103,13 @@ async function openSafetyCheck(user, eventId) {
 
 /*
  * Purpose: record the outcome of a safety check and update event status accordingly.
- * AC: SCRUM-54 AC4, AC7; SCRUM-73 (safety check integration) — approve moves to PREPARATION,
- *     decline moves back to PLANNING for coordinator to address issues.
- * Business rule: W7 #6 — Safety Officer approval is mandatory before an event can proceed
- *     to preparation. SCRUM-73 — event is confirmed after safety check approval.
+ * AC: SCRUM-54 AC4, AC7; SCRUM-73 requirement 1–3 — approve moves to PREPARATION so
+ *     the Coordinator can confirm the event; decline moves back to PLANNING so the
+ *     Coordinator can address the safety issues before re-submitting for the safety check.
+ * Business rule: W7 #6 — Safety Officer approval is mandatory before an event can
+ *     proceed to Preparation. The Coordinator then confirms separately (SCRUM-73 AC1–AC8).
+ *     Workflow: AWAITING_SAFETY_CHECK → (approved) → PREPARATION → (coordinator) → CONFIRMED
+ *               AWAITING_SAFETY_CHECK → (declined) → PLANNING
  * Inputs: authenticated user, event id, { approved: boolean, outcome: string }.
  * Output: `{ eventId, approved, outcome }` after writing audit and updating event status.
  * Failure: 403 before any event lookup if the role is missing; 400 if outcome is
