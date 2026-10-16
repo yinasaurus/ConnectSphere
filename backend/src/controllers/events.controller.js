@@ -211,7 +211,7 @@ const createChangeRequest = asyncHandler(async (req, res) => {
  * Purpose: POST /api/events/:id/change-requests/:requestId/decision. Assigned coordinator
  * approves (applies fields onto the event) or rejects (event unchanged). The organiser is
  * notified either way. Invalid requested values cannot be approved.
- * AC: SCRUM-35 AC1, AC2, AC3; SCRUM-36 AC1, AC2, AC3, AC4, AC6 (AC5 waits for SCRUM-41/42)
+ * AC: SCRUM-35 AC1, AC2, AC3; SCRUM-69 AC1, AC2, AC3, AC4, AC6 (AC5 waits for SCRUM-41/42)
  * Inputs: `approve`, optional `reason`. Output: `{ changeRequest }` with the recorded decision.
  * Failure: 400 invalid requested values on approve; 403 if not the assigned coordinator;
  *     404/409 from the service.

@@ -1254,7 +1254,7 @@ function parseChangeRequestPayload(payload = {}) {
 /**
  * Purpose: the event columns a change request may copy, with the API names used in the
  * AC4 audit (previous / new per included field).
- * AC: SCRUM-36 AC1, AC4
+ * AC: SCRUM-69 AC1, AC4
  */
 const CHANGE_APPLY_FIELDS = [
   { column: 'start_at', field: 'startAt' },
@@ -1266,7 +1266,7 @@ const CHANGE_APPLY_FIELDS = [
 
 /**
  * Purpose: copy non-null proposed columns onto the event, then check the resulting window.
- * AC: SCRUM-35 AC2, SCRUM-36 AC1 (every included field is copied), AC2 (end must be after start).
+ * AC: SCRUM-35 AC2, SCRUM-69 AC1 (every included field is copied), AC2 (end must be after start).
  * Failure: 400 if the merged start is not before the merged end.
  */
 function proposedEventPatch(request, existing) {
@@ -1285,7 +1285,7 @@ function proposedEventPatch(request, existing) {
 /**
  * Purpose: refuse approve when the requested values themselves are not usable, before any
  * event write. Existing event values that were not requested are not re-checked.
- * AC: SCRUM-36 AC2 (attendance ≤ 0 or not a whole number, start in the past, unparseable
+ * AC: SCRUM-69 AC2 (attendance ≤ 0 or not a whole number, start in the past, unparseable
  *     start or end). End-before-start is checked in proposedEventPatch after this, using
  *     the merged window.
  * Inputs: the pending change-request row; `now` so tests can fix the clock.
@@ -1338,7 +1338,7 @@ function assertRequestedValuesApprovable(request, now) {
 /**
  * Purpose: one audit row for an approved apply lists each included field's previous (event)
  * and new (requested) value, plus who approved and when.
- * AC: SCRUM-36 AC4
+ * AC: SCRUM-69 AC4
  */
 function approvedChangeAuditFields(request, existing) {
   return CHANGE_APPLY_FIELDS
@@ -1352,7 +1352,7 @@ function approvedChangeAuditFields(request, existing) {
 
 /**
  * Purpose: tell the event's Organiser that their change request was approved or rejected.
- * AC: SCRUM-36 AC6
+ * AC: SCRUM-69 AC6
  * Failure: none here — notifyUser no-ops when organiser_id is missing.
  */
 async function notifyChangeRequestDecision(event, decided, reason) {
@@ -1451,11 +1451,11 @@ async function createChangeRequest(user, eventId, payload) {
  * Purpose: assigned coordinator approves (copies proposed fields onto the event, including
  * Confirmed) or rejects (event unchanged). Event status is not moved.
  * AC: SCRUM-35 AC1 (assigned coordinator decides), AC2 (approve applies the change);
- *     SCRUM-36 AC1 (every included field is written onto the event), AC2 (invalid
+ *     SCRUM-69 AC1 (every included field is written onto the event), AC2 (invalid
  *     requested values cannot be approved — request stays PENDING), AC3 (reject does not
  *     touch the event), AC4 (who/when plus previous and new values on approve), AC6
  *     (organiser is notified either way).
- *     SCRUM-36 AC5: flagging venue/equipment arrangements for review reuses SCRUM-41/42.
+ *     SCRUM-69 AC5: flagging venue/equipment arrangements for review reuses SCRUM-41/42.
  *     Those stories are not built yet, so approve does not invent a review flag.
  * Inputs: user, event id, request id, { approve, reason? }.
  * Output: the decided change request.
