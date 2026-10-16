@@ -8,12 +8,12 @@
  *   SCRUM-35 AC1  Only the assigned coordinator can approve or reject.
  *   SCRUM-35 AC2  Approve copies the proposed fields onto the event (including Confirmed);
  *                 reject leaves the event unchanged. Event status is not moved.
- *   SCRUM-36 AC1  Approve writes every included field onto the event.
- *   SCRUM-36 AC2  Approve is refused when requested values are invalid.
- *   SCRUM-36 AC3  Reject still leaves the event unchanged.
- *   SCRUM-36 AC4  Approve audit records who, when, and previous/new per field.
- *   SCRUM-36 AC5  Approve flags affected venue/equipment rows for review (SCRUM-41/42).
- *   SCRUM-36 AC6  Organiser is notified on approve and on reject.
+ *   SCRUM-69 AC1  Approve writes every included field onto the event.
+ *   SCRUM-69 AC2  Approve is refused when requested values are invalid.
+ *   SCRUM-69 AC3  Reject still leaves the event unchanged.
+ *   SCRUM-69 AC4  Approve audit records who, when, and previous/new per field.
+ *   SCRUM-69 AC5  Approve flags affected venue/equipment rows for review (SCRUM-41/42).
+ *   SCRUM-69 AC6  Organiser is notified on approve and on reject.
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
@@ -287,7 +287,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Scenario: Assigned coordinator approves a pending request on a Planning event.
    * Setup:    Request proposes new times, attendance, venue and equipment notes.
    * Expected: Those columns are written onto the event; status stays PLANNING; request APPROVED.
-   *           The organiser is notified (SCRUM-36 AC6).
+   *           The organiser is notified (SCRUM-69 AC6).
    * Type:     normal
    */
   it('AC1+AC2: assigned coordinator approve copies proposed fields and leaves status', async () => {
@@ -328,7 +328,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
       50,
       expect.objectContaining({ eventId: 3 })
     );
-    // SCRUM-36 AC6: decide notifies the organiser (create still does not).
+    // SCRUM-69 AC6: decide notifies the organiser (create still does not).
     expect(audit.notifyUser).toHaveBeenCalledWith(
       1,
       'CHANGE_REQUEST_DECIDED',
@@ -374,7 +374,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * AC:       SCRUM-35 AC2
    * Scenario: Assigned coordinator rejects, optionally with a reason.
    * Expected: Request REJECTED with the reason; events table is not written.
-   *           The organiser is notified (SCRUM-36 AC6).
+   *           The organiser is notified (SCRUM-69 AC6).
    * Type:     normal
    */
   it('AC2: reject leaves the event unchanged and stores an optional reason', async () => {
@@ -480,13 +480,13 @@ describe('SCRUM-35 decideChangeRequest', () => {
   });
 });
 
-describe('SCRUM-36 decideChangeRequest apply', () => {
+describe('SCRUM-69 decideChangeRequest apply', () => {
   afterEach(() => {
     jest.useRealTimers();
   });
 
   /*
-   * AC:       SCRUM-36 AC1
+   * AC:       SCRUM-69 AC1
    * Scenario: Request includes only attendance; date/venue/equipment on the request are null.
    * Setup:    Planning event attendance 40; pending row expected_attendance 80 and other
    *           proposed columns null (those fields were not requested).
@@ -517,7 +517,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC2
+   * AC:       SCRUM-69 AC2
    * Scenario: Pending row has attendance 0 (not a usable headcount).
    * Expected: 400; event and request stay unwritten so the request remains PENDING.
    * Type:     boundary
@@ -534,7 +534,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC2
+   * AC:       SCRUM-69 AC2
    * Scenario: Pending row has negative attendance.
    * Expected: 400; nothing is written.
    * Type:     error
@@ -550,7 +550,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC2
+   * AC:       SCRUM-69 AC2
    * Scenario: Pending row has a fractional attendance (not a whole headcount).
    * Expected: 400; nothing is written.
    * Type:     error
@@ -566,7 +566,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC2
+   * AC:       SCRUM-69 AC2
    * Scenario: Stored start is not a real timestamp.
    * Expected: 400; junk dates cannot be copied onto the event.
    * Type:     error
@@ -582,7 +582,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC2
+   * AC:       SCRUM-69 AC2
    * Scenario: Stored end is not a real timestamp.
    * Setup:    end_at is "not-a-date"; start is a valid future time.
    * Expected: 400 before any write — junk ends must not be copied onto the event
@@ -600,7 +600,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC2
+   * AC:       SCRUM-69 AC2
    * Scenario: Requested start is before the moment of approve.
    * Setup:    now is 15 Oct 2026 12:00 UTC; request start is 14 Oct 2026.
    * Expected: 400; request stays PENDING.
@@ -623,7 +623,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC2
+   * AC:       SCRUM-69 AC2
    * Scenario: Requested start is exactly the approve time (not yet in the past).
    * Setup:    now and start_at are both 15 Oct 2026 12:00 UTC.
    * Expected: Approve proceeds; start is written.
@@ -651,7 +651,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC2
+   * AC:       SCRUM-69 AC2
    * Scenario: Request has no start; the event's existing start is already in the past.
    * Setup:    Event start 10 Nov is before now 20 Nov; request only changes attendance.
    * Expected: Approve is allowed — AC2 checks requested values, not the current event.
@@ -682,7 +682,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC2
+   * AC:       SCRUM-69 AC2
    * Scenario: Requested start is after the requested end.
    * Expected: 400 from the merged-window check; event not written.
    * Type:     error
@@ -701,7 +701,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC3
+   * AC:       SCRUM-69 AC3
    * Scenario: Coordinator rejects a request whose attendance would be invalid if approved.
    * Setup:    expected_attendance 0 on the pending row.
    * Expected: Request REJECTED; events table is not written (invalid values do not apply).
@@ -726,7 +726,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC4
+   * AC:       SCRUM-69 AC4
    * Scenario: Approve a request that changes every permitted field.
    * Setup:    Event has the planning defaults; request has WINDOW / 80 / Banquet / 4 mics.
    * Expected: Audit CHANGE_REQUEST_APPROVED includes decidedBy, decidedAt, and previous/new
@@ -761,13 +761,13 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC4
+   * AC:       SCRUM-69 AC4
    * Scenario: Approve a request that includes only attendance.
    * Expected: Audit fields array has only expectedAttendance (omitted columns are not listed).
    * Type:     boundary
    */
   /*
-   * AC:       SCRUM-36 AC4
+   * AC:       SCRUM-69 AC4
    * Scenario: Supabase returns Date objects for timestamps instead of ISO strings.
    * Setup:    Event and request start/end are Date instances.
    * Expected: Audit previous/next are ISO strings so the log is JSON-safe.
@@ -814,7 +814,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC5 / SCRUM-41 AC3 / SCRUM-42 AC1 + AC2
+   * AC:       SCRUM-69 AC5 / SCRUM-41 AC3 / SCRUM-42 AC1 + AC2
    * Scenario: Approve an attendance-only change that a booked room cannot hold.
    * Setup:    Attendance 40 → 80; one APPROVED booking at a 50-capacity venue; one PENDING
    *           equipment request.
@@ -859,7 +859,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC6
+   * AC:       SCRUM-69 AC6
    * Scenario: Approve a valid request.
    * Expected: One CHANGE_REQUEST_DECIDED notice to the event organiser, after the writes.
    * Type:     normal
@@ -882,7 +882,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC6
+   * AC:       SCRUM-69 AC6
    * Scenario: Reject with no reason.
    * Expected: Organiser is still notified; body has no reason line.
    * Type:     normal
@@ -904,7 +904,7 @@ describe('SCRUM-36 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC6
+   * AC:       SCRUM-69 AC6
    * Scenario: Event has no organiser_id.
    * Expected: Decision still saves; notifyUser is called with a falsy user id and no-ops.
    * Type:     boundary
@@ -1048,7 +1048,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC2
+   * AC:       SCRUM-69 AC2
    * Scenario: Assigned coordinator approves a request whose start is already in the past.
    * Setup:    Session cookie for coordinator 2; pending start 14 Oct 2026; now 15 Oct 2026.
    * Expected: 400; events table is not written.

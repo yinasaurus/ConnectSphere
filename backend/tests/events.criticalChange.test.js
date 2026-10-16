@@ -11,7 +11,7 @@
  *                 EventDetail shows "Requires review".
  *   SCRUM-42 AC3  Does not trigger a review for non-critical changes.
  *   SCRUM-42 AC4  W7 #3 — one booking's window does not automatically flag another.
- *   SCRUM-36 AC5  Approve of a change request runs the same flag after the event write.
+ *   SCRUM-69 AC5  Approve of a change request runs the same flag after the event write.
  */
 jest.mock('../src/config/db', () => ({
   supabase: { from: jest.fn() },

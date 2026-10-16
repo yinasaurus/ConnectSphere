@@ -1,7 +1,7 @@
 /**
  * SCRUM-34: organiser requests a change on the event page.
  * SCRUM-35: assigned coordinator approves or rejects it.
- * SCRUM-36 AC2: approve 400 (invalid requested values) is shown on the page.
+ * SCRUM-69 AC2: approve 400 (invalid requested values) is shown on the page.
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -230,7 +230,7 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
    * Type:     security
    */
   /*
-   * AC:       SCRUM-36 AC2
+   * AC:       SCRUM-69 AC2
    * Scenario: Assigned coordinator approves, but the API refuses invalid requested values.
    * Setup:    Decision POST throws VALIDATION_ERROR with the server message (start in the past).
    * Expected: That message is shown in the page alert so the coordinator sees why approve failed.
