@@ -181,6 +181,18 @@ const respondClarification = asyncHandler(async (req, res) => {
   res.json({ event });
 });
 
+/*
+ * Purpose: HTTP entry for confirming an event once arrangements are complete.
+ * AC: SCRUM-73 AC1–AC8
+ * Inputs: authenticated coordinator, event id in the path
+ * Outputs: `{ event }` with status CONFIRMED
+ * Failure: service errors (403/404/409) are returned as JSON
+ */
+const confirm = asyncHandler(async (req, res) => {
+  const event = await eventsService.confirmEvent(req.user, req.params.id);
+  res.json({ event });
+});
+
 module.exports = {
   list,
   listUnassignedQueue,
@@ -193,6 +205,7 @@ module.exports = {
   openForReview,
   decide,
   changeStatus,
+  confirm,
   history,
   requestReassign,
   acceptReassign,
