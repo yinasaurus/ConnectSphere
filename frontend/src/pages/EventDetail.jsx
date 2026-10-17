@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import ConflictModal from '../components/ConflictModal';
 import EventDecisionPanel from '../components/EventDecisionPanel';
+import RegistrationSettingsCard from '../components/RegistrationSettingsCard';
 import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
 
@@ -55,6 +56,7 @@ function formatBookingStatus(status) {
  *     SCRUM-39 AC1 + AC2 (request details, venue booking, equipment requests).
  *     SCRUM-65 AC5: the Lead can open this page from the unassigned queue and see the full request details.
  *     SCRUM-71 AC1, AC2, AC6 (Lead assign card).
+ *     SCRUM-63 AC1-AC7 (assigned Coordinator's registration card).
  *     SCRUM-78 AC1-AC3 (the Venue Staff card sends the reason and alternative staff typed, or none).
  *     SCRUM-34 AC1 + AC2 (organiser change-request form: date/time, attendance, venue/equipment).
  *     SCRUM-35 AC1 + AC2 (assigned coordinator approve/reject; approve applies the fields).
@@ -671,6 +673,14 @@ export default function EventDetail() {
                 </div>
               ))}
             </div>
+          )}
+
+          {/* SCRUM-63: only the assigned Coordinator opens or changes registration, and only once Confirmed. */}
+          {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && event.status === 'CONFIRMED' && (
+            <RegistrationSettingsCard
+              event={event}
+              onRun={({ path, method, body }) => run(() => api(path, { method, body }))}
+            />
           )}
 
           {hasRole(ROLES.ATTENDEE) && event.status === 'CONFIRMED' && (
