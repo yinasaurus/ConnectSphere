@@ -107,6 +107,7 @@ export default function EventDetail() {
     ROLES.TECHNICAL_SUPPORT
   );
   const [event, setEvent] = useState(null);
+  const [registering, setRegistering] = useState(false);
   const [history, setHistory] = useState([]);
   const [comments, setComments] = useState([]);
   const [, setVenues] = useState([]);
@@ -690,12 +691,18 @@ export default function EventDetail() {
               {event.registrationOpen ? (
                 <button
                   className="btn"
-                  onClick={() => run(async () => {
-                    const { placesLeft } = await api(`/api/events/${id}/registrations`, { method: 'POST' });
-                    return `Registered. ${placesLeft} ${placesLeft === 1 ? 'place' : 'places'} left.`;
-                  })}
+                  disabled={registering}
+                  onClick={async () => {
+                    // Disabled while the request runs so a double click cannot send two registrations.
+                    setRegistering(true);
+                    await run(async () => {
+                      const { placesLeft } = await api(`/api/events/${id}/registrations`, { method: 'POST' });
+                      return `Registered. ${placesLeft} ${placesLeft === 1 ? 'place' : 'places'} left.`;
+                    });
+                    setRegistering(false);
+                  }}
                 >
-                  Register
+                  {registering ? 'Registering...' : 'Register'}
                 </button>
               ) : (
                 <p className="muted">Registration is not open for this event.</p>

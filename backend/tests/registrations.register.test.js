@@ -28,6 +28,7 @@ const attendee = { id: 30, roles: [ROLES.ATTENDEE] };
 const NOW = new Date('2026-11-05T09:00:00.000Z');
 const OPENS = '2026-11-01T09:00:00.000Z';
 const CLOSES = '2026-11-08T09:00:00.000Z';
+const STARTS = '2026-11-12T09:00:00.000Z';
 
 let event;
 let builder;
@@ -43,6 +44,7 @@ function openEvent(overrides = {}) {
     registration_opens_at: OPENS,
     registration_closes_at: CLOSES,
     registration_capacity: 50,
+    start_at: STARTS,
     ...overrides,
   };
 }
@@ -248,6 +250,33 @@ describe('SCRUM-52 register for an event (service rules)', () => {
   it('US52-B16: an open event with no stored capacity takes no registrations', async () => {
     event = openEvent({ registration_capacity: null });
     await expectRefused(service.register(attendee, 3), 409, 'EVENT_FULL');
+  });
+
+  /*
+   * AC: SCRUM-52 AC3
+   * Scenario: After registration opened, the start was moved earlier (an edit or an approved
+   *   change request) so the event has started while the window is still open.
+   * Expected: Refused from the start time onwards with 409 EVENT_STARTED; allowed just before it.
+   * Type: boundary / error
+   */
+  it.each([
+    ['exactly at the new start time', '2026-11-05T09:00:00.000Z'],
+    ['after the new start time', '2026-11-05T08:00:00.000Z'],
+  ])('US52-B17: registration is refused %s, even with the window open', async (_label, startAt) => {
+    event = openEvent({ start_at: startAt });
+    await expectRefused(service.register(attendee, 3), 409, 'EVENT_STARTED');
+  });
+
+  it('US52-B18: registration is allowed one millisecond before the event starts', async () => {
+    event = openEvent({ start_at: '2026-11-05T09:00:00.001Z' });
+    await service.register(attendee, 3);
+    expect(db.insertOne).toHaveBeenCalledTimes(1);
+  });
+
+  it('US52-B19: an event with no start date is not treated as started', async () => {
+    event = openEvent({ start_at: null });
+    await service.register(attendee, 3);
+    expect(db.insertOne).toHaveBeenCalledTimes(1);
   });
 
   it('US52-B14: registering for an event that does not exist returns 404', async () => {

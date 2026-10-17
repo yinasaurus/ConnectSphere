@@ -126,6 +126,27 @@ describe('SCRUM-52 Register button (event page)', () => {
   });
 
   /*
+   * AC: SCRUM-52 AC5
+   * Scenario: The Attendee double-clicks Register while the first request is still running.
+   * Expected: the button is disabled and only one registration request is sent.
+   */
+  it('US52-F06: a double click sends only one registration', async () => {
+    const calls = [];
+    let finish;
+    stubApi(eventWith(), () => new Promise((resolve) => { finish = resolve; }), calls);
+    renderEvent();
+
+    const button = await screen.findByRole('button', { name: 'Register' });
+    await userEvent.dblClick(button);
+
+    expect(screen.getByRole('button', { name: 'Registering...' })).toBeDisabled();
+    finish({ registration: { id: 99 }, placesLeft: 9 });
+    expect(await screen.findByText('Registered. 9 places left.')).toBeInTheDocument();
+    expect(calls.filter((c) => c.path === '/api/events/3/registrations')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Register' })).toBeEnabled();
+  });
+
+  /*
    * AC: SCRUM-52 AC3
    * Scenario: The event is Confirmed but registration has not been enabled.
    * Expected: no Register button, and a note that registration is not open.
