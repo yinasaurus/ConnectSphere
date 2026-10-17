@@ -274,6 +274,7 @@ async function getEvent(user, id) {
   if (!row || !canViewEvent(user, row)) throw httpError(404, 'Event not found', 'NOT_FOUND');
   const event = visibleEvent(user, row);
   // SCRUM-56 AC8: only the owning Organiser and assigned Coordinator see the outcome.
+  // Lazy require avoids a circular import (access.service does not import events.service).
   const accessService = require('./access.service');
   const safetyCheck = await accessService.safetyOutcomeForViewer(user, row);
   if (safetyCheck) {
@@ -724,9 +725,11 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
     throw httpError(400, REJECTION_REASON_MESSAGE, 'VALIDATION_ERROR', { fields: ['reason'] });
   }
 
-  // SCRUM-55 AC3 / SCRUM-56 AC6: Preparation only after an approved safety check.
+  // SCRUM-55 AC3 / SCRUM-56 AC6: Preparation only after an approved safety check
+  // for the current awaiting cycle (not an older approval).
   // Approve already moves Awaiting → Preparation in access.recordSafetyCheck; a direct
   // status POST still needs that approval on record.
+  // Lazy require avoids a circular import (access.service does not import events.service).
   if (nextStatus === EVENT_STATUS.PREPARATION) {
     const accessService = require('./access.service');
     const approved = await accessService.hasApprovedSafetyCheck(existing.id);

@@ -18,6 +18,9 @@ export default function SafetyCheck() {
   const [selectedEquipment, setSelectedEquipment] = useState([]);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  // SCRUM-56 AC5: disable Record while the POST is in flight so a double-click cannot
+  // fire two outcome requests for the same check.
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     api(`/api/events/${id}/safety-check`)
@@ -43,8 +46,10 @@ export default function SafetyCheck() {
 
   async function onSubmit(event) {
     event.preventDefault();
+    if (saving) return;
     setError('');
     setMessage('');
+    setSaving(true);
     try {
       const affectedArrangements = [
         ...selectedBookings.map((bookingId) => ({ type: 'VENUE_BOOKING', id: bookingId })),
@@ -67,6 +72,8 @@ export default function SafetyCheck() {
       setMessage('Safety check outcome recorded.');
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -74,6 +81,7 @@ export default function SafetyCheck() {
   const needsReason = outcome === 'REJECT' || outcome === 'REQUEST_CHANGES';
   const needsArrangements = outcome === 'REQUEST_CHANGES';
   const canSubmit = !recorded
+    && !saving
     && (!needsReason || reason.trim())
     && (!needsArrangements || selectedBookings.length + selectedEquipment.length > 0);
 

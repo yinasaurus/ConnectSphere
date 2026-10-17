@@ -10,6 +10,7 @@ jest.mock('../src/config/db', () => ({
   fetchOne: jest.fn(),
   fetchMany: jest.fn(),
   updateById: jest.fn(),
+  updateByIdWhere: jest.fn(),
   insertOne: jest.fn(),
 }));
 jest.mock('../src/services/audit.service', () => ({
@@ -151,6 +152,16 @@ beforeEach(() => {
   db.updateById.mockImplementation(async (table, id, patch) => {
     const row = (tables[table] || []).find((item) => String(item.id) === String(id));
     if (row) Object.assign(row, patch);
+    return row;
+  });
+  // SCRUM-56 AC5: claim only succeeds while the where predicates still match (e.g. still Awaiting).
+  db.updateByIdWhere.mockImplementation(async (table, id, patch, where = {}) => {
+    const row = (tables[table] || []).find((item) => String(item.id) === String(id));
+    if (!row) return null;
+    if (Object.entries(where).some(([column, value]) => String(row[column]) !== String(value))) {
+      return null;
+    }
+    Object.assign(row, patch);
     return row;
   });
   db.insertOne.mockImplementation(async (table, row) => {
@@ -560,12 +571,18 @@ describe('SCRUM-56 record safety outcome', () => {
   /*
    * AC:       SCRUM-55 AC3; SCRUM-56 AC6
    * Scenario: Coordinator moves Awaiting → Preparation after an approved check exists.
-   * Setup:    Approved safety_checks row seeded while status stays AWAITING so changeStatus
-   *           owns the transition (recordSafetyCheck would already move to PREPARATION).
+   * Setup:    History shows enter-Awaiting at T0; APPROVED safety_checks decided after T0;
+   *           status stays AWAITING so changeStatus owns the transition.
    * Expected: Status becomes PREPARATION.
    * Type:     normal
    */
   it('allows Preparation once an approved safety check exists', async () => {
+    tables.event_status_history.push({
+      id: 1,
+      event_id: 3,
+      to_status: 'AWAITING_SAFETY_CHECK',
+      created_at: '2026-10-17T00:00:00.000Z',
+    });
     tables.safety_checks.push({
       id: 1,
       event_id: 3,
@@ -573,10 +590,66 @@ describe('SCRUM-56 record safety outcome', () => {
       reason: null,
       affected_arrangements: [],
       decided_by: 12,
-      decided_at: '2026-10-17T00:00:00.000Z',
+      decided_at: '2026-10-17T00:01:00.000Z',
     });
     await events.changeStatus(coordinator, 3, 'PREPARATION');
     expect(event.status).toBe('PREPARATION');
+  });
+
+  /*
+   * AC:       SCRUM-55 AC3 (17 Oct change record)
+   * Scenario: Event was approved in an earlier cycle, then re-entered Awaiting after a
+   *           critical change (Planning → Awaiting again) without a new approval yet.
+   * Setup:    Old APPROVED decided_at is before the latest enter-Awaiting history row.
+   * Expected: changeStatus to PREPARATION is refused (SAFETY_CHECK_NOT_APPROVED).
+   * Type:     conflict
+   */
+  it('blocks Preparation when the only approval is from a previous awaiting cycle', async () => {
+    tables.event_status_history.push(
+      {
+        id: 1,
+        event_id: 3,
+        to_status: 'AWAITING_SAFETY_CHECK',
+        created_at: '2026-10-10T00:00:00.000Z',
+      },
+      {
+        id: 2,
+        event_id: 3,
+        to_status: 'AWAITING_SAFETY_CHECK',
+        created_at: '2026-10-17T12:00:00.000Z',
+      }
+    );
+    tables.safety_checks.push({
+      id: 1,
+      event_id: 3,
+      outcome: 'APPROVED',
+      reason: null,
+      affected_arrangements: [],
+      decided_by: 12,
+      // Decided in the first cycle — before the second enter-Awaiting.
+      decided_at: '2026-10-10T01:00:00.000Z',
+    });
+    await expect(
+      events.changeStatus(coordinator, 3, 'PREPARATION')
+    ).rejects.toMatchObject({ status: 409, code: 'SAFETY_CHECK_NOT_APPROVED' });
+    expect(event.status).toBe('AWAITING_SAFETY_CHECK');
+  });
+
+  /*
+   * AC:       SCRUM-56 AC5
+   * Scenario: Two Safety Officers pass the initial status read, but only one can claim
+   *           the event update (status still AWAITING).
+   * Setup:    updateByIdWhere returns null once (the other writer already moved status).
+   * Expected: 409; no safety_checks row written (claim happens before insert).
+   * Type:     conflict
+   */
+  it('refuses a concurrent second outcome when the status claim loses the race', async () => {
+    db.updateByIdWhere.mockImplementationOnce(async () => null);
+    await expect(
+      access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE' })
+    ).rejects.toMatchObject({ status: 409, code: 'INVALID_STATUS' });
+    expect(tables.safety_checks).toHaveLength(0);
+    expect(event.status).toBe('AWAITING_SAFETY_CHECK');
   });
 
   /*
