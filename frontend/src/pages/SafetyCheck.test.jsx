@@ -123,4 +123,24 @@ describe('SCRUM-55 / SCRUM-56 safety check page', () => {
     expect(screen.queryByLabelText('Outcome')).not.toBeInTheDocument();
     expect(screen.queryByText('Helix Conference')).not.toBeInTheDocument();
   });
+
+  /*
+   * AC:       SCRUM-56 AC5 (refresh after decide)
+   * Scenario: Safety Officer reopens the check page after the event left Awaiting.
+   * Setup:    GET returns 409 (openSafetyCheck INVALID_STATUS / already decided).
+   * Expected: A clear closed-check message and a link back to the queue; no outcome form.
+   * Type:     boundary
+   */
+  it('explains when the safety check is no longer open after a 409', async () => {
+    const err = new Error('Only events awaiting a safety check can be opened for safety review');
+    err.status = 409;
+    api.mockRejectedValue(err);
+    renderPage();
+    expect(await screen.findByText(/This safety check is no longer open/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to queue' })).toHaveAttribute(
+      'href',
+      '/app/events/safety-queue'
+    );
+    expect(screen.queryByLabelText('Outcome')).not.toBeInTheDocument();
+  });
 });

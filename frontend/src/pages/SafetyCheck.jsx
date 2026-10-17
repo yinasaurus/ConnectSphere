@@ -22,7 +22,17 @@ export default function SafetyCheck() {
   useEffect(() => {
     api(`/api/events/${id}/safety-check`)
       .then((data) => setCheck(data.safetyCheck))
-      .catch((err) => setError(err.message));
+      .catch((err) => {
+        // After an outcome the event leaves Awaiting, so GET open returns 409. SO is not an
+        // AC8 outcome viewer on the event page — tell them the check is closed and link back.
+        if (err.status === 409) {
+          setError(
+            'This safety check is no longer open. The outcome was already recorded, or the event left the awaiting queue.'
+          );
+          return;
+        }
+        setError(err.message);
+      });
   }, [id]);
 
   function toggleId(list, setList, value) {
@@ -75,7 +85,14 @@ export default function SafetyCheck() {
           <p>Only a Safety Officer can open this check or record its outcome.</p>
         </div>
       </div>
-      {error && <div className="alert">{error}</div>}
+      {error && (
+        <div className="alert stack">
+          <p>{error}</p>
+          {!check && (
+            <Link className="btn ghost" to="/app/events/safety-queue">Back to queue</Link>
+          )}
+        </div>
+      )}
       {message && <div className="alert success">{message}</div>}
       {check && (
         <div className="stack" style={{ maxWidth: 720 }}>
