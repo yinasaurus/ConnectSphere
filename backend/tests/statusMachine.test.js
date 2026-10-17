@@ -34,7 +34,8 @@ const EXPECTED_ALLOWED = [
   ['UNDER_REVIEW', 'APPROVED'], // AC2
   ['APPROVED', 'PLANNING'], // AC3
   ['PLANNING', 'AWAITING_SAFETY_CHECK'], // AC6
-  ['AWAITING_SAFETY_CHECK', 'PREPARATION'], // AC7
+  ['AWAITING_SAFETY_CHECK', 'PREPARATION'], // AC7 / SCRUM-56 approve
+  ['AWAITING_SAFETY_CHECK', 'PLANNING'], // SCRUM-56 reject / request-changes
   ['PREPARATION', 'CONFIRMED'], // SCRUM-73
   ['CONFIRMED', 'COMPLETED'],
   // rejection (AC4), essential requirements can't be met (Week 2 Q&A), resubmission (Week 4 Q&A)

@@ -271,6 +271,22 @@ export default function EventDetail() {
             {event.rejectionReason && <p><strong>Rejection reason:</strong> {event.rejectionReason}</p>}
           </div>
 
+          {/* SCRUM-56 AC8: only the Organiser and assigned Coordinator receive safetyCheck on the event. */}
+          {event.safetyCheck && (
+            <div className="card stack">
+              <h3>Safety check outcome</h3>
+              <p><strong>Outcome:</strong> {event.safetyCheck.outcome}</p>
+              {event.safetyCheck.reason && (
+                <p><strong>Reason:</strong> {event.safetyCheck.reason}</p>
+              )}
+              {event.safetyCheck.decidedAt && (
+                <p className="muted">
+                  Recorded {new Date(event.safetyCheck.decidedAt).toLocaleString()}
+                </p>
+              )}
+            </div>
+          )}
+
           {/*
             Purpose: Lead chooses the one primary Coordinator for a Submitted event that has none.
             AC: SCRUM-71 AC1, AC2, AC6
@@ -768,10 +784,13 @@ export default function EventDetail() {
             )}
           </div>
           {hasRole(ROLES.SAFETY_OFFICER) && (
-            <div className="card">
+            <div className="card stack">
               <h3>Safety check</h3>
               <p className="muted">Only a Safety Officer can open a safety check or record its outcome.</p>
-              <Link className="btn" to={`/app/events/${id}/safety-check`}>Open safety check</Link>
+              <Link className="btn ghost" to="/app/events/safety-queue">Safety queue</Link>
+              {event.status === 'AWAITING_SAFETY_CHECK' && (
+                <Link className="btn" to={`/app/events/${id}/safety-check`}>Open safety check</Link>
+              )}
             </div>
           )}
 

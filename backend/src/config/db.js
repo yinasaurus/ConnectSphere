@@ -60,6 +60,23 @@ async function updateById(table, id, patch) {
   return data;
 }
 
+/**
+ * Purpose: update one row by id only when extra column predicates still match (optimistic claim).
+ * Used by SCRUM-56 AC5 so a second concurrent safety outcome cannot move the event if the
+ * status has already left AWAITING_SAFETY_CHECK.
+ * Inputs: table, id, patch, where object of extra eq filters (e.g. { status: 'AWAITING_SAFETY_CHECK' }).
+ * Output: updated row, or null when no row matched (another writer won the race).
+ */
+async function updateByIdWhere(table, id, patch, where = {}) {
+  let builder = supabase.from(table).update(patch).eq('id', id);
+  for (const [column, value] of Object.entries(where)) {
+    builder = builder.eq(column, value);
+  }
+  const { data, error } = await builder.select().maybeSingle();
+  throwIf(error);
+  return data;
+}
+
 async function pingDatabase() {
   const { error } = await supabase.from('users').select('id').limit(1);
   throwIf(error);
@@ -74,5 +91,6 @@ module.exports = {
   insertOne,
   insertMany,
   updateById,
+  updateByIdWhere,
   pingDatabase,
 };
