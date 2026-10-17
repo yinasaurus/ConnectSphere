@@ -260,6 +260,7 @@ describe('SCRUM-55 safety queue and open', () => {
   /*
    * AC:       SCRUM-55 AC4
    * Scenario: Non-SO opens a safety check.
+   * Setup:    Coordinator-only session; no Safety Officer role.
    * Expected: 403 before any event fetch.
    * Type:     error
    */
@@ -267,12 +268,43 @@ describe('SCRUM-55 safety queue and open', () => {
     await expect(access.openSafetyCheck(coordinator, 3)).rejects.toMatchObject({ status: 403 });
     expect(db.fetchOne).not.toHaveBeenCalled();
   });
+
+  /*
+   * AC:       SCRUM-55 AC1, AC2
+   * Scenario: Safety Officer opens an event that is not awaiting a safety check.
+   * Setup:    Event status PLANNING with ready arrangements.
+   * Expected: 409 INVALID_STATUS; no review payload for a non-awaiting event.
+   * Type:     error
+   */
+  it('refuses to open a Planning event for safety review', async () => {
+    event.status = 'PLANNING';
+    await expect(access.openSafetyCheck(safetyOfficer, 3)).rejects.toMatchObject({
+      status: 409,
+      code: 'INVALID_STATUS',
+    });
+  });
+
+  /*
+   * AC:       SCRUM-55 AC1, AC2
+   * Scenario: Safety Officer opens an awaiting event whose venue is no longer approved.
+   * Setup:    Status AWAITING_SAFETY_CHECK; booking PENDING.
+   * Expected: 409 NOT_READY_FOR_SAFETY_CHECK.
+   * Type:     error
+   */
+  it('refuses to open an awaiting event when arrangements are incomplete', async () => {
+    tables.venue_bookings[0].status = 'PENDING';
+    await expect(access.openSafetyCheck(safetyOfficer, 3)).rejects.toMatchObject({
+      status: 409,
+      code: 'NOT_READY_FOR_SAFETY_CHECK',
+    });
+  });
 });
 
 describe('SCRUM-56 record safety outcome', () => {
   /*
    * AC:       SCRUM-56 AC1, AC4, AC6
    * Scenario: Approve with no reason.
+   * Setup:    Awaiting event with ready arrangements; outcome APPROVE and no reason.
    * Expected: Outcome APPROVED stored; event moves to PREPARATION; history and audit written.
    * Type:     normal
    */
@@ -400,6 +432,7 @@ describe('SCRUM-56 record safety outcome', () => {
   /*
    * AC:       SCRUM-56 AC8
    * Scenario: Organiser and assigned Coordinator load the event after an approve.
+   * Setup:    Approve recorded; organiser id 1 and coordinator id 2 are the event contacts.
    * Expected: safetyCheck is present for them; an unrelated organiser does not get it.
    * Type:     normal
    */
@@ -417,6 +450,28 @@ describe('SCRUM-56 record safety outcome', () => {
 
     // Unrelated organiser in another organisation cannot see the event at all (404).
     await expect(events.getEvent(otherUser, 3)).rejects.toMatchObject({ status: 404 });
+  });
+
+  /*
+   * AC:       SCRUM-56 AC8
+   * Scenario: Users who can open the event but are not its organiser or assigned coordinator.
+   * Setup:    After approve; same-org organiser id 8 (organisation 10); Lead id 20. Both may
+   *           view the event via canViewEvent, but neither is the event contact.
+   * Expected: getEvent succeeds and safetyCheck is omitted (not leaked to unrelated viewers).
+   * Type:     boundary
+   */
+  it('hides the outcome from a same-org organiser and a Lead who are not the event contacts', async () => {
+    await access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE', reason: 'Clear' });
+
+    const peerOrganiser = { id: 8, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] };
+    const forPeer = await events.getEvent(peerOrganiser, 3);
+    expect(forPeer.name).toBe('Workshop');
+    expect(forPeer.safetyCheck).toBeUndefined();
+
+    const lead = { id: 20, roles: [ROLES.EVENT_COORDINATOR_LEAD] };
+    const forLead = await events.getEvent(lead, 3);
+    expect(forLead.name).toBe('Workshop');
+    expect(forLead.safetyCheck).toBeUndefined();
   });
 });
 
