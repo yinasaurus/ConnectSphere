@@ -191,7 +191,7 @@ describe('SCRUM-81 safety-check readiness notices', () => {
    * Expected: 409; no SAFETY_CHECK_READY notification rows.
    * Type:     error
    */
-  it('does not notify Safety Officers when arrangements are not ready', async () => {
+  it('does not notify Safety Officers when a venue booking is not approved', async () => {
     tables.venue_bookings[0].status = 'PENDING';
     await expect(
       events.changeStatus(coordinator, 3, 'AWAITING_SAFETY_CHECK')
@@ -200,10 +200,39 @@ describe('SCRUM-81 safety-check readiness notices', () => {
   });
 
   /*
+   * AC:       SCRUM-81 AC2
+   * Scenario: Coordinator tries to send to safety check while equipment is not reserved.
+   * Setup:    Booking APPROVED; equipment request PENDING.
+   * Expected: 409; no SAFETY_CHECK_READY notification rows.
+   * Type:     error
+   */
+  it('does not notify Safety Officers when requested equipment is not reserved', async () => {
+    tables.equipment_requests[0].status = 'PENDING';
+    await expect(
+      events.changeStatus(coordinator, 3, 'AWAITING_SAFETY_CHECK')
+    ).rejects.toMatchObject({ status: 409, code: 'NOT_READY_FOR_SAFETY_CHECK' });
+    expect(safetyReadyNotices()).toHaveLength(0);
+  });
+
+  /*
+   * AC:       SCRUM-81 AC1
+   * Scenario: Event is sent to safety check but no active Safety Officer exists.
+   * Setup:    Remove all SAFETY_OFFICER role rows (arrangements still ready).
+   * Expected: Status still moves to Awaiting; zero SAFETY_CHECK_READY notices.
+   * Type:     boundary
+   */
+  it('sends no readiness notice when there is no active Safety Officer', async () => {
+    tables.user_roles = tables.user_roles.filter((row) => row.role !== ROLES.SAFETY_OFFICER);
+    await events.changeStatus(coordinator, 3, 'AWAITING_SAFETY_CHECK');
+    expect(event.status).toBe('AWAITING_SAFETY_CHECK');
+    expect(safetyReadyNotices()).toHaveLength(0);
+  });
+
+  /*
    * AC:       SCRUM-81 AC6
    * Scenario: After request-changes returned the event to Planning, Coordinator sends again.
-   * Setup:    First send notifies SOs; record REQUEST_CHANGES; restore ready arrangements;
-   *           send to Awaiting again.
+   * Setup:    First send notifies SOs; record REQUEST_CHANGES (arrangements stay ready;
+   *           event returns to Planning); send to Awaiting again.
    * Expected: A second SAFETY_CHECK_READY wave to the same active SOs.
    * Type:     normal
    */
@@ -302,6 +331,37 @@ describe('SCRUM-81 safety-check outcome notices', () => {
     expect(safetyOutcomeNotices()).toEqual([
       expect.objectContaining({ user_id: 2, type: 'SAFETY_CHECK_OUTCOME' }),
     ]);
+  });
+
+  /*
+   * AC:       SCRUM-81 AC7
+   * Scenario: Approve when the event somehow has no coordinator id.
+   * Setup:    coordinator_id null; organiser_id 1.
+   * Expected: Only the Organiser is notified (one outcome notice).
+   * Type:     boundary
+   */
+  it('skips a missing coordinator when notifying the safety outcome', async () => {
+    event.coordinator_id = null;
+    await access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE' });
+    expect(safetyOutcomeNotices()).toEqual([
+      expect.objectContaining({ user_id: 1, type: 'SAFETY_CHECK_OUTCOME' }),
+    ]);
+  });
+
+  /*
+   * AC:       SCRUM-81 AC7
+   * Scenario: Outcome notices must not go to an organiser of a different event.
+   * Setup:    User 99 is an organiser in another organisation; event contacts stay 1 and 2.
+   * Expected: SAFETY_CHECK_OUTCOME only for 1 and 2; user 99 never appears.
+   * Type:     boundary
+   */
+  it('does not notify an organiser of another event about the outcome', async () => {
+    tables.users.push({ id: 99, is_active: true });
+    tables.user_roles.push({ user_id: 99, role: ROLES.EVENT_ORGANISER });
+    await access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE' });
+    const outcomes = safetyOutcomeNotices();
+    expect(outcomes.map((row) => row.user_id).sort()).toEqual([1, 2]);
+    expect(outcomes.every((row) => row.user_id !== 99)).toBe(true);
   });
 });
 
