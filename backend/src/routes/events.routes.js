@@ -73,6 +73,9 @@ router.post(
   controller.decideChangeRequest
 );
 
+// SCRUM-63: only Coordinators reach these; the service also checks it is the assigned one (AC7).
+router.post('/:id/registration/enable', requireRole(ROLES.EVENT_COORDINATOR), registrations.enable);
+router.patch('/:id/registration', requireRole(ROLES.EVENT_COORDINATOR), registrations.changeSettings);
 router.get('/:id/registrations', registrations.list);
 router.post('/:id/registrations', registrations.register);
 router.post('/:id/registrations/withdraw', registrations.withdraw);

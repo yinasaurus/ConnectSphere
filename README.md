@@ -58,7 +58,8 @@ Login looks up the `users` table in Supabase and issues an httpOnly JWT cookie. 
 7. Coordinators, venue staff and technical support can check a venue's availability for any date/time range under **Venue availability** (confirmed bookings incl. setup/turnaround, active tentative holds and maintenance blocks are shown as unavailable). Coordinators and venue staff also get an **Existing bookings** list for the same period, showing each confirmed booking's occupied window and each active tentative hold.
 8. Attendees can register / withdraw once the event is confirmed.
 9. After a Coordinator is assigned, the Organiser can request a change to date/time, attendance, venue requirements or equipment requirements. The assigned Coordinator approves (those fields are applied; Confirmed stays Confirmed) or rejects. Draft / cancelled / rejected / completed events cannot use this path.
-10. In-app notifications and status history are written along the way.
+10. Technical Support (`tech@connectsphere.sg`) can open **Equipment**, see whether each pending request is Sufficient / Insufficient / Unavailable for the event date/time, then reserve (blocked if leftover stock is short) or mark unavailable.
+11. In-app notifications and status history are written along the way.
 
 ## Project layout
 
