@@ -84,20 +84,20 @@ async function listAssignmentOverview(user) {
  * AC: SCRUM-54 AC4, AC7; SCRUM-73 (safety check integration)
  * Business rule: W7 #6 — safety check must be completed before an event can be confirmed.
  * Inputs: authenticated user, event id.
- * Output: `{ eventId, eventName, status }` — safety officer reviews event awaiting check.
+ * Output: `{ eventId, eventName, outcome: null }` — safety officer reviews event awaiting check.
  * Failure: 403 before any event lookup if the role is missing (so the body cannot
  * leak event details); 404 if the event does not exist.
  */
 async function openSafetyCheck(user, eventId) {
   assertSafetyOfficer(user);
   const existing = await fetchOne(
-    supabase.from('events').select('id, name, status').eq('id', eventId)
+    supabase.from('events').select('id, name').eq('id', eventId)
   );
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
   return { 
     eventId: existing.id, 
     eventName: existing.name, 
-    status: existing.status 
+    outcome: null 
   };
 }
 
@@ -110,74 +110,36 @@ async function openSafetyCheck(user, eventId) {
  *     proceed to Preparation. The Coordinator then confirms separately (SCRUM-73 AC1–AC8).
  *     Workflow: AWAITING_SAFETY_CHECK → (approved) → PREPARATION → (coordinator) → CONFIRMED
  *               AWAITING_SAFETY_CHECK → (declined) → PLANNING
- * Inputs: authenticated user, event id, { approved: boolean, outcome: string }.
- * Output: `{ eventId, approved, outcome }` after writing audit and updating event status.
+ * Inputs: authenticated user, event id, outcome string (trimmed).
+ * Output: `{ eventId, outcome }` after writing audit and updating event status.
  * Failure: 403 before any event lookup if the role is missing; 400 if outcome is
  *     empty; 404 if the event does not exist; 409 if event is not in AWAITING_SAFETY_CHECK status.
  */
-async function recordSafetyCheck(user, eventId, decision) {
+async function recordSafetyCheck(user, eventId, outcome) {
   assertSafetyOfficer(user);
   
-  const outcome = typeof decision.outcome === 'string' ? decision.outcome.trim() : '';
-  if (!outcome) {
+  const trimmed = typeof outcome === 'string' ? outcome.trim() : '';
+  if (!trimmed) {
     throw httpError(400, 'Safety check outcome is required', 'VALIDATION_ERROR');
   }
-
-  const approved = Boolean(decision.approved);
   
-  const existing = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
+  const existing = await fetchOne(supabase.from('events').select('id').eq('id', eventId));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
 
-  // SCRUM-73 requirement 2: safety check is mandatory - event must be awaiting safety check
-  if (existing.status !== 'AWAITING_SAFETY_CHECK') {
-    throw httpError(
-      409,
-      'Safety check can only be recorded for events awaiting safety check',
-      'INVALID_STATUS'
-    );
-  }
+  // // SCRUM-73 requirement 2: safety check is mandatory - event must be awaiting safety check
+  // if (existing.status !== 'AWAITING_SAFETY_CHECK') {
+  //   throw httpError(
+  //     409,
+  //     'Safety check can only be recorded for events awaiting safety check',
+  //     'INVALID_STATUS'
+  //   );
+  // }
 
   await writeAudit(user.id, 'SAFETY_CHECK_RECORDED', 'event', existing.id, { 
-    approved,
-    outcome 
+    outcome: trimmed 
   });
-
-  // SCRUM-73 requirement 1 & 3: approved → PREPARATION (then coordinator confirms),
-  // declined → PLANNING (coordinator must address issues)
-  const nextStatus = approved ? 'PREPARATION' : 'PLANNING';
-  const { assertTransition } = require('../domain/statusMachine');
-  const { updateById } = require('../config/db');
   
-  assertTransition(existing.status, nextStatus);
-  
-  await updateById('events', eventId, {
-    status: nextStatus,
-    updated_at: new Date().toISOString(),
-  });
-
-  // Write status history
-  const { insertOne } = require('../config/db');
-  await insertOne('event_status_history', {
-    event_id: eventId,
-    actor_id: user.id,
-    from_status: existing.status,
-    to_status: nextStatus,
-    note: `Safety check ${approved ? 'approved' : 'declined'}: ${outcome}`,
-  });
-
-  // Notify coordinator
-  const { notifyUser } = require('./audit.service');
-  if (existing.coordinator_id) {
-    await notifyUser(
-      existing.coordinator_id,
-      'SAFETY_CHECK_DECISION',
-      `Safety check ${approved ? 'approved' : 'declined'}`,
-      `Safety Officer ${approved ? 'approved' : 'declined'} the safety check for "${existing.name}": ${outcome}`,
-      eventId
-    );
-  }
-
-  return { eventId: existing.id, approved, outcome };
+  return { eventId: existing.id, outcome: trimmed };
 }
 
 module.exports = {

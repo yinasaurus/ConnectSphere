@@ -65,7 +65,7 @@ describe('SCRUM-54 Safety Officer-only safety checks', () => {
   /*
    * AC: SCRUM-54 AC4
    * Scenario: A Safety Officer records a safety-check outcome.
-   * Setup: Event 3 exists; outcome "Site cleared".
+   * Setup: Event 3 exists in AWAITING_SAFETY_CHECK status; outcome "Site cleared".
    * Expected: An audit row is written and the outcome is returned. The event row is not updated.
    * Type: normal
    */
@@ -107,7 +107,7 @@ describe('SCRUM-54 Safety Officer-only safety checks', () => {
   /*
    * AC: SCRUM-54 AC2, AC4
    * Scenario: A hybrid Coordinator + Safety Officer records an outcome in the same session.
-   * Setup: User holds both roles; event 3 exists.
+   * Setup: User holds both roles; event 3 exists in AWAITING_SAFETY_CHECK status.
    * Expected: The Safety Officer function is allowed because they hold that role.
    * Type: normal
    */
