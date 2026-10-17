@@ -1267,8 +1267,21 @@ function parseChangeRequestPayload(payload = {}) {
 }
 
 /**
+ * Purpose: the event columns a change request may copy, with the API names used in the
+ * AC4 audit (previous / new per included field).
+ * AC: SCRUM-69 AC1, AC4
+ */
+const CHANGE_APPLY_FIELDS = [
+  { column: 'start_at', field: 'startAt' },
+  { column: 'end_at', field: 'endAt' },
+  { column: 'expected_attendance', field: 'expectedAttendance' },
+  { column: 'venue_requirements', field: 'venueRequirements' },
+  { column: 'equipment_notes', field: 'equipmentNotes' },
+];
+
+/**
  * Purpose: copy non-null proposed columns onto the event, then check the resulting window.
- * AC: SCRUM-35 AC2
+ * AC: SCRUM-35 AC2, SCRUM-69 AC1 (every included field is copied), AC2 (end must be after start).
  * Failure: 400 if the merged start is not before the merged end.
  */
 function proposedEventPatch(request, existing) {
@@ -1282,6 +1295,89 @@ function proposedEventPatch(request, existing) {
   const nextEnd = patch.end_at !== undefined ? patch.end_at : existing.end_at;
   validateDateRange(nextStart, nextEnd);
   return patch;
+}
+
+/**
+ * Purpose: refuse approve when the requested values themselves are not usable, before any
+ * event write. Existing event values that were not requested are not re-checked.
+ * AC: SCRUM-69 AC2 (attendance ≤ 0 or not a whole number, start in the past, unparseable
+ *     start or end). End-before-start is checked in proposedEventPatch after this, using
+ *     the merged window.
+ * Inputs: the pending change-request row; `now` so tests can fix the clock.
+ * Failure: 400 VALIDATION_ERROR; caller must not write the event or mark the request decided.
+ */
+function assertRequestedValuesApprovable(request, now) {
+  if (request.expected_attendance != null) {
+    const n = Number(request.expected_attendance);
+    if (!Number.isInteger(n) || n <= 0) {
+      throw httpError(
+        400,
+        'A change request cannot be approved with an invalid attendance (must be a whole number of at least 1)',
+        'VALIDATION_ERROR',
+        { fields: ['expectedAttendance'] }
+      );
+    }
+  }
+  if (request.start_at != null) {
+    const start = new Date(request.start_at);
+    if (Number.isNaN(start.getTime())) {
+      throw httpError(
+        400,
+        'A change request cannot be approved with an invalid start date/time',
+        'VALIDATION_ERROR',
+        { fields: ['startAt'] }
+      );
+    }
+    if (start < now) {
+      throw httpError(
+        400,
+        'A change request cannot be approved with a start date/time in the past',
+        'VALIDATION_ERROR',
+        { fields: ['startAt'] }
+      );
+    }
+  }
+  if (request.end_at != null) {
+    const end = new Date(request.end_at);
+    if (Number.isNaN(end.getTime())) {
+      throw httpError(
+        400,
+        'A change request cannot be approved with an invalid end date/time',
+        'VALIDATION_ERROR',
+        { fields: ['endAt'] }
+      );
+    }
+  }
+}
+
+/**
+ * Purpose: one audit row for an approved apply lists each included field's previous (event)
+ * and new (requested) value, plus who approved and when.
+ * AC: SCRUM-69 AC4
+ */
+function approvedChangeAuditFields(request, existing) {
+  return CHANGE_APPLY_FIELDS
+    .filter(({ column }) => request[column] != null)
+    .map(({ column, field }) => ({
+      field,
+      previous: existing[column] instanceof Date ? existing[column].toISOString() : existing[column],
+      next: request[column] instanceof Date ? request[column].toISOString() : request[column],
+    }));
+}
+
+/**
+ * Purpose: tell the event's Organiser that their change request was approved or rejected.
+ * AC: SCRUM-69 AC6
+ * Failure: none here — notifyUser no-ops when organiser_id is missing.
+ */
+async function notifyChangeRequestDecision(event, decided, reason) {
+  const title = decided ? 'Change request approved' : 'Change request rejected';
+  const body = decided
+    ? `Your change request for ${event.name} was approved. The event record has been updated.`
+    : (reason
+      ? `Your change request for ${event.name} was rejected. Reason: ${reason}`
+      : `Your change request for ${event.name} was rejected.`);
+  await notifyUser(event.organiser_id, 'CHANGE_REQUEST_DECIDED', title, body, event.id);
 }
 
 /**
@@ -1369,10 +1465,17 @@ async function createChangeRequest(user, eventId, payload) {
 /**
  * Purpose: assigned coordinator approves (copies proposed fields onto the event, including
  * Confirmed) or rejects (event unchanged). Event status is not moved.
- * AC: SCRUM-35 AC1 (assigned coordinator decides), AC2 (approve applies the change).
+ * AC: SCRUM-35 AC1 (assigned coordinator decides), AC2 (approve applies the change);
+ *     SCRUM-69 AC1 (every included field is written onto the event), AC2 (invalid
+ *     requested values cannot be approved — request stays PENDING), AC3 (reject does not
+ *     touch the event), AC4 (who/when plus previous and new values on approve), AC6
+ *     (organiser is notified either way).
+ *     SCRUM-69 AC5: flagging venue/equipment arrangements for review reuses SCRUM-41/42.
+ *     Those stories are not built yet, so approve does not invent a review flag.
  * Inputs: user, event id, request id, { approve, reason? }.
  * Output: the decided change request.
- * Failure: 404 missing; 403 not the assigned coordinator; 409 already decided.
+ * Failure: 404 missing; 403 not the assigned coordinator; 409 already decided; 400 when
+ *     approve is requested with attendance ≤ 0, a start in the past, or an end not after start.
  */
 async function decideChangeRequest(user, eventId, requestId, { approve, reason } = {}) {
   const event = await loadVisibleEventRow(user, eventId);
@@ -1394,11 +1497,13 @@ async function decideChangeRequest(user, eventId, requestId, { approve, reason }
     throw httpError(409, 'This change request has already been decided', 'ALREADY_DECIDED');
   }
 
-  const now = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
   const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
   const decided = approve === true || approve === 'true';
 
   if (decided) {
+    assertRequestedValuesApprovable(request, now);
     const eventPatch = proposedEventPatch(request, event);
     // Bypass updateEvent so Confirmed SIGNIFICANT_FIELDS stay locked to direct edits
     // but an approved change request can still apply date/time/attendance/requirements.
@@ -1408,9 +1513,9 @@ async function decideChangeRequest(user, eventId, requestId, { approve, reason }
   const crPatch = {
     status: decided ? CHANGE_REQUEST_STATUS.APPROVED : CHANGE_REQUEST_STATUS.REJECTED,
     decided_by: user.id,
-    decided_at: now,
+    decided_at: nowIso,
     decision_reason: trimmedReason || null,
-    updated_at: now,
+    updated_at: nowIso,
   };
   const updated = await updateById('event_change_requests', request.id, crPatch);
   await writeAudit(
@@ -1418,8 +1523,17 @@ async function decideChangeRequest(user, eventId, requestId, { approve, reason }
     decided ? 'CHANGE_REQUEST_APPROVED' : 'CHANGE_REQUEST_REJECTED',
     'event_change_request',
     request.id,
-    { eventId: event.id, reason: trimmedReason || null }
+    decided
+      ? {
+        eventId: event.id,
+        reason: trimmedReason || null,
+        decidedBy: user.id,
+        decidedAt: nowIso,
+        fields: approvedChangeAuditFields(request, event),
+      }
+      : { eventId: event.id, reason: trimmedReason || null }
   );
+  await notifyChangeRequestDecision(event, decided, trimmedReason);
   return mapChangeRequest(updated || { ...request, ...crPatch });
 }
 

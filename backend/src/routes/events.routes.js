@@ -60,7 +60,8 @@ router.post('/:id/clarification/respond', controller.respondClarification);
 router.get('/:id/history', controller.history);
 router.post('/:id/reassign', requireRole(ROLES.EVENT_COORDINATOR), controller.requestReassign);
 router.post('/:id/reassign/accept', requireRole(ROLES.EVENT_COORDINATOR), controller.acceptReassign);
-// SCRUM-34 / SCRUM-35: organiser change requests; assigned coordinator approves or rejects.
+// SCRUM-34 / SCRUM-35 / SCRUM-69: organiser change requests; assigned coordinator
+// approves (applies valid fields, notifies organiser) or rejects (event unchanged, notifies).
 router.get('/:id/change-requests', controller.listChangeRequests);
 router.post(
   '/:id/change-requests',
