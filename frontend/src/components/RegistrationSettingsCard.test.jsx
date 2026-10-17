@@ -10,6 +10,9 @@ import RegistrationSettingsCard from './RegistrationSettingsCard';
 const confirmedEvent = {
   id: 3,
   status: 'CONFIRMED',
+  startAt: '2026-11-12T09:00:00.000Z',
+  endAt: '2026-11-12T13:00:00.000Z',
+  expectedAttendance: 40,
   registrationOpen: false,
   registrationOpensAt: null,
   registrationClosesAt: null,
@@ -89,11 +92,40 @@ describe('SCRUM-63 RegistrationSettingsCard', () => {
   it('US63-F05: sends only the new close date when capacity is left empty', async () => {
     const onRun = jest.fn();
     render(<RegistrationSettingsCard event={enabledEvent} onRun={onRun} />);
-    await userEvent.type(screen.getByLabelText('New close date and time (later only)'), '2026-11-10T09:00');
+    await userEvent.type(screen.getByLabelText('New close date and time (after registration opens)'), '2026-11-10T09:00');
     await userEvent.click(screen.getByRole('button', { name: 'Save registration changes' }));
 
     expect(onRun.mock.calls[0][0].body).toEqual({
       closesAt: new Date('2026-11-10T09:00').toISOString(),
     });
+  });
+
+  /*
+   * AC: SCRUM-63 AC3, AC4 (review on PR #28)
+   * Scenario: The Coordinator fills in the form; the event's date, time and expected attendance are shown.
+   * Expected: both cards show the event start, end and expected attendance with the rule next to it.
+   */
+  it.each([
+    ['before registration is enabled', confirmedEvent],
+    ['after registration is enabled', enabledEvent],
+  ])('US63-F09: shows the event date, time and expected attendance %s', (_label, ev) => {
+    render(<RegistrationSettingsCard event={ev} onRun={jest.fn()} />);
+    const start = new Date(ev.startAt).toLocaleString();
+    expect(screen.getAllByText((_text, el) => el.textContent.includes(`Event: ${start}`)).length).toBeGreaterThan(0);
+    expect(screen.getByText('40 (maximum capacity cannot be higher)')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['before registration is enabled', confirmedEvent],
+    ['after registration is enabled', enabledEvent],
+  ])('US63-F10: says when the event date or attendance is not recorded %s', (_label, ev) => {
+    render(
+      <RegistrationSettingsCard
+        event={{ ...ev, startAt: null, endAt: null, expectedAttendance: null }}
+        onRun={jest.fn()}
+      />
+    );
+    expect(screen.getByText(/Date not set/)).toBeInTheDocument();
+    expect(screen.getByText('Not recorded')).toBeInTheDocument();
   });
 });

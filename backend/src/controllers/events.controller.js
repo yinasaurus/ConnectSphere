@@ -181,6 +181,51 @@ const respondClarification = asyncHandler(async (req, res) => {
   res.json({ event });
 });
 
+/**
+ * Purpose: GET /api/events/:id/change-requests for the owner organiser and assigned coordinator.
+ * AC: SCRUM-34 AC1, SCRUM-35 AC1
+ * Inputs: authenticated user, event id. Output: `{ changeRequests }`.
+ * Failure: 404/403 from the service.
+ */
+const listChangeRequests = asyncHandler(async (req, res) => {
+  const changeRequests = await eventsService.listChangeRequests(req.user, req.params.id);
+  res.json({ changeRequests });
+});
+
+/**
+ * Purpose: POST /api/events/:id/change-requests. Organiser proposes permitted field changes.
+ * AC: SCRUM-34 AC1, AC2
+ * Inputs: body of permitted fields. Output: 201 `{ changeRequest }`.
+ * Failure: 400/403/404/409 from the service; 403 from requireRole if not an Organiser.
+ */
+const createChangeRequest = asyncHandler(async (req, res) => {
+  const changeRequest = await eventsService.createChangeRequest(
+    req.user,
+    req.params.id,
+    req.body
+  );
+  res.status(201).json({ changeRequest });
+});
+
+/**
+ * Purpose: POST /api/events/:id/change-requests/:requestId/decision. Assigned coordinator
+ * approves (applies fields onto the event) or rejects (event unchanged). The organiser is
+ * notified either way. Invalid requested values cannot be approved.
+ * AC: SCRUM-35 AC1, AC2, AC3; SCRUM-69 AC1, AC2, AC3, AC4, AC6 (AC5 waits for SCRUM-41/42)
+ * Inputs: `approve`, optional `reason`. Output: `{ changeRequest }` with the recorded decision.
+ * Failure: 400 invalid requested values on approve; 403 if not the assigned coordinator;
+ *     404/409 from the service.
+ */
+const decideChangeRequest = asyncHandler(async (req, res) => {
+  const changeRequest = await eventsService.decideChangeRequest(
+    req.user,
+    req.params.id,
+    req.params.requestId,
+    { approve: req.body.approve, reason: req.body.reason }
+  );
+  res.json({ changeRequest });
+});
+
 module.exports = {
   list,
   listUnassignedQueue,
@@ -200,4 +245,7 @@ module.exports = {
   assignCoordinator,
   requestClarification,
   respondClarification,
+  listChangeRequests,
+  createChangeRequest,
+  decideChangeRequest,
 };

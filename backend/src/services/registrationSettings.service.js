@@ -80,6 +80,44 @@ async function assertCapacityCoversRegistrations(eventId, capacity) {
 }
 
 /**
+ * Purpose: make sure the registration window fits the event: the event has not started,
+ *   the close time is still ahead, and registration closes no later than the event starts.
+ * AC: SCRUM-63 AC3 (a valid window), review on PR #28 (a window after the event saved).
+ * Inputs: the events row, the close Date being saved.
+ * Failure: 409 EVENT_STARTED; 400 CLOSE_IN_PAST; 400 CLOSES_AFTER_EVENT_START.
+ */
+function assertWindowFitsEvent(event, closesAt) {
+  const now = new Date();
+  const startsAt = event.start_at ? new Date(event.start_at) : null;
+  if (startsAt && now >= startsAt) {
+    throw httpError(409, 'This event has already started, so registration cannot be opened or changed', 'EVENT_STARTED');
+  }
+  if (closesAt <= now) {
+    throw httpError(400, 'The close date and time must be in the future', 'CLOSE_IN_PAST');
+  }
+  if (startsAt && closesAt > startsAt) {
+    throw httpError(400, 'Registration must close no later than the event starts', 'CLOSES_AFTER_EVENT_START');
+  }
+}
+
+/**
+ * Purpose: keep the maximum capacity within the event's expected attendance.
+ * AC: SCRUM-63 AC4, review on PR #28 (capacity 100 saved on a 40-person event).
+ * Input: the events row and the capacity being saved. No limit if attendance is not recorded.
+ * Failure: 400 CAPACITY_ABOVE_ATTENDANCE.
+ */
+function assertCapacityWithinAttendance(event, capacity) {
+  const expected = Number(event.expected_attendance);
+  if (expected > 0 && capacity > expected) {
+    throw httpError(
+      400,
+      `Maximum capacity cannot be more than the expected attendance of ${expected}`,
+      'CAPACITY_ABOVE_ATTENDANCE'
+    );
+  }
+}
+
+/**
  * Purpose: what the API returns after a change: just the registration settings.
  */
 function toSettings(row) {
@@ -96,7 +134,8 @@ function toSettings(row) {
  * Purpose: the assigned Coordinator opens registration for a Confirmed event with a window
  *   and a maximum capacity.
  * AC: SCRUM-63 AC1, AC2, AC3, AC4, AC6, AC7, and the agreed extra rule that registration
- *   cannot be enabled twice (changes go through changeRegistrationSettings).
+ *   cannot be enabled twice (changes go through changeRegistrationSettings). After review on
+ *   PR #28 the window must also fit the event and capacity must not exceed expected attendance.
  * Business rule: W4 — registration opens once the event is Confirmed. No check against the
  *   venue's capacity (W4: at the Organiser's discretion).
  * Inputs: user, event id, { opensAt, closesAt, capacity }.
@@ -129,11 +168,13 @@ async function enableRegistration(user, eventId, body = {}) {
   if (closesAt <= opensAt) {
     throw httpError(400, 'The close date and time must be after the open date and time', 'INVALID_WINDOW');
   }
+  assertWindowFitsEvent(event, closesAt);
 
   const capacity = parseCapacity(body.capacity);
   if (capacity === null) {
     throw httpError(400, 'Maximum capacity must be a whole number greater than zero', 'INVALID_CAPACITY');
   }
+  assertCapacityWithinAttendance(event, capacity);
   await assertCapacityCoversRegistrations(eventId, capacity);
 
   const updated = await updateById('events', eventId, {
@@ -154,12 +195,12 @@ async function enableRegistration(user, eventId, body = {}) {
 
 /**
  * Purpose: the assigned Coordinator changes registration that is already enabled: move the
- *   close date later (extension) and/or change the maximum capacity.
- * AC: SCRUM-63 AC4, AC5, AC6, AC7, and the agreed extra rules that the close cannot move
- *   earlier and the open date cannot change once enabled.
+ *   close date (earlier or later, but still after the open date) and/or change the capacity.
+ * AC: SCRUM-63 AC4, AC5, AC6, AC7, and the agreed extra rule that the open date cannot change
+ *   once enabled.
  * Inputs: user, event id, { closesAt?, capacity? }.
- * Output: the saved settings. Failure: 403/404 as above; 409 if not enabled, close moved
- *   earlier or capacity below registrations; 400 for bad values. Nothing is written on failure.
+ * Output: the saved settings. Failure: 403/404 as above; 409 if not enabled or capacity
+ *   below registrations; 400 if the close is not after the open; 400 for bad values. Nothing is written on failure.
  */
 async function changeRegistrationSettings(user, eventId, body = {}) {
   const event = await loadEventForAssignedCoordinator(user, eventId);
@@ -179,9 +220,10 @@ async function changeRegistrationSettings(user, eventId, body = {}) {
   if (body.closesAt !== undefined) {
     const closesAt = parseDateTime(body.closesAt);
     if (!closesAt) throw httpError(400, 'Close must be a valid date and time', 'INVALID_DATE');
-    if (closesAt < new Date(event.registration_closes_at)) {
-      throw httpError(409, 'The close date and time can only be moved later', 'CLOSE_EARLIER');
+    if (closesAt <= new Date(event.registration_opens_at)) {
+      throw httpError(400, 'The close date and time must be after the open date and time', 'INVALID_WINDOW');
     }
+    assertWindowFitsEvent(event, closesAt);
     patch.registration_closes_at = closesAt.toISOString();
   }
 
@@ -190,6 +232,7 @@ async function changeRegistrationSettings(user, eventId, body = {}) {
     if (capacity === null) {
       throw httpError(400, 'Maximum capacity must be a whole number greater than zero', 'INVALID_CAPACITY');
     }
+    assertCapacityWithinAttendance(event, capacity);
     await assertCapacityCoversRegistrations(eventId, capacity);
     patch.registration_capacity = capacity;
   }
