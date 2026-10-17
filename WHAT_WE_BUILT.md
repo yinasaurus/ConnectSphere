@@ -63,7 +63,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Statuses (SCRUM-5): Draft → Submitted → Under Review → Approved → Planning → Awaiting Safety Check → Preparation → Confirmed → Completed, plus Cancelled / Rejected. Anything else is 400 | `constants/statuses.js`, `statusMachine.js` |
 | Rejecting (from Submitted / Under Review) needs a reason | `changeStatus` |
 | Awaiting Safety Check needs every active venue booking approved and all equipment requests reserved | `isReadyForSafetyCheck` |
-| Preparation only after the Safety Officer approves the safety check (W7 #6) | `changeStatus` refuses it until SCRUM-55/56 |
+| Safety review (SCRUM-55 / SCRUM-56, W7 #6): Safety Officer sees only **Awaiting Safety Check** events whose active venue bookings are approved and requested equipment is reserved; opens attendance, venue capacity/layouts, accessibility and equipment; records approve / reject / request-changes (reject and request-changes need a reason; request-changes needs at least one selected arrangement). Approve → **Preparation**; reject or request-changes → **Planning**. Outcome is visible to the event's Organiser and assigned Coordinator only. Non-SO cannot open or record (403). | `safety_checks`; `GET /api/events/safety-queue`; `GET/POST /api/events/:id/safety-check` → SafetyQueue / SafetyCheck |
 | Status changes show on the dashboard and event page within 10 s, no reload (team decision for "real time") | `LIVE_REFRESH_MS` polling |
 | Moving to Awaiting Safety Check is a coordinator action, not automatic (team decision) | "Send to safety check" button |
 | Clarification is **not** its own status (sub-state of under review) | we stay on `UNDER_REVIEW` |

@@ -41,6 +41,9 @@ export default function Layout() {
             <NavLink to="/app/events/unassigned">Unassigned queue</NavLink>
           )}
           {hasRole(ROLES.EVENT_COORDINATOR_LEAD) && <NavLink to="/app/assignments">Assignments</NavLink>}
+          {hasRole(ROLES.SAFETY_OFFICER) && (
+            <NavLink to="/app/events/safety-queue">Safety queue</NavLink>
+          )}
           <NavLink to="/app/calendar">Calendar</NavLink>
           {hasRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF) && (
             // `end` keeps Venues from also highlighting on /app/venues/availability.

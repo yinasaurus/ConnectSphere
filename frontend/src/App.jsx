@@ -18,6 +18,7 @@ import Notifications from './pages/Notifications';
 import Profile from './pages/Profile';
 import AssignmentOverview from './pages/AssignmentOverview';
 import SafetyCheck from './pages/SafetyCheck';
+import SafetyQueue from './pages/SafetyQueue';
 import { ROLES } from './constants';
 
 const requestRoles = [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR];
@@ -56,9 +57,18 @@ export default function App() {
               )}
             />
             <Route path="assignments" element={<ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR_LEAD]}><AssignmentOverview /></ProtectedRoute>} />
+            {/* SCRUM-55 AC1 / AC4: Safety Officer queue. Before events/:id so "safety-queue" is not an id. */}
+            <Route
+              path="events/safety-queue"
+              element={(
+                <ProtectedRoute allowedRoles={[ROLES.SAFETY_OFFICER]}>
+                  <SafetyQueue />
+                </ProtectedRoute>
+              )}
+            />
             {/* Keep booking requests scoped to an event and available only to coordinators. */}
             <Route path="events/:id/venue-booking" element={<ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR]}><VenueBooking /></ProtectedRoute>} />
-            {/* SCRUM-54 AC4: opening or recording a safety check is Safety Officer only. */}
+            {/* SCRUM-54 AC4 / SCRUM-55 AC4: opening or recording a safety check is Safety Officer only. */}
             <Route path="events/:id/safety-check" element={<ProtectedRoute allowedRoles={[ROLES.SAFETY_OFFICER]}><SafetyCheck /></ProtectedRoute>} />
             <Route path="events/:id" element={<EventDetail />} />
             <Route path="calendar" element={<CalendarPage />} />

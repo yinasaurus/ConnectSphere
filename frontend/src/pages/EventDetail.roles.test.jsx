@@ -70,10 +70,10 @@ describe('SCRUM-54 event page role limits', () => {
   });
 
   /*
-   * AC: SCRUM-54 AC4
-   * Scenario: A Safety Officer opens an event.
-   * Setup: Session role SAFETY_OFFICER.
-   * Expected: They see the control to open a safety check.
+   * AC: SCRUM-55 AC4 / SCRUM-54 AC4
+   * Scenario: A Safety Officer opens an event awaiting a safety check.
+   * Setup: Session role SAFETY_OFFICER; event status AWAITING_SAFETY_CHECK.
+   * Expected: They see Safety queue and Open safety check.
    * Type: normal
    */
   it('shows Open safety check to a Safety Officer', async () => {
@@ -81,9 +81,10 @@ describe('SCRUM-54 event page role limits', () => {
       user: { id: 12, roles: ['SAFETY_OFFICER'] },
       hasRole: (...roles) => roles.includes('SAFETY_OFFICER'),
     });
-    mockEvent();
+    mockEvent({ status: 'AWAITING_SAFETY_CHECK' });
     renderEvent();
-    expect(await screen.findByRole('link', { name: 'Open safety check' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Safety queue' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open safety check' })).toBeInTheDocument();
   });
 
   /*
@@ -98,9 +99,10 @@ describe('SCRUM-54 event page role limits', () => {
       user: { id: 2, roles: ['EVENT_COORDINATOR'] },
       hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
     });
-    mockEvent();
+    mockEvent({ status: 'AWAITING_SAFETY_CHECK' });
     renderEvent();
     expect(await screen.findByText('Secret Workshop')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Open safety check' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Safety queue' })).not.toBeInTheDocument();
   });
 });

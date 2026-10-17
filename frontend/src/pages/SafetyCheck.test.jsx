@@ -6,6 +6,27 @@ import SafetyCheck from './SafetyCheck';
 
 jest.mock('../api', () => ({ api: jest.fn() }));
 
+const reviewPayload = {
+  eventId: 3,
+  eventName: 'Helix Conference',
+  expectedAttendance: 120,
+  accessibilityNeeds: 'Step-free',
+  outcome: null,
+  bookings: [{
+    id: 7,
+    venueName: 'Orchid',
+    capacity: 100,
+    layouts: ['Theatre'],
+    venueAccessibility: 'Lift',
+  }],
+  equipmentRequests: [{
+    id: 21,
+    equipmentName: 'Wireless mic',
+    quantity: 2,
+    status: 'RESERVED',
+  }],
+};
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/app/events/3/safety-check']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -16,68 +37,84 @@ function renderPage() {
   );
 }
 
-describe('SCRUM-54 safety check page', () => {
+describe('SCRUM-55 / SCRUM-56 safety check page', () => {
   beforeEach(() => {
     api.mockReset();
   });
 
   /*
-   * AC: SCRUM-54 AC4
-   * Scenario: A Safety Officer opens a safety check and records an outcome.
-   * Setup: GET returns event 3; POST echoes the outcome.
-   * Expected: The form submits POST /api/events/3/safety-check with the outcome.
-   * Type: normal
+   * AC:       SCRUM-55 AC2; SCRUM-56 AC1, AC4
+   * Scenario: Safety Officer opens the review and approves without a reason.
+   * Setup:    GET returns attendance, venue capacity/layouts and equipment.
+   * Expected: Those fields are shown; POST sends outcome APPROVE.
+   * Type:     normal
    */
-  it('lets a Safety Officer record a safety-check outcome', async () => {
+  it('shows review details and lets a Safety Officer approve', async () => {
     api.mockImplementation(async (path, options = {}) => {
       if (path === '/api/events/3/safety-check' && options.method === 'POST') {
-        return { safetyCheck: { eventId: 3, outcome: 'Site cleared' } };
+        return { safetyCheck: { eventId: 3, outcome: 'APPROVED' } };
       }
-      return { safetyCheck: { eventId: 3, eventName: 'Helix Conference', outcome: null } };
+      return { safetyCheck: reviewPayload };
     });
     renderPage();
     expect(await screen.findByText('Helix Conference')).toBeInTheDocument();
+    expect(screen.getByText(/Expected attendance/i).parentElement).toHaveTextContent('120');
+    expect(screen.getByText(/Capacity 100/)).toBeInTheDocument();
+    expect(screen.getByText(/Wireless mic/)).toBeInTheDocument();
+
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText('Outcome'), 'Site cleared');
+    await user.selectOptions(screen.getByLabelText('Outcome'), 'APPROVE');
     await user.click(screen.getByRole('button', { name: 'Record outcome' }));
     expect(api).toHaveBeenCalledWith('/api/events/3/safety-check', {
       method: 'POST',
-      body: { outcome: 'Site cleared' },
+      body: { outcome: 'APPROVE', reason: '' },
     });
     expect(await screen.findByText('Safety check outcome recorded.')).toBeInTheDocument();
   });
 
   /*
-   * AC: SCRUM-54 AC4
-   * Scenario: Opening succeeds but recording is refused by the server.
-   * Setup: GET returns the check; POST returns 403.
-   * Expected: The refusal message is shown; the form remains (they already opened it).
-   * Type: error
+   * AC:       SCRUM-56 AC2, AC3
+   * Scenario: Request changes requires a reason and a selected arrangement.
+   * Setup:    GET returns one booking; user chooses request changes.
+   * Expected: Submit stays disabled until reason and checkbox are set; POST includes both.
+   * Type:     normal
    */
-  it('shows the server refusal when recording an outcome is blocked', async () => {
+  it('requires reason and an arrangement for request changes', async () => {
     api.mockImplementation(async (path, options = {}) => {
       if (options.method === 'POST') {
-        const err = new Error('You do not have access to this action');
-        err.status = 403;
-        throw err;
+        return { safetyCheck: { eventId: 3, outcome: 'REQUEST_CHANGES', reason: 'Move room' } };
       }
-      return { safetyCheck: { eventId: 3, eventName: 'Helix Conference', outcome: null } };
+      return { safetyCheck: reviewPayload };
     });
     renderPage();
     const user = userEvent.setup();
-    await user.type(await screen.findByLabelText('Outcome'), 'Site cleared');
+    await screen.findByText('Helix Conference');
+    await user.selectOptions(screen.getByLabelText('Outcome'), 'REQUEST_CHANGES');
+    expect(screen.getByRole('button', { name: 'Record outcome' })).toBeDisabled();
+
+    await user.type(screen.getByLabelText(/Reason/), 'Move room');
+    expect(screen.getByRole('button', { name: 'Record outcome' })).toBeDisabled();
+
+    await user.click(screen.getByRole('checkbox', { name: /Venue: Orchid/i }));
     await user.click(screen.getByRole('button', { name: 'Record outcome' }));
-    expect(await screen.findByText('You do not have access to this action')).toBeInTheDocument();
+    expect(api).toHaveBeenCalledWith('/api/events/3/safety-check', {
+      method: 'POST',
+      body: {
+        outcome: 'REQUEST_CHANGES',
+        reason: 'Move room',
+        affectedArrangements: [{ type: 'VENUE_BOOKING', id: 7 }],
+      },
+    });
   });
 
   /*
-   * AC: SCRUM-54 AC4, AC7
-   * Scenario: A blocked user hits the safety-check page (for example after a stale session).
-   * Setup: GET 403 with a message and no safetyCheck body.
-   * Expected: The refusal is shown and the event name is not rendered from the error.
-   * Type: error
+   * AC:       SCRUM-55 AC4
+   * Scenario: A blocked user hits the safety-check page.
+   * Setup:    GET 403 with a message and no safetyCheck body.
+   * Expected: The refusal is shown and review fields are not rendered.
+   * Type:     error
    */
-  it('shows the refusal and no extra event details when opening a safety check is blocked', async () => {
+  it('shows the refusal and no extra event details when opening is blocked', async () => {
     const err = new Error('You do not have access to this action');
     err.status = 403;
     api.mockRejectedValue(err);
