@@ -11,9 +11,116 @@ const {
 const { hasRole } = require('../middleware/auth');
 const { httpError } = require('../middleware/errorHandler');
 const { assertTransition } = require('../domain/statusMachine');
-const { writeAudit } = require('./audit.service');
+const { writeAudit, notifyUser } = require('./audit.service');
 
 const INACTIVE_BOOKING_STATUSES = [BOOKING_STATUS.REJECTED, BOOKING_STATUS.CANCELLED];
+
+/**
+ * Purpose: active user ids that hold the Safety Officer role (for readiness notices).
+ * AC: SCRUM-81 AC1, AC7 — every Safety Officer is told; inactive accounts are skipped.
+ * Inputs: none. Output: number[]. Empty when no active SO exists (callers send nothing).
+ */
+async function listActiveSafetyOfficerIds() {
+  const roleRows = await fetchMany(
+    supabase.from('user_roles').select('user_id').eq('role', ROLES.SAFETY_OFFICER)
+  );
+  const ids = [...new Set(roleRows.map((row) => row.user_id))];
+  if (!ids.length) return [];
+
+  const users = await fetchMany(
+    supabase.from('users').select('id, is_active').in('id', ids)
+  );
+  return users.filter((row) => row.is_active).map((row) => row.id);
+}
+
+/**
+ * Purpose: title/body for the notice that an event is ready for its safety check.
+ * AC: SCRUM-81 AC1 — Safety Officer is told the event is ready.
+ * Inputs: event name. Output: { title, body }. Never throws.
+ */
+function buildSafetyReadyNotice(eventName) {
+  const name = eventName || 'An event';
+  return {
+    title: 'Event ready for safety check',
+    body: `${name} is ready for its safety check. Open the Safety queue to review it.`,
+  };
+}
+
+/**
+ * Purpose: title/body for the notice Coordinator and Organiser get after an SO outcome.
+ * AC: SCRUM-81 AC3 (approve), AC4 (reject includes reason), AC5 (request-changes includes
+ *     reason and the arrangements that need changes).
+ * Inputs: stored outcome, event name, reason, affected arrangement list.
+ * Output: { title, body }. Never throws.
+ */
+function buildSafetyOutcomeNotice({ outcome, eventName, reason, affectedArrangements = [] }) {
+  const name = eventName || 'An event';
+  if (outcome === SAFETY_CHECK_OUTCOME.APPROVED) {
+    return {
+      title: 'Safety check approved',
+      body: `The safety check for ${name} was approved. The event can proceed to preparation.`,
+    };
+  }
+  if (outcome === SAFETY_CHECK_OUTCOME.REJECTED) {
+    return {
+      title: 'Safety check rejected',
+      body: `The safety check for ${name} was rejected. Reason: ${reason}`,
+    };
+  }
+  const arrangementBits = (affectedArrangements || []).map((item) => {
+    if (item.type === SAFETY_ARRANGEMENT_TYPE.VENUE_BOOKING) {
+      return `venue booking #${item.id}`;
+    }
+    if (item.type === SAFETY_ARRANGEMENT_TYPE.EQUIPMENT_REQUEST) {
+      return `equipment request #${item.id}`;
+    }
+    return `${item.type} #${item.id}`;
+  });
+  const arrangementText = arrangementBits.length
+    ? arrangementBits.join(', ')
+    : 'none listed';
+  return {
+    title: 'Safety check: changes requested',
+    body: `The safety check for ${name} requested changes. Reason: ${reason} Arrangements that need changes: ${arrangementText}.`,
+  };
+}
+
+/**
+ * Purpose: tell every active Safety Officer that an event entered Awaiting Safety Check.
+ * AC: SCRUM-81 AC1, AC6, AC7 — SO role only; called again when the event is sent again
+ *     after request-changes (AC6). AC2 is enforced by the caller: only invoke after the
+ *     ready gate has passed and the status write succeeded.
+ * Inputs: event row with id and name. Output: nothing. Missing SO accounts → no notices.
+ */
+async function notifySafetyOfficersEventReady(eventRow) {
+  if (!eventRow?.id) return;
+  const officerIds = await listActiveSafetyOfficerIds();
+  if (!officerIds.length) return;
+  const notice = buildSafetyReadyNotice(eventRow.name);
+  for (const userId of officerIds) {
+    await notifyUser(userId, 'SAFETY_CHECK_READY', notice.title, notice.body, eventRow.id);
+  }
+}
+
+/**
+ * Purpose: tell the event's assigned Coordinator and Organiser the safety-check outcome.
+ * AC: SCRUM-81 AC3–AC5, AC7 — only those two contacts; skipped when an id is null.
+ * Inputs: event row, stored outcome, reason, affected arrangements.
+ * Output: nothing.
+ */
+async function notifySafetyCheckContacts(eventRow, outcome, reason, affectedArrangements) {
+  if (!eventRow?.id) return;
+  const notice = buildSafetyOutcomeNotice({
+    outcome,
+    eventName: eventRow.name,
+    reason,
+    affectedArrangements,
+  });
+  const recipients = [eventRow.coordinator_id, eventRow.organiser_id].filter(Boolean);
+  for (const userId of recipients) {
+    await notifyUser(userId, 'SAFETY_CHECK_OUTCOME', notice.title, notice.body, eventRow.id);
+  }
+}
 
 /**
  * Purpose: refuse Lead-only functions when the session has no Lead role.
@@ -363,7 +470,7 @@ function parseAffectedArrangements(raw, bookingIds, equipmentIds) {
 
 /**
  * Purpose: Safety Officer records approve, reject, or request changes on an awaiting check.
- * AC: SCRUM-56 AC1–AC7, AC9
+ * AC: SCRUM-56 AC1–AC7, AC9; SCRUM-81 AC3–AC5, AC7 (notifies Coordinator and Organiser).
  * Business rule: W7 #6; customer Q&A 2026-10-17 — reject and request-changes both return
  *     to Planning; approve clears the event for Preparation (and later confirmation).
  * Inputs: user, event id, { outcome, reason?, affectedArrangements? }.
@@ -485,6 +592,9 @@ async function recordSafetyCheck(user, eventId, payload = {}) {
     toStatus: nextStatus,
   });
 
+  // SCRUM-81 AC3–AC5, AC7: only this event's Coordinator and Organiser get the outcome.
+  await notifySafetyCheckContacts(existing, outcome, reason || null, affected);
+
   return mapSafetyCheck(created);
 }
 
@@ -523,4 +633,9 @@ module.exports = {
   arrangementsReadyForSafetyCheck,
   canViewSafetyOutcome,
   mapSafetyCheck,
+  listActiveSafetyOfficerIds,
+  buildSafetyReadyNotice,
+  buildSafetyOutcomeNotice,
+  notifySafetyOfficersEventReady,
+  notifySafetyCheckContacts,
 };

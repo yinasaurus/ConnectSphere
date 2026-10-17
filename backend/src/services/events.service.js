@@ -690,12 +690,16 @@ function statusNotification(name, fromStatus, nextStatus, note) {
 /**
  * Purpose: approve, reject, confirm, or otherwise move an event's status.
  * Only the assigned Event Coordinator may do this; anyone else is refused and
- * the event is unchanged.
- * AC: SCRUM-54 AC5, AC7
+ * the event is unchanged. When the move is to Awaiting Safety Check, every active
+ * Safety Officer is notified after a successful write (SCRUM-81).
+ * AC: SCRUM-54 AC5, AC7; SCRUM-81 AC1, AC2, AC6, AC7 — readiness notice only after
+ *     the arrangement gate passes and the status update succeeds; sending again
+ *     after request-changes notifies SOs again; incomplete arrangements → no notice.
  * Business rule: W7 #5 — Coordinators manage only their assigned events.
  * Inputs: user, event id, next status, optional reason.
  * Output: the updated visible event.
- * Failure: 403 FORBIDDEN with no event body when the caller is not assigned.
+ * Failure: 403 FORBIDDEN with no event body when the caller is not assigned;
+ *     409 NOT_READY_FOR_SAFETY_CHECK before any SAFETY_CHECK_READY notice (AC2).
  */
 async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expectedStatuses } = {}) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
@@ -749,6 +753,7 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
     patch.rejection_reason = note;
   }
   // SCRUM-5 AC6: every active venue booking approved, and any requested equipment reserved.
+  // SCRUM-81 AC2: refuse before any readiness notice is sent when arrangements are incomplete.
   if (nextStatus === EVENT_STATUS.AWAITING_SAFETY_CHECK) {
     const ready = await isReadyForSafetyCheck(existing.id);
     if (!ready.ok) {
@@ -773,6 +778,13 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
   if (existing.organiser_id) {
     const { title, body } = statusNotification(existing.name, existing.status, nextStatus, note);
     await notifyUser(existing.organiser_id, 'EVENT_STATUS_CHANGED', title, body, id);
+  }
+
+  // SCRUM-81 AC1, AC6, AC7: after a successful Send to safety check, every active SO is told.
+  // AC6: sending again after request-changes hits this path a second time.
+  if (nextStatus === EVENT_STATUS.AWAITING_SAFETY_CHECK) {
+    const accessService = require('./access.service');
+    await accessService.notifySafetyOfficersEventReady(existing);
   }
 
   return getEvent(user, id);
