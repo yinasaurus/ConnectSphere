@@ -460,6 +460,42 @@ describe('SCRUM-56 record safety outcome', () => {
   });
 
   /*
+   * AC:       SCRUM-56 AC3
+   * Scenario: Request changes omits the arrangement id.
+   * Setup:    Awaiting event; VENUE_BOOKING entry with null id.
+   * Expected: 400 VALIDATION_ERROR; nothing written.
+   * Type:     error
+   */
+  it('refuses request changes when an arrangement has no id', async () => {
+    await expect(
+      access.recordSafetyCheck(safetyOfficer, 3, {
+        outcome: 'REQUEST_CHANGES',
+        reason: 'Need changes',
+        affectedArrangements: [{ type: 'VENUE_BOOKING', id: null }],
+      })
+    ).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(tables.safety_checks).toHaveLength(0);
+  });
+
+  /*
+   * AC:       SCRUM-56 AC3
+   * Scenario: Request changes names an equipment request that is not on this event.
+   * Setup:    Awaiting event; EQUIPMENT_REQUEST id 999 (unknown).
+   * Expected: 400 VALIDATION_ERROR; nothing written.
+   * Type:     error
+   */
+  it('refuses request changes for an equipment request that is not on the event', async () => {
+    await expect(
+      access.recordSafetyCheck(safetyOfficer, 3, {
+        outcome: 'REQUEST_CHANGES',
+        reason: 'Wrong kit',
+        affectedArrangements: [{ type: 'EQUIPMENT_REQUEST', id: 999 }],
+      })
+    ).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(tables.safety_checks).toHaveLength(0);
+  });
+
+  /*
    * AC:       SCRUM-56 AC5, AC7
    * Scenario: Second outcome after reject already moved the event to Planning.
    * Setup:    First REJECT succeeds; second APPROVE attempted on the same event.
