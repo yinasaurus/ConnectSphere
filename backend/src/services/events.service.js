@@ -749,6 +749,7 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
     patch.rejection_reason = note;
   }
   // SCRUM-5 AC6: every active venue booking approved, and any requested equipment reserved.
+  // SCRUM-81 AC2: refuse before any readiness notice is sent when arrangements are incomplete.
   if (nextStatus === EVENT_STATUS.AWAITING_SAFETY_CHECK) {
     const ready = await isReadyForSafetyCheck(existing.id);
     if (!ready.ok) {
@@ -773,6 +774,13 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
   if (existing.organiser_id) {
     const { title, body } = statusNotification(existing.name, existing.status, nextStatus, note);
     await notifyUser(existing.organiser_id, 'EVENT_STATUS_CHANGED', title, body, id);
+  }
+
+  // SCRUM-81 AC1, AC6, AC7: after a successful Send to safety check, every active SO is told.
+  // AC6: sending again after request-changes hits this path a second time.
+  if (nextStatus === EVENT_STATUS.AWAITING_SAFETY_CHECK) {
+    const accessService = require('./access.service');
+    await accessService.notifySafetyOfficersEventReady(existing);
   }
 
   return getEvent(user, id);
