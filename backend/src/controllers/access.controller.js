@@ -32,11 +32,11 @@ const openSafetyCheck = asyncHandler(async (req, res) => {
   res.json({ safetyCheck });
 });
 
-/**
+/*
  * Purpose: HTTP wrapper for recording a safety-check outcome.
- * AC: SCRUM-54 AC4
- * Inputs: authenticated request, event id, `{ outcome }`.
- * Output: `{ safetyCheck }`. Failure: 400/403/404 from the service.
+ * AC: SCRUM-54 AC4; SCRUM-73 (safety check integration)
+ * Inputs: authenticated request, event id, `{ outcome: string }`.
+ * Output: `{ safetyCheck }`. Failure: 400/403/404/409 from the service.
  */
 const recordSafetyCheck = asyncHandler(async (req, res) => {
   const safetyCheck = await accessService.recordSafetyCheck(

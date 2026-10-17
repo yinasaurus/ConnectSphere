@@ -715,12 +715,14 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
     throw httpError(400, REJECTION_REASON_MESSAGE, 'VALIDATION_ERROR', { fields: ['reason'] });
   }
 
-  // SCRUM-5 AC7: the safety check itself belongs to SCRUM-55/56 (not built yet), so this
-  // always refuses for now rather than silently allowing preparation to start unchecked.
+  // SCRUM-5 AC7: the safety check itself belongs to SCRUM-55/56 (not built yet)
+  // SCRUM-73: Safety Officer approval is handled through access.service.recordSafetyCheck.
+  // The coordinator cannot directly move an event to PREPARATION; it must go through
+  // the safety check workflow (AWAITING_SAFETY_CHECK → Safety Officer approval → PREPARATION).
   if (nextStatus === EVENT_STATUS.PREPARATION) {
     throw httpError(
       409,
-      'The Safety Officer must approve the safety check before preparation can start',
+      'The Safety Officer must approve the safety check before preparation can start.',
       'SAFETY_CHECK_NOT_APPROVED'
     );
   }
@@ -741,6 +743,7 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
       throw httpError(409, ready.message, 'NOT_READY_FOR_SAFETY_CHECK');
     }
   }
+  // SCRUM-73: confirmation checks all arrangements are complete
   if (nextStatus === EVENT_STATUS.CONFIRMED) {
     const ready = await isReadyToConfirm(existing);
     if (!ready.ok) {
@@ -764,17 +767,103 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
   return getEvent(user, id);
 }
 
+/*
+ * Purpose: verify that an event meets all requirements for confirmation.
+ * AC: SCRUM-73 AC2–AC7 — only Preparation events with approved bookings, reserved equipment,
+ *     and no flags requiring coordinator attention can be confirmed. The Safety Officer
+ *     check (SCRUM-56) is a prerequisite for reaching Preparation status, so this
+ *     check does not re-validate the safety check itself.
+ * Inputs: event row (snake_case). Output: { ok: true/false, message: string }. Failure: none.
+ */
 async function isReadyToConfirm(event) {
-  const booking = await fetchOne(
+  // AC2: only Preparation events can be confirmed — safety check must have been
+  // approved first, which moves the event from AWAITING_SAFETY_CHECK to PREPARATION.
+  if (event.status !== EVENT_STATUS.PREPARATION) {
+    return { ok: false, message: 'Only events in Preparation status can be confirmed' };
+  }
+
+  // AC3: must have at least one venue booking that is not cancelled
+  const allBookings = await fetchMany(
     supabase
       .from('venue_bookings')
-      .select('id')
+      .select('id, status')
       .eq('event_id', event.id)
-      .eq('status', 'APPROVED')
   );
-  if (!booking) {
-    return { ok: false, message: 'A venue booking must be approved before confirmation' };
+
+  const activeBookings = allBookings.filter(
+    (booking) => booking.status !== BOOKING_STATUS.CANCELLED
+  );
+
+  if (activeBookings.length === 0) {
+    return { ok: false, message: 'Event must have at least one venue booking that is not cancelled' };
   }
+
+  // AC4: all non-cancelled bookings must be approved
+  const hasUnapprovedBooking = activeBookings.some(
+    (booking) => booking.status !== BOOKING_STATUS.APPROVED
+  );
+
+  if (hasUnapprovedBooking) {
+    return { ok: false, message: 'All venue bookings that are not cancelled must be approved' };
+  }
+
+  // AC6: no booking or equipment can be marked as needing review or needing alternative
+  // Check venue bookings for decision_reason or alternative_suggestion indicating issues
+  const bookingsWithIssues = await fetchMany(
+    supabase
+      .from('venue_bookings')
+      .select('id, status, decision_reason, alternative_suggestion')
+      .eq('event_id', event.id)
+      .neq('status', BOOKING_STATUS.CANCELLED)
+  );
+
+  const hasBookingIssues = bookingsWithIssues.some(
+    (booking) => 
+      (booking.decision_reason && booking.decision_reason.trim().length > 0) ||
+      (booking.alternative_suggestion && booking.alternative_suggestion.trim().length > 0)
+  );
+
+  if (hasBookingIssues) {
+    return { 
+      ok: false, 
+      message: 'Venue bookings marked as needing review or alternative arrangements must be cleared before confirmation' 
+    };
+  }
+
+  // AC5 & AC7: check equipment if any requested
+  const equipmentRequests = await fetchMany(
+    supabase
+      .from('equipment_requests')
+      .select('id, status, decision_reason')
+      .eq('event_id', event.id)
+  );
+
+  if (equipmentRequests.length > 0) {
+    // AC5: all requested equipment must be reserved
+    const hasUnreservedEquipment = equipmentRequests.some(
+      (request) => request.status !== 'RESERVED'
+    );
+
+    if (hasUnreservedEquipment) {
+      return { 
+        ok: false, 
+        message: 'All requested equipment must be reserved before confirmation' 
+      };
+    }
+
+    // AC6: no equipment reservation can have outstanding issues (decision_reason indicates review needed)
+    const hasEquipmentIssues = equipmentRequests.some(
+      (request) => request.decision_reason && request.decision_reason.trim().length > 0
+    );
+
+    if (hasEquipmentIssues) {
+      return { 
+        ok: false, 
+        message: 'Equipment reservations marked as needing review must be cleared before confirmation' 
+      };
+    }
+  }
+
   return { ok: true };
 }
 
@@ -904,6 +993,74 @@ async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
   // Organiser / Coordinator notices are SCRUM-29 and SCRUM-45 — do not notify here.
 
   return getEvent(user, eventId);
+}
+
+/*
+ * Purpose: confirm an event once its essential arrangements are in place.
+ * AC: SCRUM-73 AC1–AC8 — only the assigned Coordinator can confirm a Preparation event
+ *     that has approved venue bookings, reserved equipment, and no outstanding issues.
+ *     The Safety Officer check (SCRUM-56) is a mandatory prerequisite; the event reaches
+ *     Preparation only after the Safety Officer approves, so confirming implicitly
+ *     means the safety check already passed.
+ * Business rule: W4 — Confirmed means essential arrangements completed; registration opens only for Confirmed events.
+ * Inputs: user (coordinator), event id. Output: the updated event with status CONFIRMED.
+ * Failure: 403 if not the assigned coordinator; 404 if event not found; 409 if not ready to confirm.
+ */
+async function confirmEvent(user, id) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
+    throw httpError(403, 'Only coordinators can confirm events', 'FORBIDDEN');
+  }
+
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+
+  // AC1: only the assigned coordinator can confirm
+  if (existing.coordinator_id !== user.id) {
+    throw httpError(403, 'Only the assigned coordinator can confirm this event', 'FORBIDDEN');
+  }
+
+  // AC2: only Preparation events can be confirmed — the event must have passed the
+  // mandatory Safety Officer check (SCRUM-56) before the coordinator can confirm it.
+  // Workflow: PLANNING → AWAITING_SAFETY_CHECK → (Safety Officer approves) → PREPARATION
+  //           → (Coordinator confirms) → CONFIRMED
+  if (existing.status !== EVENT_STATUS.PREPARATION) {
+    throw httpError(409, 'Only events in Preparation status can be confirmed', 'INVALID_STATUS');
+  }
+
+  // AC3-7: verify all confirmation requirements
+  const ready = await isReadyToConfirm(existing);
+  if (!ready.ok) {
+    throw httpError(409, ready.message, 'NOT_READY_TO_CONFIRM');
+  }
+
+  // Check valid transition
+  assertTransition(existing.status, EVENT_STATUS.CONFIRMED);
+
+  // AC8: update status to CONFIRMED
+  await updateById('events', id, {
+    status: EVENT_STATUS.CONFIRMED,
+    sub_state: null,
+    updated_at: new Date().toISOString(),
+  });
+
+  await writeStatusHistory(id, user.id, existing.status, EVENT_STATUS.CONFIRMED, 'Event confirmed');
+  await writeAudit(user.id, 'EVENT_CONFIRMED', 'event', id, {
+    from: existing.status,
+    to: EVENT_STATUS.CONFIRMED,
+  });
+
+  // Notify the organiser
+  if (existing.organiser_id) {
+    await notifyUser(
+      existing.organiser_id,
+      'EVENT_CONFIRMED',
+      'Event confirmed',
+      `Your event "${existing.name}" has been confirmed. Registration can now be opened.`,
+      id
+    );
+  }
+
+  return getEvent(user, id);
 }
 
 async function requestCoordinatorChange(user, eventId, newCoordinatorId) {
@@ -1118,6 +1275,7 @@ module.exports = {
   openForReview,
   decideEvent,
   changeStatus,
+  confirmEvent,
   requestClarification,
   respondClarification,
   requestCoordinatorChange,
