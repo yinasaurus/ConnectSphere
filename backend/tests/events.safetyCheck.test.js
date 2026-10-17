@@ -222,6 +222,7 @@ describe('SCRUM-55 safety queue and open', () => {
   /*
    * AC:       SCRUM-55 AC4
    * Scenario: A Coordinator opens the safety queue.
+   * Setup:    Coordinator-only session; no Safety Officer role.
    * Expected: 403 and no event list leak from the service throw.
    * Type:     error
    */
@@ -325,6 +326,7 @@ describe('SCRUM-56 record safety outcome', () => {
   /*
    * AC:       SCRUM-56 AC1, AC2, AC7
    * Scenario: Reject with a reason.
+   * Setup:    Awaiting event; outcome REJECT with a non-empty reason.
    * Expected: Event returns to PLANNING; cannot stay awaiting.
    * Type:     normal
    */
@@ -340,6 +342,7 @@ describe('SCRUM-56 record safety outcome', () => {
   /*
    * AC:       SCRUM-56 AC2
    * Scenario: Reject without a reason.
+   * Setup:    Awaiting event; outcome REJECT and empty/missing reason.
    * Expected: 400; event and safety_checks unchanged.
    * Type:     error
    */
@@ -352,8 +355,42 @@ describe('SCRUM-56 record safety outcome', () => {
   });
 
   /*
+   * AC:       SCRUM-56 AC2
+   * Scenario: Request changes without a reason.
+   * Setup:    Awaiting event; REQUEST_CHANGES with an arrangement but blank reason.
+   * Expected: 400 VALIDATION_ERROR; nothing written.
+   * Type:     error
+   */
+  it('refuses request changes without a reason', async () => {
+    await expect(
+      access.recordSafetyCheck(safetyOfficer, 3, {
+        outcome: 'REQUEST_CHANGES',
+        reason: '   ',
+        affectedArrangements: [{ type: 'VENUE_BOOKING', id: 7 }],
+      })
+    ).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(tables.safety_checks).toHaveLength(0);
+  });
+
+  /*
+   * AC:       SCRUM-56 AC1
+   * Scenario: Outcome value is not approve, reject, or request changes.
+   * Setup:    Awaiting event; outcome string "MAYBE".
+   * Expected: 400 VALIDATION_ERROR; event unchanged.
+   * Type:     error
+   */
+  it('refuses an unknown safety-check outcome', async () => {
+    await expect(
+      access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'MAYBE' })
+    ).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(event.status).toBe('AWAITING_SAFETY_CHECK');
+    expect(tables.safety_checks).toHaveLength(0);
+  });
+
+  /*
    * AC:       SCRUM-56 AC1, AC2, AC3, AC7
    * Scenario: Request changes with reason and one venue booking selected.
+   * Setup:    Awaiting event; REQUEST_CHANGES with reason and booking id 7.
    * Expected: REQUEST_CHANGES stored with affected arrangement; event → PLANNING.
    * Type:     normal
    */
@@ -371,6 +408,7 @@ describe('SCRUM-56 record safety outcome', () => {
   /*
    * AC:       SCRUM-56 AC3
    * Scenario: Request changes with reason but no arrangements.
+   * Setup:    Awaiting event; REQUEST_CHANGES with reason and empty affectedArrangements.
    * Expected: 400; nothing written.
    * Type:     error
    */
@@ -386,8 +424,45 @@ describe('SCRUM-56 record safety outcome', () => {
   });
 
   /*
+   * AC:       SCRUM-56 AC3
+   * Scenario: Request changes names a booking that is not on this event.
+   * Setup:    Awaiting event; affected arrangement id 999 (unknown).
+   * Expected: 400 VALIDATION_ERROR; nothing written.
+   * Type:     error
+   */
+  it('refuses request changes for a venue booking that is not on the event', async () => {
+    await expect(
+      access.recordSafetyCheck(safetyOfficer, 3, {
+        outcome: 'REQUEST_CHANGES',
+        reason: 'Wrong room',
+        affectedArrangements: [{ type: 'VENUE_BOOKING', id: 999 }],
+      })
+    ).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(tables.safety_checks).toHaveLength(0);
+  });
+
+  /*
+   * AC:       SCRUM-56 AC3
+   * Scenario: Request changes uses an unknown arrangement type.
+   * Setup:    Awaiting event; type "STAGE" which is not venue or equipment.
+   * Expected: 400 VALIDATION_ERROR; nothing written.
+   * Type:     error
+   */
+  it('refuses request changes with an unknown arrangement type', async () => {
+    await expect(
+      access.recordSafetyCheck(safetyOfficer, 3, {
+        outcome: 'REQUEST_CHANGES',
+        reason: 'Need changes',
+        affectedArrangements: [{ type: 'STAGE', id: 7 }],
+      })
+    ).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(tables.safety_checks).toHaveLength(0);
+  });
+
+  /*
    * AC:       SCRUM-56 AC5, AC7
    * Scenario: Second outcome after reject already moved the event to Planning.
+   * Setup:    First REJECT succeeds; second APPROVE attempted on the same event.
    * Expected: 409 INVALID_STATUS; no second safety_checks row.
    * Type:     conflict
    */
@@ -405,6 +480,7 @@ describe('SCRUM-56 record safety outcome', () => {
   /*
    * AC:       SCRUM-56 AC9
    * Scenario: Non-SO records an outcome.
+   * Setup:    Coordinator-only user; APPROVE payload.
    * Expected: 403; event unchanged.
    * Type:     error
    */
@@ -417,8 +493,24 @@ describe('SCRUM-56 record safety outcome', () => {
   });
 
   /*
+   * AC:       SCRUM-55 AC1; SCRUM-56 record gate
+   * Scenario: Record while awaiting but arrangements slipped (pending booking).
+   * Setup:    Status AWAITING_SAFETY_CHECK; booking PENDING.
+   * Expected: 409 NOT_READY_FOR_SAFETY_CHECK; no safety_checks row.
+   * Type:     error
+   */
+  it('refuses to record when arrangements are no longer ready', async () => {
+    tables.venue_bookings[0].status = 'PENDING';
+    await expect(
+      access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE' })
+    ).rejects.toMatchObject({ status: 409, code: 'NOT_READY_FOR_SAFETY_CHECK' });
+    expect(tables.safety_checks).toHaveLength(0);
+  });
+
+  /*
    * AC:       SCRUM-55 AC3; SCRUM-56 AC6
    * Scenario: Coordinator tries to move Awaiting → Preparation without an approved check.
+   * Setup:    Awaiting event; no safety_checks row.
    * Expected: 409 SAFETY_CHECK_NOT_APPROVED; status unchanged.
    * Type:     error
    */
@@ -427,6 +519,28 @@ describe('SCRUM-56 record safety outcome', () => {
       events.changeStatus(coordinator, 3, 'PREPARATION')
     ).rejects.toMatchObject({ status: 409, code: 'SAFETY_CHECK_NOT_APPROVED' });
     expect(event.status).toBe('AWAITING_SAFETY_CHECK');
+  });
+
+  /*
+   * AC:       SCRUM-55 AC3; SCRUM-56 AC6
+   * Scenario: Coordinator moves Awaiting → Preparation after an approved check exists.
+   * Setup:    Approved safety_checks row seeded while status stays AWAITING so changeStatus
+   *           owns the transition (recordSafetyCheck would already move to PREPARATION).
+   * Expected: Status becomes PREPARATION.
+   * Type:     normal
+   */
+  it('allows Preparation once an approved safety check exists', async () => {
+    tables.safety_checks.push({
+      id: 1,
+      event_id: 3,
+      outcome: 'APPROVED',
+      reason: null,
+      affected_arrangements: [],
+      decided_by: 12,
+      decided_at: '2026-10-17T00:00:00.000Z',
+    });
+    await events.changeStatus(coordinator, 3, 'PREPARATION');
+    expect(event.status).toBe('PREPARATION');
   });
 
   /*
@@ -488,6 +602,7 @@ describe('SCRUM-55/56 HTTP routes', () => {
   /*
    * AC:       SCRUM-55 AC4
    * Scenario: Coordinator GETs the safety queue over HTTP.
+   * Setup:    Session role EVENT_COORDINATOR (auth mocks replace the table doubles).
    * Expected: 403 with no events body.
    * Type:     error
    */
@@ -500,4 +615,60 @@ describe('SCRUM-55/56 HTTP routes', () => {
     expect(res.body).not.toHaveProperty('events');
   });
 
+  /*
+   * AC:       SCRUM-55 AC1, AC4
+   * Scenario: Safety Officer GETs the safety queue over HTTP.
+   * Setup:    JWT for user 12; table-backed mocks include the awaiting Workshop event.
+   * Expected: 200 with the awaiting event in `{ events }`.
+   * Type:     normal
+   */
+  it('returns the awaiting queue for a Safety Officer over HTTP', async () => {
+    const res = await request(app)
+      .get('/api/events/safety-queue')
+      .set('Cookie', `${env.sessionCookieName}=${soToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.events).toEqual([
+      expect.objectContaining({ id: 3, name: 'Workshop', status: 'AWAITING_SAFETY_CHECK' }),
+    ]);
+  });
+
+  /*
+   * AC:       SCRUM-55 AC2, AC4
+   * Scenario: Safety Officer opens a safety check over HTTP.
+   * Setup:    JWT for user 12; event 3 awaiting with ready arrangements.
+   * Expected: 200 with attendance, venue capacity/layouts and equipment.
+   * Type:     normal
+   */
+  it('opens safety-check details for a Safety Officer over HTTP', async () => {
+    const res = await request(app)
+      .get('/api/events/3/safety-check')
+      .set('Cookie', `${env.sessionCookieName}=${soToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.safetyCheck).toEqual(expect.objectContaining({
+      eventId: 3,
+      expectedAttendance: 80,
+      accessibilityNeeds: 'Step-free access',
+    }));
+    expect(res.body.safetyCheck.bookings[0]).toEqual(expect.objectContaining({
+      capacity: 100,
+      layouts: ['Theatre', 'Classroom'],
+    }));
+  });
+
+  /*
+   * AC:       SCRUM-56 AC1, AC4, AC6
+   * Scenario: Safety Officer records approve over HTTP.
+   * Setup:    JWT for user 12; POST outcome APPROVE with no reason.
+   * Expected: 200 APPROVED; in-memory event moves to PREPARATION.
+   * Type:     normal
+   */
+  it('records an approve outcome for a Safety Officer over HTTP', async () => {
+    const res = await request(app)
+      .post('/api/events/3/safety-check')
+      .set('Cookie', `${env.sessionCookieName}=${soToken}`)
+      .send({ outcome: 'APPROVE' });
+    expect(res.status).toBe(200);
+    expect(res.body.safetyCheck.outcome).toBe('APPROVED');
+    expect(event.status).toBe('PREPARATION');
+  });
 });

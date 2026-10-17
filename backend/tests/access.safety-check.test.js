@@ -41,7 +41,6 @@ function expectNoEventLeak(res) {
 describe('SCRUM-54 / SCRUM-55 Safety Officer-only safety checks', () => {
   const app = createApp();
   const token = jwt.sign({ sub: 12 }, env.jwtSecret);
-  const safetyOfficer = { id: 12, roles: [ROLES.SAFETY_OFFICER] };
   const coordinator = { id: 2, roles: [ROLES.EVENT_COORDINATOR] };
 
   beforeEach(() => {
@@ -114,6 +113,7 @@ describe('SCRUM-54 / SCRUM-55 Safety Officer-only safety checks', () => {
   /*
    * AC: SCRUM-55 AC4
    * Scenario: A Coordinator GETs /api/events/safety-queue.
+   * Setup: Session role EVENT_COORDINATOR.
    * Expected: 403 with no events list.
    * Type: error
    */
