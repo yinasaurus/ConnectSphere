@@ -272,7 +272,14 @@ async function getEvent(user, id) {
     supabase.from('events').select(EVENT_SELECT).eq('id', id)
   );
   if (!row || !canViewEvent(user, row)) throw httpError(404, 'Event not found', 'NOT_FOUND');
-  return visibleEvent(user, row);
+  const event = visibleEvent(user, row);
+  // SCRUM-56 AC8: only the owning Organiser and assigned Coordinator see the outcome.
+  const accessService = require('./access.service');
+  const safetyCheck = await accessService.safetyOutcomeForViewer(user, row);
+  if (safetyCheck) {
+    event.safetyCheck = safetyCheck;
+  }
+  return event;
 }
 
 /**
@@ -717,14 +724,19 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
     throw httpError(400, REJECTION_REASON_MESSAGE, 'VALIDATION_ERROR', { fields: ['reason'] });
   }
 
-  // SCRUM-5 AC7: the safety check itself belongs to SCRUM-55/56 (not built yet), so this
-  // always refuses for now rather than silently allowing preparation to start unchecked.
+  // SCRUM-55 AC3 / SCRUM-56 AC6: Preparation only after an approved safety check.
+  // Approve already moves Awaiting → Preparation in access.recordSafetyCheck; a direct
+  // status POST still needs that approval on record.
   if (nextStatus === EVENT_STATUS.PREPARATION) {
-    throw httpError(
-      409,
-      'The Safety Officer must approve the safety check before preparation can start',
-      'SAFETY_CHECK_NOT_APPROVED'
-    );
+    const accessService = require('./access.service');
+    const approved = await accessService.hasApprovedSafetyCheck(existing.id);
+    if (!approved) {
+      throw httpError(
+        409,
+        'The Safety Officer must approve the safety check before preparation can start',
+        'SAFETY_CHECK_NOT_APPROVED'
+      );
+    }
   }
 
   const patch = {

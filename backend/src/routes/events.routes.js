@@ -34,10 +34,19 @@ router.post(
   validateBody(assignCoordinatorSchema),
   controller.assignCoordinator
 );
+/**
+ * Purpose: Safety Officer queue of events awaiting a safety check.
+ * AC: SCRUM-55 AC1, AC4. Registered before `/:id` so the path is not parsed as an id.
+ */
+router.get(
+  '/safety-queue',
+  requireRole(ROLES.SAFETY_OFFICER),
+  access.safetyQueue
+);
 // SCRUM-39 AC1 + AC2: no role gate here because who may see which event (and how much of it)
 // is decided per event in the service; outsiders get 404.
 router.get('/:id', controller.get);
-// AC: SCRUM-54 AC4 — only a Safety Officer may open or record a safety check.
+// AC: SCRUM-54 AC4 / SCRUM-55 AC4 / SCRUM-56 AC9 — only a Safety Officer may open or record.
 router.get('/:id/safety-check', requireRole(ROLES.SAFETY_OFFICER), access.openSafetyCheck);
 router.post('/:id/safety-check', requireRole(ROLES.SAFETY_OFFICER), access.recordSafetyCheck);
 // SCRUM-39 AC2 (booked venue): same per-event access as GET /:id; Attendees only see
