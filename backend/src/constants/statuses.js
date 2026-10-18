@@ -87,6 +87,21 @@ const CHANGE_REQUEST_FIELDS = [
   'equipmentNotes',
 ];
 
+/**
+ * SCRUM-56: Safety Officer records exactly one of these for an awaiting check.
+ * APPROVED clears the event for Preparation; REJECTED and REQUEST_CHANGES return it to Planning.
+ */
+const SAFETY_CHECK_OUTCOME = {
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  REQUEST_CHANGES: 'REQUEST_CHANGES',
+};
+
+const SAFETY_ARRANGEMENT_TYPE = {
+  VENUE_BOOKING: 'VENUE_BOOKING',
+  EQUIPMENT_REQUEST: 'EQUIPMENT_REQUEST',
+};
+
 module.exports = {
   EVENT_STATUS,
   EVENT_SUB_STATE,
@@ -98,4 +113,6 @@ module.exports = {
   REGISTRATION_STATUS,
   CHANGE_REQUEST_STATUS,
   CHANGE_REQUEST_FIELDS,
+  SAFETY_CHECK_OUTCOME,
+  SAFETY_ARRANGEMENT_TYPE,
 };

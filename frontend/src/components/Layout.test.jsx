@@ -49,6 +49,8 @@ describe('SCRUM-54 layout role recognition and nav limits', () => {
     expect(screen.getByText('Safety Officer')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Unassigned queue' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Assignments' })).not.toBeInTheDocument();
+    // SCRUM-55 AC1: Safety Officers get the safety queue nav item.
+    expect(screen.getByRole('link', { name: 'Safety queue' })).toBeInTheDocument();
   });
 
   /*
