@@ -107,6 +107,7 @@ export default function EventDetail() {
     ROLES.TECHNICAL_SUPPORT
   );
   const [event, setEvent] = useState(null);
+  const [registering, setRegistering] = useState(false);
   const [history, setHistory] = useState([]);
   const [comments, setComments] = useState([]);
   const [, setVenues] = useState([]);
@@ -197,8 +198,9 @@ export default function EventDetail() {
     setMessage('');
     setConflictModalMsg('');
     try {
-      await action();
-      setMessage('Updated.');
+      // An action can return its own success text (e.g. SCRUM-52's places left); otherwise "Updated."
+      const result = await action();
+      setMessage(typeof result === 'string' ? result : 'Updated.');
       await reload();
     } catch (err) {
       if (err.code === 'BOOKING_CONFLICT') {
@@ -685,7 +687,26 @@ export default function EventDetail() {
 
           {hasRole(ROLES.ATTENDEE) && event.status === 'CONFIRMED' && (
             <div className="card actions">
-              <button className="btn" onClick={() => run(() => api(`/api/events/${id}/registrations`, { method: 'POST' }))}>Register</button>
+              {/* SCRUM-52: the server checks the window, capacity and duplicates; the button shows when registration is enabled. */}
+              {event.registrationOpen ? (
+                <button
+                  className="btn"
+                  disabled={registering}
+                  onClick={async () => {
+                    // Disabled while the request runs so a double click cannot send two registrations.
+                    setRegistering(true);
+                    await run(async () => {
+                      const { placesLeft } = await api(`/api/events/${id}/registrations`, { method: 'POST' });
+                      return `Registered. ${placesLeft} ${placesLeft === 1 ? 'place' : 'places'} left.`;
+                    });
+                    setRegistering(false);
+                  }}
+                >
+                  {registering ? 'Registering...' : 'Register'}
+                </button>
+              ) : (
+                <p className="muted">Registration is not open for this event.</p>
+              )}
               <button className="btn ghost" onClick={() => run(() => api(`/api/events/${id}/registrations/withdraw`, { method: 'POST' }))}>Withdraw</button>
             </div>
           )}
