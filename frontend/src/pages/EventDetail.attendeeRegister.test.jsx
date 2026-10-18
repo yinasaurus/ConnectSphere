@@ -132,6 +132,27 @@ describe('SCRUM-52 Register button (event page)', () => {
   });
 
   /*
+   * AC: SCRUM-52 AC5
+   * Scenario: The Attendee double-clicks Register while the first request is still running.
+   * Expected: the button is disabled and only one registration request is sent.
+   */
+  it('US52-F06: a double click sends only one registration', async () => {
+    const calls = [];
+    let finish;
+    stubApi(eventWith(), () => new Promise((resolve) => { finish = resolve; }), calls);
+    renderEvent();
+
+    const button = await screen.findByRole('button', { name: 'Register' });
+    await userEvent.dblClick(button);
+
+    expect(screen.getByRole('button', { name: 'Registering...' })).toBeDisabled();
+    finish({ registration: { id: 99 }, placesLeft: 9 });
+    expect(await screen.findByText('Registered. 9 places left.')).toBeInTheDocument();
+    expect(calls.filter((c) => c.path === '/api/events/3/registrations')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Register' })).toBeEnabled();
+  });
+
+  /*
    * AC: SCRUM-52 AC3, SCRUM-51 AC1
    * Scenario: The event is Confirmed but registration has not been enabled.
    * Expected: no Register button, and a note that registration is not open.
@@ -162,6 +183,62 @@ describe('SCRUM-52 Register button (event page)', () => {
     expect(await screen.findByText('40 of 50')).toBeInTheDocument();
     expect(screen.getByText('Not registered')).toBeInTheDocument();
     expect(calls).toContainEqual(expect.objectContaining({ path: '/api/events/3/registration-status' }));
+  });
+
+  /*
+   * AC: SCRUM-51 AC2
+   * Scenario: The Attendee registers, then withdraws, from the card on the event page.
+   * Expected: after each action the page reloads the status, so the card shows the new status
+   *   ("Registered on ..." then "Withdrawn on ...") without a manual refresh.
+   */
+  it('US51-F11: the card shows the new status after registering and after withdrawing', async () => {
+    const calls = [];
+    const registeredAt = '2026-11-05T09:00:00.000Z';
+    const withdrawnAt = '2026-11-05T10:00:00.000Z';
+    let current = openStatus;
+    stubApi(eventWith(), () => {
+      current = { ...openStatus, placesLeft: 39, myRegistration: { status: 'REGISTERED', registeredAt, withdrawnAt: null } };
+      return Promise.resolve({ registration: { id: 99 }, placesLeft: 39 });
+    }, calls);
+    const base = api.getMockImplementation();
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/api/events/3/registration-status') {
+        calls.push({ path, ...options });
+        return Promise.resolve({ registrationStatus: current });
+      }
+      if (path === '/api/events/3/registrations/withdraw') {
+        calls.push({ path, ...options });
+        current = { ...openStatus, myRegistration: { status: 'WITHDRAWN', registeredAt, withdrawnAt } };
+        return Promise.resolve({ registration: { id: 99, status: 'WITHDRAWN' } });
+      }
+      return base(path, options);
+    });
+    renderEvent();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Register' }));
+    expect(await screen.findByText(`Registered on ${new Date(registeredAt).toLocaleString()}`)).toBeInTheDocument();
+    expect(screen.getByText('39 of 50')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Withdraw' }));
+    expect(await screen.findByText(`Withdrawn on ${new Date(withdrawnAt).toLocaleString()}`)).toBeInTheDocument();
+    expect(calls).toContainEqual(expect.objectContaining({ path: '/api/events/3/registrations/withdraw', method: 'POST' }));
+    expect(screen.getByRole('button', { name: 'Register' })).toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-51 (as an Attendee)
+   * Scenario: An Organiser (not an Attendee) opens the same event.
+   * Expected: no Registration card and no request for the Attendee's registration status.
+   */
+  it('US51-F12: a user without the Attendee role does not get the registration card', async () => {
+    const calls = [];
+    mockAuth({ id: 1, fullName: 'Olivia', roles: ['EVENT_ORGANISER'] });
+    stubApi(eventWith(), () => Promise.reject(new Error('should not be called')), calls);
+    renderEvent();
+
+    expect(await screen.findByRole('heading', { name: 'Workshop' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Registration' })).not.toBeInTheDocument();
+    expect(calls).not.toContainEqual(expect.objectContaining({ path: '/api/events/3/registration-status' }));
   });
 
   it('US51-F09: the page still opens if the registration status cannot be loaded', async () => {

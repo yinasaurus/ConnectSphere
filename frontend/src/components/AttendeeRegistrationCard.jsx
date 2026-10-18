@@ -2,6 +2,7 @@ const STATE_TEXT = {
   OPEN: 'Registration is open.',
   FULL: 'This event is full.',
   NOT_OPEN: 'Registration is not open for this event.',
+  STARTED: 'This event has already started, so registration is closed.',
 };
 
 const MY_STATUS_TEXT = {
@@ -36,9 +37,10 @@ function myRegistrationText(mine) {
  * AC: SCRUM-51 AC1 (event registration information), AC2 (own registration status);
  *   SCRUM-52 (Register button), SCRUM-53 (Withdraw button).
  * Inputs: status (from GET /api/events/:id/registration-status, or null while it can't be
- *   loaded), onRegister(), onWithdraw(). The server still checks every rule.
+ *   loaded), registering (true while a Register request is running), onRegister(), onWithdraw().
+ *   The server still checks every rule.
  */
-export default function AttendeeRegistrationCard({ status, onRegister, onWithdraw }) {
+export default function AttendeeRegistrationCard({ status, registering = false, onRegister, onWithdraw }) {
   if (!status) {
     return (
       <div className="card stack">
@@ -66,7 +68,11 @@ export default function AttendeeRegistrationCard({ status, onRegister, onWithdra
       <p><strong>Your registration:</strong> {myRegistrationText(mine)}</p>
       {(canRegister || hasActiveRegistration) && (
         <div className="actions">
-          {canRegister && <button className="btn" onClick={onRegister}>Register</button>}
+          {canRegister && (
+            <button className="btn" onClick={onRegister} disabled={registering}>
+              {registering ? 'Registering...' : 'Register'}
+            </button>
+          )}
           {hasActiveRegistration && <button className="btn ghost" onClick={onWithdraw}>Withdraw</button>}
         </div>
       )}

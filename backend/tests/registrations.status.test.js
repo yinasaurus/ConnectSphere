@@ -151,6 +151,22 @@ describe('SCRUM-51 registration status (service rules)', () => {
     expect((await service.getRegistrationStatus(attendee, 3)).state).toBe('CLOSED');
   });
 
+  /*
+   * AC: SCRUM-51 AC1
+   * Scenario: The start was moved earlier (an edit or approved change request) so the event has
+   *   started while the window is still open. Same rule as register() (US52-B17).
+   * Expected: STARTED from the start time on, even if places are left; OPEN one millisecond before.
+   * Type: boundary
+   */
+  it.each([
+    ['exactly at the start time', '2026-11-05T09:00:00.000Z', 'STARTED'],
+    ['after the start time', '2026-11-05T08:00:00.000Z', 'STARTED'],
+    ['one millisecond before the start time', '2026-11-05T09:00:00.001Z', 'OPEN'],
+  ])('US51-B12: %s it shows %s', async (_label, startAt, state) => {
+    event = openEvent({ start_at: startAt });
+    expect((await service.getRegistrationStatus(attendee, 3)).state).toBe(state);
+  });
+
   it.each([[50, 0], [51, 0]])('US51-B08: with %i of 50 taken it shows "full" and %i places left', async (taken, left) => {
     db.fetchCount.mockResolvedValue(taken);
     const result = await service.getRegistrationStatus(attendee, 3);

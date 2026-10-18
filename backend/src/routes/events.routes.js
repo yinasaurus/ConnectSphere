@@ -34,10 +34,19 @@ router.post(
   validateBody(assignCoordinatorSchema),
   controller.assignCoordinator
 );
+/**
+ * Purpose: Safety Officer queue of events awaiting a safety check.
+ * AC: SCRUM-55 AC1, AC4. Registered before `/:id` so the path is not parsed as an id.
+ */
+router.get(
+  '/safety-queue',
+  requireRole(ROLES.SAFETY_OFFICER),
+  access.safetyQueue
+);
 // SCRUM-39 AC1 + AC2: no role gate here because who may see which event (and how much of it)
 // is decided per event in the service; outsiders get 404.
 router.get('/:id', controller.get);
-// AC: SCRUM-54 AC4 — only a Safety Officer may open or record a safety check.
+// AC: SCRUM-54 AC4 / SCRUM-55 AC4 / SCRUM-56 AC9 — only a Safety Officer may open or record.
 router.get('/:id/safety-check', requireRole(ROLES.SAFETY_OFFICER), access.openSafetyCheck);
 router.post('/:id/safety-check', requireRole(ROLES.SAFETY_OFFICER), access.recordSafetyCheck);
 // SCRUM-39 AC2 (booked venue): same per-event access as GET /:id; Attendees only see
@@ -60,6 +69,19 @@ router.post('/:id/clarification/respond', controller.respondClarification);
 router.get('/:id/history', controller.history);
 router.post('/:id/reassign', requireRole(ROLES.EVENT_COORDINATOR), controller.requestReassign);
 router.post('/:id/reassign/accept', requireRole(ROLES.EVENT_COORDINATOR), controller.acceptReassign);
+// SCRUM-34 / SCRUM-35 / SCRUM-69: organiser change requests; assigned coordinator
+// approves (applies valid fields, notifies organiser) or rejects (event unchanged, notifies).
+router.get('/:id/change-requests', controller.listChangeRequests);
+router.post(
+  '/:id/change-requests',
+  requireRole(ROLES.EVENT_ORGANISER),
+  controller.createChangeRequest
+);
+router.post(
+  '/:id/change-requests/:requestId/decision',
+  requireRole(ROLES.EVENT_COORDINATOR),
+  controller.decideChangeRequest
+);
 
 // SCRUM-63: only Coordinators reach these; the service also checks it is the assigned one (AC7).
 router.post('/:id/registration/enable', requireRole(ROLES.EVENT_COORDINATOR), registrations.enable);

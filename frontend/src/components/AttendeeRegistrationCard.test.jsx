@@ -96,6 +96,7 @@ describe('SCRUM-51 AttendeeRegistrationCard', () => {
     ['NOT_YET_OPEN', `Registration opens on ${new Date(OPENS).toLocaleString()}.`],
     ['CLOSED', `Registration closed on ${new Date(CLOSES).toLocaleString()}.`],
     ['FULL', 'This event is full.'],
+    ['STARTED', 'This event has already started, so registration is closed.'],
   ])('US51-F05: when registration is %s it explains why and hides Register', (state, text) => {
     renderCard(status({ state, placesLeft: state === 'FULL' ? 0 : 40 }));
     expect(screen.getByText(text)).toBeInTheDocument();
@@ -107,6 +108,16 @@ describe('SCRUM-51 AttendeeRegistrationCard', () => {
     expect(screen.getByText('Registration is not open for this event.')).toBeInTheDocument();
     expect(screen.queryByText('Places left:')).not.toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-52 AC5
+   * Scenario: A Register request is already running.
+   * Expected: the button reads "Registering..." and is disabled, so it cannot be pressed twice.
+   */
+  it('US51-F10: the Register button is disabled while registering', () => {
+    render(<AttendeeRegistrationCard status={status()} registering onRegister={jest.fn()} onWithdraw={jest.fn()} />);
+    expect(screen.getByRole('button', { name: 'Registering...' })).toBeDisabled();
   });
 
   it('US51-F07: says so when the registration details cannot be loaded', () => {

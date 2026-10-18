@@ -39,12 +39,14 @@ async function listForEvent(user, eventId) {
 /**
  * Purpose: an Attendee registers for a Confirmed event while its registration window is open.
  * AC: SCRUM-52 AC1 (register), AC2 (each registration takes one place), AC3 (not open: wrong
- *   status, not enabled, before the window or after it), AC4 (full), AC5 (no duplicate).
+ *   status, not enabled, before the window or after it, or the event has started), AC4 (full),
+ *   AC5 (no duplicate).
  * Business rule: hard capacity cap. Going over capacity is at the Organiser's discretion
  *   outside the system (W4), so a full event refuses rather than waitlisting.
  * Inputs: user, event id.
  * Output: { registration, placesLeft }. Failure: 403 not an Attendee; 404 no event;
- *   409 NOT_OPEN / NOT_YET_OPEN / REGISTRATION_CLOSED / ALREADY_REGISTERED / EVENT_FULL.
+ *   409 NOT_OPEN / NOT_YET_OPEN / REGISTRATION_CLOSED / EVENT_STARTED / ALREADY_REGISTERED /
+ *   EVENT_FULL.
  *   On failure nothing is written.
  */
 async function register(user, eventId) {
@@ -64,6 +66,11 @@ async function register(user, eventId) {
   }
   if (now >= new Date(event.registration_closes_at)) {
     throw httpError(409, 'Registration for this event has closed', 'REGISTRATION_CLOSED');
+  }
+  // SCRUM-63 makes the window close by the event start, but an edit or an approved change
+  // request (SCRUM-35) can move the start earlier afterwards, so check the start here too.
+  if (event.start_at && now >= new Date(event.start_at)) {
+    throw httpError(409, 'This event has already started', 'EVENT_STARTED');
   }
 
   const existingRows = await fetchMany(
@@ -96,14 +103,16 @@ async function register(user, eventId) {
 /**
  * Purpose: where registration stands for one event, as one word the page can explain.
  * AC: SCRUM-51 AC1 (eligibility to register). Same rules as register() so the page and the
- *   server agree: not enabled, before the window, after it, full, or open.
+ *   server agree: not enabled, before the window, after it, the event has started, full, or open.
  * Inputs: the events row, places taken, the current time.
- * Output: 'NOT_OPEN' | 'NOT_YET_OPEN' | 'CLOSED' | 'FULL' | 'OPEN'.
+ * Output: 'NOT_OPEN' | 'NOT_YET_OPEN' | 'CLOSED' | 'STARTED' | 'FULL' | 'OPEN'.
  */
 function registrationState(event, taken, now) {
   if (event.status !== EVENT_STATUS.CONFIRMED || !event.registration_open) return 'NOT_OPEN';
   if (now < new Date(event.registration_opens_at)) return 'NOT_YET_OPEN';
   if (now >= new Date(event.registration_closes_at)) return 'CLOSED';
+  // Same as register(): once the event has started, registration is over.
+  if (event.start_at && now >= new Date(event.start_at)) return 'STARTED';
   if (taken >= Number(event.registration_capacity)) return 'FULL';
   return 'OPEN';
 }

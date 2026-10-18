@@ -7,6 +7,8 @@ const {
   MIN_REJECTION_REASON_LENGTH,
   SIGNIFICANT_FIELDS,
   BOOKING_STATUS,
+  CHANGE_REQUEST_STATUS,
+  CHANGE_REQUEST_FIELDS,
 } = require('../constants/statuses');
 const { REJECTION_REASON_MESSAGE } = require('../validators/events.validators');
 const { httpError } = require('../middleware/errorHandler');
@@ -270,7 +272,15 @@ async function getEvent(user, id) {
     supabase.from('events').select(EVENT_SELECT).eq('id', id)
   );
   if (!row || !canViewEvent(user, row)) throw httpError(404, 'Event not found', 'NOT_FOUND');
-  return visibleEvent(user, row);
+  const event = visibleEvent(user, row);
+  // SCRUM-56 AC8: only the owning Organiser and assigned Coordinator see the outcome.
+  // Lazy require avoids a circular import (access.service does not import events.service).
+  const accessService = require('./access.service');
+  const safetyCheck = await accessService.safetyOutcomeForViewer(user, row);
+  if (safetyCheck) {
+    event.safetyCheck = safetyCheck;
+  }
+  return event;
 }
 
 /**
@@ -715,14 +725,21 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
     throw httpError(400, REJECTION_REASON_MESSAGE, 'VALIDATION_ERROR', { fields: ['reason'] });
   }
 
-  // SCRUM-5 AC7: the safety check itself belongs to SCRUM-55/56 (not built yet), so this
-  // always refuses for now rather than silently allowing preparation to start unchecked.
+  // SCRUM-55 AC3 / SCRUM-56 AC6: Preparation only after an approved safety check
+  // for the current awaiting cycle (not an older approval).
+  // Approve already moves Awaiting → Preparation in access.recordSafetyCheck; a direct
+  // status POST still needs that approval on record.
+  // Lazy require avoids a circular import (access.service does not import events.service).
   if (nextStatus === EVENT_STATUS.PREPARATION) {
-    throw httpError(
-      409,
-      'The Safety Officer must approve the safety check before preparation can start',
-      'SAFETY_CHECK_NOT_APPROVED'
-    );
+    const accessService = require('./access.service');
+    const approved = await accessService.hasApprovedSafetyCheck(existing.id);
+    if (!approved) {
+      throw httpError(
+        409,
+        'The Safety Officer must approve the safety check before preparation can start',
+        'SAFETY_CHECK_NOT_APPROVED'
+      );
+    }
   }
 
   const patch = {
@@ -1106,6 +1123,435 @@ async function respondClarification(user, id, response, amendments = {}) {
   return getEvent(user, id);
 }
 
+const CHANGE_REQUEST_BLOCKED_STATUSES = [
+  EVENT_STATUS.DRAFT,
+  EVENT_STATUS.CANCELLED,
+  EVENT_STATUS.REJECTED,
+  EVENT_STATUS.COMPLETED,
+];
+
+/**
+ * Purpose: camelCase API shape for an event_change_requests row.
+ * AC: SCRUM-34 AC1, SCRUM-35 AC1
+ * Input: a database row or null. Output: the mapped request, or null.
+ */
+function mapChangeRequest(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    requestedBy: row.requested_by,
+    decidedBy: row.decided_by,
+    status: row.status,
+    startAt: row.start_at,
+    endAt: row.end_at,
+    expectedAttendance: row.expected_attendance,
+    venueRequirements: row.venue_requirements,
+    equipmentNotes: row.equipment_notes,
+    decisionReason: row.decision_reason,
+    decidedAt: row.decided_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Purpose: load the events row if this user may know it exists.
+ * AC: SCRUM-34 AC1, SCRUM-35 AC1
+ * Failure: 404 when missing or hidden (same as getEvent, so we do not leak other clients' events).
+ */
+async function loadVisibleEventRow(user, id) {
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
+  if (!existing || !canViewEvent(user, existing)) {
+    throw httpError(404, 'Event not found', 'NOT_FOUND');
+  }
+  return existing;
+}
+
+/**
+ * Purpose: owner organiser or assigned coordinator may see and act on change requests.
+ * AC: SCRUM-35 AC1 (events they manage); other coordinators are not included.
+ */
+function canAccessChangeRequests(user, event) {
+  if (event.organiser_id === user.id) return true;
+  return event.coordinator_id === user.id && hasRole(user, ROLES.EVENT_COORDINATOR);
+}
+
+/**
+ * Purpose: refuse anyone who is not the owner or assigned coordinator.
+ * AC: SCRUM-35 AC1
+ * Failure: 403 FORBIDDEN, event unchanged.
+ */
+function assertChangeRequestViewer(user, event) {
+  if (!canAccessChangeRequests(user, event)) {
+    throw httpError(
+      403,
+      'Only the organiser and assigned coordinator can view change requests',
+      'FORBIDDEN'
+    );
+  }
+}
+
+/**
+ * Purpose: accept an omitted date, or a real timestamp; reject unparseable strings.
+ * AC: SCRUM-34 AC2
+ * Failure: 400 VALIDATION_ERROR.
+ */
+function parseOptionalDate(value, field) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw httpError(400, `Invalid ${field}`, 'VALIDATION_ERROR', { fields: [field] });
+  }
+  return date;
+}
+
+/**
+ * Purpose: accept an omitted attendance, or an integer ≥ 1.
+ * AC: SCRUM-34 AC2
+ * Failure: 400 VALIDATION_ERROR.
+ */
+function parseOptionalAttendance(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) {
+    throw httpError(
+      400,
+      'Expected attendance must be a whole number of at least 1',
+      'VALIDATION_ERROR',
+      { fields: ['expectedAttendance'] }
+    );
+  }
+  return n;
+}
+
+/**
+ * Purpose: pass through omitted vs provided venue/equipment requirement text.
+ * AC: SCRUM-34 AC2
+ */
+function parseOptionalText(value) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return String(value);
+}
+
+/**
+ * Purpose: keep only permitted change-request fields and require at least one.
+ * AC: SCRUM-34 AC2
+ * Failure: 400 when the body is empty or contains a field that is not allowed.
+ */
+function parseChangeRequestPayload(payload = {}) {
+  const unknown = Object.keys(payload).filter(
+    (key) => payload[key] !== undefined && !CHANGE_REQUEST_FIELDS.includes(key)
+  );
+  if (unknown.length) {
+    throw httpError(
+      400,
+      'Only date, time, expected attendance, venue requirements and equipment requirements can be requested',
+      'VALIDATION_ERROR',
+      { fields: unknown }
+    );
+  }
+
+  const startAt = parseOptionalDate(payload.startAt, 'startAt');
+  const endAt = parseOptionalDate(payload.endAt, 'endAt');
+  const expectedAttendance = parseOptionalAttendance(payload.expectedAttendance);
+  const venueRequirements = parseOptionalText(payload.venueRequirements);
+  const equipmentNotes = parseOptionalText(payload.equipmentNotes);
+
+  const provided = [startAt, endAt, expectedAttendance, venueRequirements, equipmentNotes]
+    .some((value) => value !== undefined);
+  if (!provided) {
+    throw httpError(
+      400,
+      'At least one permitted field is required',
+      'VALIDATION_ERROR',
+      { fields: CHANGE_REQUEST_FIELDS }
+    );
+  }
+
+  return {
+    start_at: startAt === undefined ? null : startAt,
+    end_at: endAt === undefined ? null : endAt,
+    expected_attendance: expectedAttendance === undefined ? null : expectedAttendance,
+    venue_requirements: venueRequirements === undefined ? null : venueRequirements,
+    equipment_notes: equipmentNotes === undefined ? null : equipmentNotes,
+  };
+}
+
+/**
+ * Purpose: the event columns a change request may copy, with the API names used in the
+ * AC4 audit (previous / new per included field).
+ * AC: SCRUM-69 AC1, AC4
+ */
+const CHANGE_APPLY_FIELDS = [
+  { column: 'start_at', field: 'startAt' },
+  { column: 'end_at', field: 'endAt' },
+  { column: 'expected_attendance', field: 'expectedAttendance' },
+  { column: 'venue_requirements', field: 'venueRequirements' },
+  { column: 'equipment_notes', field: 'equipmentNotes' },
+];
+
+/**
+ * Purpose: copy non-null proposed columns onto the event, then check the resulting window.
+ * AC: SCRUM-35 AC2, SCRUM-69 AC1 (every included field is copied), AC2 (end must be after start).
+ * Failure: 400 if the merged start is not before the merged end.
+ */
+function proposedEventPatch(request, existing) {
+  const patch = { updated_at: new Date().toISOString() };
+  if (request.start_at != null) patch.start_at = request.start_at;
+  if (request.end_at != null) patch.end_at = request.end_at;
+  if (request.expected_attendance != null) patch.expected_attendance = request.expected_attendance;
+  if (request.venue_requirements != null) patch.venue_requirements = request.venue_requirements;
+  if (request.equipment_notes != null) patch.equipment_notes = request.equipment_notes;
+  const nextStart = patch.start_at !== undefined ? patch.start_at : existing.start_at;
+  const nextEnd = patch.end_at !== undefined ? patch.end_at : existing.end_at;
+  validateDateRange(nextStart, nextEnd);
+  return patch;
+}
+
+/**
+ * Purpose: refuse approve when the requested values themselves are not usable, before any
+ * event write. Existing event values that were not requested are not re-checked.
+ * AC: SCRUM-69 AC2 (attendance ≤ 0 or not a whole number, start in the past, unparseable
+ *     start or end). End-before-start is checked in proposedEventPatch after this, using
+ *     the merged window.
+ * Inputs: the pending change-request row; `now` so tests can fix the clock.
+ * Failure: 400 VALIDATION_ERROR; caller must not write the event or mark the request decided.
+ */
+function assertRequestedValuesApprovable(request, now) {
+  if (request.expected_attendance != null) {
+    const n = Number(request.expected_attendance);
+    if (!Number.isInteger(n) || n <= 0) {
+      throw httpError(
+        400,
+        'A change request cannot be approved with an invalid attendance (must be a whole number of at least 1)',
+        'VALIDATION_ERROR',
+        { fields: ['expectedAttendance'] }
+      );
+    }
+  }
+  if (request.start_at != null) {
+    const start = new Date(request.start_at);
+    if (Number.isNaN(start.getTime())) {
+      throw httpError(
+        400,
+        'A change request cannot be approved with an invalid start date/time',
+        'VALIDATION_ERROR',
+        { fields: ['startAt'] }
+      );
+    }
+    if (start < now) {
+      throw httpError(
+        400,
+        'A change request cannot be approved with a start date/time in the past',
+        'VALIDATION_ERROR',
+        { fields: ['startAt'] }
+      );
+    }
+  }
+  if (request.end_at != null) {
+    const end = new Date(request.end_at);
+    if (Number.isNaN(end.getTime())) {
+      throw httpError(
+        400,
+        'A change request cannot be approved with an invalid end date/time',
+        'VALIDATION_ERROR',
+        { fields: ['endAt'] }
+      );
+    }
+  }
+}
+
+/**
+ * Purpose: one audit row for an approved apply lists each included field's previous (event)
+ * and new (requested) value, plus who approved and when.
+ * AC: SCRUM-69 AC4
+ */
+function approvedChangeAuditFields(request, existing) {
+  return CHANGE_APPLY_FIELDS
+    .filter(({ column }) => request[column] != null)
+    .map(({ column, field }) => ({
+      field,
+      previous: existing[column] instanceof Date ? existing[column].toISOString() : existing[column],
+      next: request[column] instanceof Date ? request[column].toISOString() : request[column],
+    }));
+}
+
+/**
+ * Purpose: tell the event's Organiser that their change request was approved or rejected.
+ * AC: SCRUM-69 AC6
+ * Failure: none here — notifyUser no-ops when organiser_id is missing.
+ */
+async function notifyChangeRequestDecision(event, decided, reason) {
+  const title = decided ? 'Change request approved' : 'Change request rejected';
+  const body = decided
+    ? `Your change request for ${event.name} was approved. The event record has been updated.`
+    : (reason
+      ? `Your change request for ${event.name} was rejected. Reason: ${reason}`
+      : `Your change request for ${event.name} was rejected.`);
+  await notifyUser(event.organiser_id, 'CHANGE_REQUEST_DECIDED', title, body, event.id);
+}
+
+/**
+ * Purpose: list change requests for one event. Only the owning organiser and the assigned
+ * coordinator may see them; other coordinators are refused.
+ * AC: SCRUM-34 AC1, SCRUM-35 AC1
+ * Output: mapped change-request rows, newest first.
+ * Failure: 404 if the event is missing or hidden; 403 if the caller is not owner or assignee.
+ */
+async function listChangeRequests(user, eventId) {
+  const event = await loadVisibleEventRow(user, eventId);
+  assertChangeRequestViewer(user, event);
+  const rows = await fetchMany(
+    supabase.from('event_change_requests')
+      .select('*')
+      .eq('event_id', event.id)
+      .order('created_at', { ascending: false })
+  );
+  return rows.map(mapChangeRequest);
+}
+
+/**
+ * Purpose: organiser asks the assigned coordinator to change permitted event fields.
+ * AC: SCRUM-34 AC1 (organiser requests a change), AC2 (only date/time, attendance,
+ *     venue requirements, equipment requirements).
+ * Inputs: session user, event id, payload of permitted fields.
+ * Output: the pending change request.
+ * Failure: 404 missing/hidden event; 403 not the owner; 409 draft/cancelled/rejected/
+ *     completed, unassigned Submitted, or a pending request already exists; 400 unknown
+ *     or empty fields, or a proposed time that is not before the other end of the window.
+ */
+async function createChangeRequest(user, eventId, payload) {
+  const fields = parseChangeRequestPayload(payload);
+
+  const event = await loadVisibleEventRow(user, eventId);
+  if (event.organiser_id !== user.id) {
+    throw httpError(403, 'Only the event organiser can request a change', 'FORBIDDEN');
+  }
+  if (CHANGE_REQUEST_BLOCKED_STATUSES.includes(event.status)) {
+    throw httpError(
+      409,
+      `Change requests are not allowed while the event is ${event.status}`,
+      'CHANGE_NOT_ALLOWED'
+    );
+  }
+  if (!event.coordinator_id) {
+    throw httpError(
+      409,
+      'A coordinator must be assigned before a change request can be submitted',
+      'NO_COORDINATOR'
+    );
+  }
+
+  const nextStart = fields.start_at != null ? fields.start_at : event.start_at;
+  const nextEnd = fields.end_at != null ? fields.end_at : event.end_at;
+  validateDateRange(nextStart, nextEnd);
+
+  const pending = await fetchOne(
+    supabase.from('event_change_requests')
+      .select('id')
+      .eq('event_id', event.id)
+      .eq('status', CHANGE_REQUEST_STATUS.PENDING)
+  );
+  if (pending) {
+    throw httpError(
+      409,
+      'This event already has a pending change request',
+      'PENDING_CHANGE_EXISTS'
+    );
+  }
+
+  const created = await insertOne('event_change_requests', {
+    event_id: event.id,
+    requested_by: user.id,
+    status: CHANGE_REQUEST_STATUS.PENDING,
+    ...fields,
+  });
+  await writeAudit(user.id, 'CHANGE_REQUEST_CREATED', 'event_change_request', created.id, {
+    eventId: event.id,
+    fields: Object.keys(payload || {}).filter((key) => payload[key] !== undefined),
+  });
+  return mapChangeRequest(created);
+}
+
+/**
+ * Purpose: assigned coordinator approves (copies proposed fields onto the event, including
+ * Confirmed) or rejects (event unchanged). Event status is not moved.
+ * AC: SCRUM-35 AC1 (assigned coordinator decides), AC2 (approve applies the change);
+ *     SCRUM-69 AC1 (every included field is written onto the event), AC2 (invalid
+ *     requested values cannot be approved — request stays PENDING), AC3 (reject does not
+ *     touch the event), AC4 (who/when plus previous and new values on approve), AC6
+ *     (organiser is notified either way).
+ *     SCRUM-69 AC5: flagging venue/equipment arrangements for review reuses SCRUM-41/42.
+ *     Those stories are not built yet, so approve does not invent a review flag.
+ * Inputs: user, event id, request id, { approve, reason? }.
+ * Output: the decided change request.
+ * Failure: 404 missing; 403 not the assigned coordinator; 409 already decided; 400 when
+ *     approve is requested with attendance ≤ 0, a start in the past, or an end not after start.
+ */
+async function decideChangeRequest(user, eventId, requestId, { approve, reason } = {}) {
+  const event = await loadVisibleEventRow(user, eventId);
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR) || event.coordinator_id !== user.id) {
+    throw httpError(
+      403,
+      'Only the assigned coordinator can review this change request',
+      'FORBIDDEN'
+    );
+  }
+
+  const request = await fetchOne(
+    supabase.from('event_change_requests').select('*').eq('id', requestId)
+  );
+  if (!request || Number(request.event_id) !== Number(event.id)) {
+    throw httpError(404, 'Change request not found', 'NOT_FOUND');
+  }
+  if (request.status !== CHANGE_REQUEST_STATUS.PENDING) {
+    throw httpError(409, 'This change request has already been decided', 'ALREADY_DECIDED');
+  }
+
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+  const decided = approve === true || approve === 'true';
+
+  if (decided) {
+    assertRequestedValuesApprovable(request, now);
+    const eventPatch = proposedEventPatch(request, event);
+    // Bypass updateEvent so Confirmed SIGNIFICANT_FIELDS stay locked to direct edits
+    // but an approved change request can still apply date/time/attendance/requirements.
+    await updateById('events', event.id, eventPatch);
+  }
+
+  const crPatch = {
+    status: decided ? CHANGE_REQUEST_STATUS.APPROVED : CHANGE_REQUEST_STATUS.REJECTED,
+    decided_by: user.id,
+    decided_at: nowIso,
+    decision_reason: trimmedReason || null,
+    updated_at: nowIso,
+  };
+  const updated = await updateById('event_change_requests', request.id, crPatch);
+  await writeAudit(
+    user.id,
+    decided ? 'CHANGE_REQUEST_APPROVED' : 'CHANGE_REQUEST_REJECTED',
+    'event_change_request',
+    request.id,
+    decided
+      ? {
+        eventId: event.id,
+        reason: trimmedReason || null,
+        decidedBy: user.id,
+        decidedAt: nowIso,
+        fields: approvedChangeAuditFields(request, event),
+      }
+      : { eventId: event.id, reason: trimmedReason || null }
+  );
+  await notifyChangeRequestDecision(event, decided, trimmedReason);
+  return mapChangeRequest(updated || { ...request, ...crPatch });
+}
+
 module.exports = {
   listEvents,
   getEvent,
@@ -1128,4 +1574,7 @@ module.exports = {
   findMissingSubmissionFields,
   isInUnassignedQueue,
   listUnassignedQueue,
+  listChangeRequests,
+  createChangeRequest,
+  decideChangeRequest,
 };

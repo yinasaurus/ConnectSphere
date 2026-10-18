@@ -70,10 +70,10 @@ describe('SCRUM-54 event page role limits', () => {
   });
 
   /*
-   * AC: SCRUM-54 AC4
-   * Scenario: A Safety Officer opens an event.
-   * Setup: Session role SAFETY_OFFICER.
-   * Expected: They see the control to open a safety check.
+   * AC: SCRUM-55 AC4 / SCRUM-54 AC4
+   * Scenario: A Safety Officer opens an event awaiting a safety check.
+   * Setup: Session role SAFETY_OFFICER; event status AWAITING_SAFETY_CHECK.
+   * Expected: They see Safety queue and Open safety check.
    * Type: normal
    */
   it('shows Open safety check to a Safety Officer', async () => {
@@ -81,9 +81,10 @@ describe('SCRUM-54 event page role limits', () => {
       user: { id: 12, roles: ['SAFETY_OFFICER'] },
       hasRole: (...roles) => roles.includes('SAFETY_OFFICER'),
     });
-    mockEvent();
+    mockEvent({ status: 'AWAITING_SAFETY_CHECK' });
     renderEvent();
-    expect(await screen.findByRole('link', { name: 'Open safety check' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Safety queue' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open safety check' })).toBeInTheDocument();
   });
 
   /*
@@ -98,9 +99,55 @@ describe('SCRUM-54 event page role limits', () => {
       user: { id: 2, roles: ['EVENT_COORDINATOR'] },
       hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
     });
-    mockEvent();
+    mockEvent({ status: 'AWAITING_SAFETY_CHECK' });
     renderEvent();
     expect(await screen.findByText('Secret Workshop')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Open safety check' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Safety queue' })).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-56 AC8
+   * Scenario: The assigned Coordinator opens the event after a safety outcome was recorded.
+   * Setup: Event includes safetyCheck APPROVED with a reason (API only attaches this for
+   *        organiser / assigned coordinator).
+   * Expected: The Safety check outcome card shows the outcome and reason.
+   * Type: normal
+   */
+  it('shows the safety check outcome card when the API includes safetyCheck', async () => {
+    useAuth.mockReturnValue({
+      user: { id: 2, roles: ['EVENT_COORDINATOR'] },
+      hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
+    });
+    mockEvent({
+      status: 'PREPARATION',
+      safetyCheck: {
+        outcome: 'APPROVED',
+        reason: 'Exits clear',
+        decidedAt: '2026-10-17T08:00:00.000Z',
+      },
+    });
+    renderEvent();
+    expect(await screen.findByText('Safety check outcome')).toBeInTheDocument();
+    expect(screen.getByText(/APPROVED/)).toBeInTheDocument();
+    expect(screen.getByText(/Exits clear/)).toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-56 AC8
+   * Scenario: A Lead opens the event after a safety outcome (API omits safetyCheck).
+   * Setup: No safetyCheck on the event payload — matches canViewSafetyOutcome for non-contacts.
+   * Expected: The outcome card is not shown.
+   * Type: boundary
+   */
+  it('does not show the safety check outcome card when the API omits safetyCheck', async () => {
+    useAuth.mockReturnValue({
+      user: { id: 20, roles: ['EVENT_COORDINATOR_LEAD'] },
+      hasRole: (...roles) => roles.includes('EVENT_COORDINATOR_LEAD'),
+    });
+    mockEvent({ status: 'PREPARATION' });
+    renderEvent();
+    expect(await screen.findByText('Secret Workshop')).toBeInTheDocument();
+    expect(screen.queryByText('Safety check outcome')).not.toBeInTheDocument();
   });
 });
