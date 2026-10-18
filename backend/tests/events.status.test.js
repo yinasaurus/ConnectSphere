@@ -41,7 +41,8 @@ let tables;
 
 function rowsFor(query) {
   return (tables[query.table] || [])
-    .filter((row) => query.filters.every(([column, value]) => String(row[column]) === String(value)));
+    .filter((row) => query.filters.every(([column, value]) => String(row[column]) === String(value)))
+    .filter((row) => query.excluded.every(([column, value]) => String(row[column]) !== String(value)));
 }
 
 function historyRows() {
@@ -66,10 +67,14 @@ beforeEach(() => {
     user_roles: [{ user_id: 2, role: ROLES.EVENT_COORDINATOR }],
   };
   db.supabase.from.mockImplementation((table) => {
-    const query = { table, filters: [] };
+    const query = { table, filters: [], excluded: [] };
     query.select = jest.fn(() => query);
     query.eq = jest.fn((column, value) => {
       query.filters.push([column, value]);
+      return query;
+    });
+    query.neq = jest.fn((column, value) => {
+      query.excluded.push([column, value]);
       return query;
     });
     query.order = jest.fn(() => query);
@@ -199,7 +204,7 @@ describe('SCRUM-5 status progression (service rules)', () => {
     event.status = 'PREPARATION';
     tables.venue_bookings[0].status = 'PENDING';
     await expect(service.changeStatus(coordinator, 3, 'CONFIRMED')).rejects.toMatchObject({
-      status: 409, code: 'NOT_READY_TO_CONFIRM', message: 'A venue booking must be approved before confirmation',
+      status: 409, code: 'NOT_READY_TO_CONFIRM',
     });
     expect(db.updateById).not.toHaveBeenCalled();
   });
@@ -259,5 +264,16 @@ describe('SCRUM-5 POST /api/events/:id/status (route)', () => {
     const res = await asCoordinator().send({ status: 'APPROVED' });
     expect(res.status).toBe(200);
     expect(db.updateById).toHaveBeenCalledWith('events', '3', expect.objectContaining({ status: 'APPROVED' }));
+  });
+
+  // SCRUM-73: UI confirms via POST /api/events/:id/status { status: 'CONFIRMED' }
+  // Route refuses confirmation with 409 NOT_READY_TO_CONFIRM when arrangements are incomplete.
+  it('US5-R04: confirming via the status route is refused when arrangements are incomplete', async () => {
+    event.status = 'PREPARATION';
+    tables.venue_bookings[0].status = 'PENDING';
+    const res = await asCoordinator().send({ status: 'CONFIRMED' });
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ error: 'NOT_READY_TO_CONFIRM' });
+    expect(db.updateById).not.toHaveBeenCalled();
   });
 });

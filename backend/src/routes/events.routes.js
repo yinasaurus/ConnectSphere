@@ -64,6 +64,7 @@ router.post(
   controller.decide
 );
 router.post('/:id/status', requireRole(ROLES.EVENT_COORDINATOR), controller.changeStatus);
+router.post('/:id/confirm', requireRole(ROLES.EVENT_COORDINATOR), controller.confirm);
 router.post('/:id/clarification', requireRole(ROLES.EVENT_COORDINATOR), controller.requestClarification);
 router.post('/:id/clarification/respond', controller.respondClarification);
 router.get('/:id/history', controller.history);
