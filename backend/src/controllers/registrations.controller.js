@@ -7,14 +7,21 @@ const list = asyncHandler(async (req, res) => {
   res.json({ registrations });
 });
 
+// SCRUM-52: an Attendee registers; the response says how many places are left.
 const register = asyncHandler(async (req, res) => {
-  const registration = await registrationsService.register(req.user, req.params.id);
-  res.status(201).json({ registration });
+  const { registration, placesLeft } = await registrationsService.register(req.user, req.params.id);
+  res.status(201).json({ registration, placesLeft });
 });
 
 const withdraw = asyncHandler(async (req, res) => {
   const registration = await registrationsService.withdraw(req.user, req.params.id);
   res.json({ registration });
+});
+
+// SCRUM-51: the event's registration details and the caller's own status.
+const status = asyncHandler(async (req, res) => {
+  const registrationStatus = await registrationsService.getRegistrationStatus(req.user, req.params.id);
+  res.json({ registrationStatus });
 });
 
 // SCRUM-63: the assigned Coordinator opens registration (window + capacity).
@@ -29,4 +36,4 @@ const changeSettings = asyncHandler(async (req, res) => {
   res.json({ settings });
 });
 
-module.exports = { list, register, withdraw, enable, changeSettings };
+module.exports = { list, register, withdraw, enable, changeSettings, status };
