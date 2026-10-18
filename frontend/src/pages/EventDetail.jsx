@@ -4,6 +4,8 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import ConflictModal from '../components/ConflictModal';
 import EventDecisionPanel from '../components/EventDecisionPanel';
+import AttendeeRegistrationCard from '../components/AttendeeRegistrationCard';
+import RegistrationSettingsCard from '../components/RegistrationSettingsCard';
 import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
 
@@ -55,6 +57,7 @@ function formatBookingStatus(status) {
  *     SCRUM-39 AC1 + AC2 (request details, venue booking, equipment requests).
  *     SCRUM-65 AC5: the Lead can open this page from the unassigned queue and see the full request details.
  *     SCRUM-71 AC1, AC2, AC6 (Lead assign card).
+ *     SCRUM-63 AC1-AC7 (assigned Coordinator's registration card).
  *     SCRUM-78 AC1-AC3 (the Venue Staff card sends the reason and alternative staff typed, or none).
  *     SCRUM-34 AC1 + AC2 (organiser change-request form: date/time, attendance, venue/equipment).
  *     SCRUM-35 AC1 + AC2 (assigned coordinator approve/reject; approve applies the fields).
@@ -98,6 +101,7 @@ export default function EventDetail() {
   const { user, hasRole } = useAuth();
   // SCRUM-65 AC5: the Lead needs the same planning fields as other internal staff.
   const isLead = hasRole(ROLES.EVENT_COORDINATOR_LEAD);
+  const isAttendee = hasRole(ROLES.ATTENDEE);
   const canViewPlanning = hasRole(
     ROLES.EVENT_ORGANISER,
     ROLES.EVENT_COORDINATOR,
@@ -107,6 +111,7 @@ export default function EventDetail() {
     ROLES.TECHNICAL_SUPPORT
   );
   const [event, setEvent] = useState(null);
+  const [registering, setRegistering] = useState(false);
   const [history, setHistory] = useState([]);
   const [comments, setComments] = useState([]);
   const [, setVenues] = useState([]);
@@ -123,6 +128,7 @@ export default function EventDetail() {
   const [error, setError] = useState('');
   const [coordinatorError, setCoordinatorError] = useState('');
   const [message, setMessage] = useState('');
+  const [registrationStatus, setRegistrationStatus] = useState(null);
   const [showClarificationInput, setShowClarificationInput] = useState(false);
   const [clarificationNotes, setClarificationNotes] = useState('');
   const [showRespondForm, setShowRespondForm] = useState(false);
@@ -137,7 +143,7 @@ export default function EventDetail() {
   // venues and equipment requests; other roles never request planning data they aren't
   // allowed to see. A Lead also loads the active-Coordinator list when this event is still unassigned.
   const reload = useCallback(async () => {
-    const [eventRes, historyRes, commentRes, venueRes, bookingRes, equipmentRes] = await Promise.all([
+    const [eventRes, historyRes, commentRes, venueRes, bookingRes, equipmentRes, statusRes] = await Promise.all([
       api(`/api/events/${id}`),
       canViewPlanning ? api(`/api/events/${id}/history`) : Promise.resolve({ history: [] }),
       canViewPlanning ? api(`/api/comments/${id}`) : Promise.resolve({ comments: [] }),
@@ -149,8 +155,13 @@ export default function EventDetail() {
       canViewPlanning
         ? api(`/api/events/${id}/equipment-requests`).catch((err) => ({ requests: [], loadError: err.message }))
         : Promise.resolve({ requests: [] }),
+      // SCRUM-51: an Attendee's registration details and own status; a failure only hides that card's details.
+      isAttendee
+        ? api(`/api/events/${id}/registration-status`).catch(() => ({ registrationStatus: null }))
+        : Promise.resolve({ registrationStatus: null }),
     ]);
     setEvent(eventRes.event);
+    setRegistrationStatus(statusRes.registrationStatus || null);
     setHistory(historyRes.history || []);
     setComments(commentRes.comments || []);
     setVenues(venueRes.venues || []);
@@ -180,7 +191,7 @@ export default function EventDetail() {
       setChangeRequests(changeRes.changeRequests || []);
       setChangeRequestError(changeRes.loadError || '');
     }
-  }, [id, canViewPlanning, isLead, user]);
+  }, [id, canViewPlanning, isLead, isAttendee, user]);
 
   useEffect(() => {
     const refresh = () => reload().catch((err) => setError(err.message));
@@ -197,8 +208,9 @@ export default function EventDetail() {
     setMessage('');
     setConflictModalMsg('');
     try {
-      await action();
-      setMessage('Updated.');
+      // An action can return its own success text (e.g. SCRUM-52's places left); otherwise "Updated."
+      const result = await action();
+      setMessage(typeof result === 'string' ? result : 'Updated.');
       await reload();
     } catch (err) {
       if (err.code === 'BOOKING_CONFLICT') {
@@ -270,6 +282,22 @@ export default function EventDetail() {
             <p><strong>Equipment:</strong> {event.equipmentNotes || '—'}</p>
             {event.rejectionReason && <p><strong>Rejection reason:</strong> {event.rejectionReason}</p>}
           </div>
+
+          {/* SCRUM-56 AC8: only the Organiser and assigned Coordinator receive safetyCheck on the event. */}
+          {event.safetyCheck && (
+            <div className="card stack">
+              <h3>Safety check outcome</h3>
+              <p><strong>Outcome:</strong> {event.safetyCheck.outcome}</p>
+              {event.safetyCheck.reason && (
+                <p><strong>Reason:</strong> {event.safetyCheck.reason}</p>
+              )}
+              {event.safetyCheck.decidedAt && (
+                <p className="muted">
+                  Recorded {new Date(event.safetyCheck.decidedAt).toLocaleString()}
+                </p>
+              )}
+            </div>
+          )}
 
           {/*
             Purpose: Lead chooses the one primary Coordinator for a Submitted event that has none.
@@ -675,11 +703,30 @@ export default function EventDetail() {
             </div>
           )}
 
-          {hasRole(ROLES.ATTENDEE) && event.status === 'CONFIRMED' && (
-            <div className="card actions">
-              <button className="btn" onClick={() => run(() => api(`/api/events/${id}/registrations`, { method: 'POST' }))}>Register</button>
-              <button className="btn ghost" onClick={() => run(() => api(`/api/events/${id}/registrations/withdraw`, { method: 'POST' }))}>Withdraw</button>
-            </div>
+          {/* SCRUM-63: only the assigned Coordinator opens or changes registration, and only once Confirmed. */}
+          {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && event.status === 'CONFIRMED' && (
+            <RegistrationSettingsCard
+              event={event}
+              onRun={({ path, method, body }) => run(() => api(path, { method, body }))}
+            />
+          )}
+
+          {/* SCRUM-51: registration details and the Attendee's own status; SCRUM-52/53 buttons inside. */}
+          {isAttendee && (
+            <AttendeeRegistrationCard
+              status={registrationStatus}
+              registering={registering}
+              onRegister={async () => {
+                // SCRUM-52: disabled while the request runs so a double click cannot send two registrations.
+                setRegistering(true);
+                await run(async () => {
+                  const { placesLeft } = await api(`/api/events/${id}/registrations`, { method: 'POST' });
+                  return `Registered. ${placesLeft} ${placesLeft === 1 ? 'place' : 'places'} left.`;
+                });
+                setRegistering(false);
+              }}
+              onWithdraw={() => run(() => api(`/api/events/${id}/registrations/withdraw`, { method: 'POST' }))}
+            />
           )}
 
           {canViewPlanning && <div className="card">
@@ -761,10 +808,13 @@ export default function EventDetail() {
             )}
           </div>
           {hasRole(ROLES.SAFETY_OFFICER) && (
-            <div className="card">
+            <div className="card stack">
               <h3>Safety check</h3>
               <p className="muted">Only a Safety Officer can open a safety check or record its outcome.</p>
-              <Link className="btn" to={`/app/events/${id}/safety-check`}>Open safety check</Link>
+              <Link className="btn ghost" to="/app/events/safety-queue">Safety queue</Link>
+              {event.status === 'AWAITING_SAFETY_CHECK' && (
+                <Link className="btn" to={`/app/events/${id}/safety-check`}>Open safety check</Link>
+              )}
             </div>
           )}
 

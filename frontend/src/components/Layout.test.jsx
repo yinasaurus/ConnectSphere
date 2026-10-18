@@ -49,6 +49,8 @@ describe('SCRUM-54 layout role recognition and nav limits', () => {
     expect(screen.getByText('Safety Officer')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Unassigned queue' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Assignments' })).not.toBeInTheDocument();
+    // SCRUM-55 AC1: Safety Officers get the safety queue nav item.
+    expect(screen.getByRole('link', { name: 'Safety queue' })).toBeInTheDocument();
   });
 
   /*
@@ -78,5 +80,32 @@ describe('SCRUM-54 layout role recognition and nav limits', () => {
     mount(['EVENT_COORDINATOR']);
     expect(screen.queryByRole('link', { name: 'Unassigned queue' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Assignments' })).not.toBeInTheDocument();
+  });
+});
+
+describe('SCRUM-82 Sign out stays in the sidebar', () => {
+  /*
+   * AC:       SCRUM-82
+   * Scenario: Event Coordinator is signed in (extra Venues / availability / Equipment links).
+   * Setup:    EVENT_COORDINATOR only. The clip bug was CSS (sidebar 100vh, no scroll), not a
+   *           missing control; this asserts Sign out is still in the tree for that role.
+   * Expected: A Sign out button is present.
+   * Type:     normal
+   */
+  it('shows Sign out for an Event Coordinator', () => {
+    mount(['EVENT_COORDINATOR']);
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCRUM-82
+   * Scenario: Coordinator + Lead hybrid has the longest nav.
+   * Setup:    Both EVENT_COORDINATOR and EVENT_COORDINATOR_LEAD.
+   * Expected: Sign out is still present.
+   * Type:     boundary
+   */
+  it('shows Sign out for a Coordinator + Lead hybrid', () => {
+    mount(['EVENT_COORDINATOR', 'EVENT_COORDINATOR_LEAD']);
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
   });
 });

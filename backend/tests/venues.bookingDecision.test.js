@@ -291,6 +291,8 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
       mockUser = COORDINATOR;
       // getEvent check
       fetchOne.mockResolvedValueOnce(EVENT_ROW);
+      // getEvent may load the latest safety_check for organiser/coordinator (SCRUM-56 AC8)
+      fetchMany.mockResolvedValueOnce([]);
       // listVenueBookings query
       fetchMany.mockResolvedValueOnce([
         {

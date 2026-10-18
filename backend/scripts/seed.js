@@ -18,6 +18,8 @@ const CLEAR_ORDER = [
   'event_sessions',
   'event_status_history',
   'coordinator_reassignments',
+  'safety_checks',
+  'event_change_requests',
   'events',
   'venue_unavailability',
   'venue_layouts',
