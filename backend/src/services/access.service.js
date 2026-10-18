@@ -68,13 +68,14 @@ function buildSafetyOutcomeNotice({ outcome, eventName, reason, affectedArrangem
     };
   }
   const arrangementBits = (affectedArrangements || []).map((item) => {
+    const name = typeof item.name === 'string' ? item.name.trim() : '';
     if (item.type === SAFETY_ARRANGEMENT_TYPE.VENUE_BOOKING) {
-      return `venue booking #${item.id}`;
+      return name ? `venue ${name}` : `venue booking #${item.id}`;
     }
     if (item.type === SAFETY_ARRANGEMENT_TYPE.EQUIPMENT_REQUEST) {
-      return `equipment request #${item.id}`;
+      return name ? `equipment ${name}` : `equipment request #${item.id}`;
     }
-    return `${item.type} #${item.id}`;
+    return name ? `${item.type} ${name}` : `${item.type} #${item.id}`;
   });
   const arrangementText = arrangementBits.length
     ? arrangementBits.join(', ')
@@ -116,7 +117,10 @@ async function notifySafetyCheckContacts(eventRow, outcome, reason, affectedArra
     reason,
     affectedArrangements,
   });
-  const recipients = [eventRow.coordinator_id, eventRow.organiser_id].filter(Boolean);
+  // Same person as Coordinator and Organiser → one notice, not two identical ones.
+  const recipients = [...new Set(
+    [eventRow.coordinator_id, eventRow.organiser_id].filter(Boolean)
+  )];
   for (const userId of recipients) {
     await notifyUser(userId, 'SAFETY_CHECK_OUTCOME', notice.title, notice.body, eventRow.id);
   }
@@ -532,23 +536,42 @@ async function recordSafetyCheck(user, eventId, payload = {}) {
   }
 
   const bookingRows = await fetchMany(
-    supabase.from('venue_bookings').select('id, status').eq('event_id', existing.id)
+    supabase
+      .from('venue_bookings')
+      .select('id, status, venues ( name )')
+      .eq('event_id', existing.id)
   );
   const activeBookingIds = bookingRows
     .filter((row) => !INACTIVE_BOOKING_STATUSES.includes(row.status))
     .map((row) => row.id);
   const equipmentRows = await fetchMany(
-    supabase.from('equipment_requests').select('id').eq('event_id', existing.id)
+    supabase
+      .from('equipment_requests')
+      .select('id, equipment:equipment_id ( name )')
+      .eq('event_id', existing.id)
   );
   const equipmentIds = equipmentRows.map((row) => row.id);
 
   let affected = [];
+  let affectedForNotice = [];
   if (outcome === SAFETY_CHECK_OUTCOME.REQUEST_CHANGES) {
     affected = parseAffectedArrangements(
       payload.affectedArrangements,
       activeBookingIds,
       equipmentIds
     );
+    // SCRUM-81 review: notices use venue/equipment names, not raw booking ids.
+    affectedForNotice = affected.map((item) => {
+      if (item.type === SAFETY_ARRANGEMENT_TYPE.VENUE_BOOKING) {
+        const row = bookingRows.find((booking) => String(booking.id) === String(item.id));
+        return { ...item, name: row?.venues?.name || null };
+      }
+      if (item.type === SAFETY_ARRANGEMENT_TYPE.EQUIPMENT_REQUEST) {
+        const row = equipmentRows.find((request) => String(request.id) === String(item.id));
+        return { ...item, name: row?.equipment?.name || null };
+      }
+      return item;
+    });
   }
 
   const nextStatus = outcome === SAFETY_CHECK_OUTCOME.APPROVED
@@ -607,7 +630,7 @@ async function recordSafetyCheck(user, eventId, payload = {}) {
   });
 
   // SCRUM-81 AC3–AC5, AC7: only this event's Coordinator and Organiser get the outcome.
-  await notifySafetyCheckContacts(existing, outcome, reason || null, affected);
+  await notifySafetyCheckContacts(existing, outcome, reason || null, affectedForNotice);
 
   return mapSafetyCheck(created);
 }

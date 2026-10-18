@@ -23,6 +23,7 @@ jest.mock('../src/config/db', () => ({
   fetchOne: jest.fn(),
   fetchMany: jest.fn(),
   updateById: jest.fn(),
+  updateByIdWhere: jest.fn(),
   insertOne: jest.fn(),
 }));
 jest.mock('../src/services/audit.service', () => {
@@ -152,6 +153,16 @@ beforeEach(() => {
   db.updateById.mockImplementation(async (table, id, patch) => {
     const row = (tables[table] || []).find((item) => String(item.id) === String(id));
     if (row) Object.assign(row, patch);
+    return row;
+  });
+  // SCRUM-56 AC5 / #34: recordSafetyCheck claims via updateByIdWhere while still Awaiting.
+  db.updateByIdWhere.mockImplementation(async (table, id, patch, where = {}) => {
+    const row = (tables[table] || []).find((item) => String(item.id) === String(id));
+    if (!row) return null;
+    if (Object.entries(where).some(([column, value]) => String(row[column]) !== String(value))) {
+      return null;
+    }
+    Object.assign(row, patch);
     return row;
   });
   db.insertOne.mockImplementation(async (table, row) => {
@@ -300,8 +311,8 @@ describe('SCRUM-81 safety-check outcome notices', () => {
   /*
    * AC:       SCRUM-81 AC5, AC7
    * Scenario: Safety Officer requests changes with a venue booking selected.
-   * Setup:    Reason and affectedArrangements [{ VENUE_BOOKING, 7 }].
-   * Expected: Notices include the reason and venue booking #7; only contacts 1 and 2.
+   * Setup:    Reason and affectedArrangements [{ VENUE_BOOKING, 7 }] (venue name Orchid).
+   * Expected: Notices include the reason and venue name; only contacts 1 and 2.
    * Type:     normal
    */
   it('notifies Coordinator and Organiser of request-changes with reason and arrangements', async () => {
@@ -315,7 +326,22 @@ describe('SCRUM-81 safety-check outcome notices', () => {
     expect(outcomes.map((row) => row.user_id).sort()).toEqual([1, 2]);
     expect(outcomes[0].title).toBe('Safety check: changes requested');
     expect(outcomes[0].body).toContain('Need a larger room');
-    expect(outcomes[0].body).toContain('venue booking #7');
+    expect(outcomes[0].body).toContain('venue Orchid');
+  });
+
+  /*
+   * AC:       SCRUM-81 AC3, AC7
+   * Scenario: Same user is both Coordinator and Organiser.
+   * Setup:    organiser_id and coordinator_id both 2.
+   * Expected: One SAFETY_CHECK_OUTCOME notice (not two identical copies).
+   * Type:     boundary
+   */
+  it('sends one outcome notice when Coordinator and Organiser are the same person', async () => {
+    event.organiser_id = 2;
+    await access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE' });
+    expect(safetyOutcomeNotices()).toEqual([
+      expect.objectContaining({ user_id: 2, type: 'SAFETY_CHECK_OUTCOME' }),
+    ]);
   });
 
   /*
@@ -382,24 +408,41 @@ describe('SCRUM-81 notice text helpers', () => {
 
   /*
    * AC:       SCRUM-81 AC5
-   * Scenario: Request-changes notice lists venue and equipment arrangement ids.
-   * Setup:    One venue booking and one equipment request in affectedArrangements.
-   * Expected: Body includes both arrangement labels and the reason.
+   * Scenario: Request-changes notice lists venue and equipment by name when provided.
+   * Setup:    One venue and one equipment request with names in affectedArrangements.
+   * Expected: Body includes both names and the reason (falls back to #id without name).
    * Type:     normal
    */
-  it('builds a request-changes notice that lists arrangements', () => {
+  it('builds a request-changes notice that lists arrangements by name', () => {
     const notice = access.buildSafetyOutcomeNotice({
       outcome: 'REQUEST_CHANGES',
       eventName: 'Workshop',
       reason: 'Swap the room',
       affectedArrangements: [
-        { type: 'VENUE_BOOKING', id: 7 },
-        { type: 'EQUIPMENT_REQUEST', id: 21 },
+        { type: 'VENUE_BOOKING', id: 7, name: 'Orchid' },
+        { type: 'EQUIPMENT_REQUEST', id: 21, name: 'Wireless mic' },
       ],
     });
     expect(notice.title).toBe('Safety check: changes requested');
     expect(notice.body).toContain('Swap the room');
+    expect(notice.body).toContain('venue Orchid');
+    expect(notice.body).toContain('equipment Wireless mic');
+  });
+
+  /*
+   * AC:       SCRUM-81 AC5
+   * Scenario: Name missing on an arrangement still produces a usable label.
+   * Setup:    Venue booking without name.
+   * Expected: Body falls back to venue booking #id.
+   * Type:     boundary
+   */
+  it('falls back to arrangement ids when names are missing', () => {
+    const notice = access.buildSafetyOutcomeNotice({
+      outcome: 'REQUEST_CHANGES',
+      eventName: 'Workshop',
+      reason: 'Swap the room',
+      affectedArrangements: [{ type: 'VENUE_BOOKING', id: 7 }],
+    });
     expect(notice.body).toContain('venue booking #7');
-    expect(notice.body).toContain('equipment request #21');
   });
 });
