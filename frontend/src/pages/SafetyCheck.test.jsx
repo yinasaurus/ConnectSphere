@@ -108,6 +108,33 @@ describe('SCRUM-55 / SCRUM-56 safety check page', () => {
   });
 
   /*
+   * AC:       SCRUM-56 AC5
+   * Scenario: Safety Officer clicks Record while the POST is still in flight.
+   * Setup:    POST hangs until we resolve it; form is otherwise valid for approve.
+   * Expected: Record outcome is disabled for the duration of the request (no double submit).
+   * Type:     boundary
+   */
+  it('disables Record outcome while the save request is in flight', async () => {
+    let resolvePost;
+    const postPromise = new Promise((resolve) => {
+      resolvePost = resolve;
+    });
+    api.mockImplementation(async (path, options = {}) => {
+      if (path === '/api/events/3/safety-check' && options.method === 'POST') {
+        return postPromise;
+      }
+      return { safetyCheck: reviewPayload };
+    });
+    renderPage();
+    const user = userEvent.setup();
+    await screen.findByText('Helix Conference');
+    await user.click(screen.getByRole('button', { name: 'Record outcome' }));
+    expect(screen.getByRole('button', { name: 'Record outcome' })).toBeDisabled();
+    resolvePost({ safetyCheck: { eventId: 3, outcome: 'APPROVED' } });
+    expect(await screen.findByText('Safety check outcome recorded.')).toBeInTheDocument();
+  });
+
+  /*
    * AC:       SCRUM-55 AC4
    * Scenario: A blocked user hits the safety-check page.
    * Setup:    GET 403 with a message and no safetyCheck body.

@@ -1,4 +1,4 @@
-const { supabase, fetchOne, fetchMany, insertOne, updateById } = require('../config/db');
+const { supabase, fetchOne, fetchMany, insertOne, updateByIdWhere } = require('../config/db');
 const {
   ROLES,
 } = require('../constants/roles');
@@ -556,6 +556,32 @@ async function recordSafetyCheck(user, eventId, payload = {}) {
     : EVENT_STATUS.PLANNING;
   assertTransition(existing.status, nextStatus);
 
+  const statusNote = outcome === SAFETY_CHECK_OUTCOME.APPROVED
+    ? (reason ? `Safety check approved: ${reason}` : 'Safety check approved')
+    : outcome === SAFETY_CHECK_OUTCOME.REJECTED
+      ? `Safety check rejected: ${reason}`
+      : `Safety check requested changes: ${reason}`;
+
+  // SCRUM-56 AC5: claim the transition first so a concurrent second record cannot also win.
+  // Only succeeds while status is still AWAITING_SAFETY_CHECK.
+  const claimed = await updateByIdWhere(
+    'events',
+    existing.id,
+    {
+      status: nextStatus,
+      sub_state: null,
+      updated_at: new Date().toISOString(),
+    },
+    { status: EVENT_STATUS.AWAITING_SAFETY_CHECK }
+  );
+  if (!claimed) {
+    throw httpError(
+      409,
+      'A safety-check outcome can only be recorded while the event is awaiting a safety check',
+      'INVALID_STATUS'
+    );
+  }
+
   const created = await insertOne('safety_checks', {
     event_id: existing.id,
     outcome,
@@ -563,18 +589,6 @@ async function recordSafetyCheck(user, eventId, payload = {}) {
     affected_arrangements: affected,
     decided_by: user.id,
     decided_at: new Date().toISOString(),
-  });
-
-  const statusNote = outcome === SAFETY_CHECK_OUTCOME.APPROVED
-    ? (reason ? `Safety check approved: ${reason}` : 'Safety check approved')
-    : outcome === SAFETY_CHECK_OUTCOME.REJECTED
-      ? `Safety check rejected: ${reason}`
-      : `Safety check requested changes: ${reason}`;
-
-  await updateById('events', existing.id, {
-    status: nextStatus,
-    sub_state: null,
-    updated_at: new Date().toISOString(),
   });
 
   await insertOne('event_status_history', {
@@ -611,13 +625,38 @@ async function safetyOutcomeForViewer(user, eventRow) {
 }
 
 /**
- * Purpose: whether an approved safety check exists so Preparation / confirm may proceed.
- * AC: SCRUM-55 AC3; SCRUM-56 AC6
+ * Purpose: when the event last entered Awaiting Safety Check (current cycle start).
+ * AC: SCRUM-55 AC3 — a prior cycle's approval must not clear Preparation after a re-check.
+ * Inputs: event id. Output: ISO timestamp string or null if never entered Awaiting.
+ */
+async function latestAwaitingEnteredAt(eventId) {
+  const rows = await fetchMany(
+    supabase
+      .from('event_status_history')
+      .select('created_at, to_status')
+      .eq('event_id', eventId)
+      .eq('to_status', EVENT_STATUS.AWAITING_SAFETY_CHECK)
+  );
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return null;
+  return [...list].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0]
+    .created_at;
+}
+
+/**
+ * Purpose: whether an approved safety check exists for the *current* awaiting cycle so
+ *     Preparation / confirm may proceed.
+ * AC: SCRUM-55 AC3; SCRUM-56 AC6; 17 Oct change record — critical change → Planning →
+ *     Awaiting again requires a new approval; an older APPROVED row does not count.
  * Inputs: event id. Output: boolean.
  */
 async function hasApprovedSafetyCheck(eventId) {
+  const awaitingAt = await latestAwaitingEnteredAt(eventId);
+  if (!awaitingAt) return false;
   const row = await latestSafetyCheckForEvent(eventId);
-  return Boolean(row && row.outcome === SAFETY_CHECK_OUTCOME.APPROVED);
+  if (!row || row.outcome !== SAFETY_CHECK_OUTCOME.APPROVED) return false;
+  // Approval must be at or after the latest enter-Awaiting transition for this cycle.
+  return String(row.decided_at || '') >= String(awaitingAt);
 }
 
 module.exports = {

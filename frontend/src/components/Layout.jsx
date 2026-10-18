@@ -59,6 +59,7 @@ export default function Layout() {
           <NavLink to="/app/notifications">Notifications</NavLink>
           <NavLink to="/app/profile">Profile</NavLink>
         </nav>
+        {/* SCRUM-82: Sign out lives in this chip, pinned below the scrolling nav. */}
         <div className="user-chip">
           <strong>{user.fullName}</strong>
           <div className="roles">

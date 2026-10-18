@@ -7,9 +7,10 @@ const list = asyncHandler(async (req, res) => {
   res.json({ registrations });
 });
 
+// SCRUM-52: an Attendee registers; the response says how many places are left.
 const register = asyncHandler(async (req, res) => {
-  const registration = await registrationsService.register(req.user, req.params.id);
-  res.status(201).json({ registration });
+  const { registration, placesLeft } = await registrationsService.register(req.user, req.params.id);
+  res.status(201).json({ registration, placesLeft });
 });
 
 const withdraw = asyncHandler(async (req, res) => {

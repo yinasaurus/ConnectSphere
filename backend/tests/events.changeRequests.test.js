@@ -8,6 +8,12 @@
  *   SCRUM-35 AC1  Only the assigned coordinator can approve or reject.
  *   SCRUM-35 AC2  Approve copies the proposed fields onto the event (including Confirmed);
  *                 reject leaves the event unchanged. Event status is not moved.
+ *   SCRUM-69 AC1  Approve writes every included field onto the event.
+ *   SCRUM-69 AC2  Approve is refused when requested values are invalid.
+ *   SCRUM-69 AC3  Reject still leaves the event unchanged.
+ *   SCRUM-69 AC4  Approve audit records who, when, and previous/new per field.
+ *   SCRUM-69 AC5  Deferred — SCRUM-41/42 review flags are not built.
+ *   SCRUM-69 AC6  Organiser is notified on approve and on reject.
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
@@ -280,6 +286,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Scenario: Assigned coordinator approves a pending request on a Planning event.
    * Setup:    Request proposes new times, attendance, venue and equipment notes.
    * Expected: Those columns are written onto the event; status stays PLANNING; request APPROVED.
+   *           The organiser is notified (SCRUM-69 AC6).
    * Type:     normal
    */
   it('AC1+AC2: assigned coordinator approve copies proposed fields and leaves status', async () => {
@@ -320,7 +327,14 @@ describe('SCRUM-35 decideChangeRequest', () => {
       50,
       expect.objectContaining({ eventId: 3 })
     );
-    expect(audit.notifyUser).not.toHaveBeenCalled();
+    // SCRUM-69 AC6: decide notifies the organiser (create still does not).
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      1,
+      'CHANGE_REQUEST_DECIDED',
+      'Change request approved',
+      expect.stringContaining('Workshop'),
+      3
+    );
   });
 
   /*
@@ -359,6 +373,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * AC:       SCRUM-35 AC2
    * Scenario: Assigned coordinator rejects, optionally with a reason.
    * Expected: Request REJECTED with the reason; events table is not written.
+   *           The organiser is notified (SCRUM-69 AC6).
    * Type:     normal
    */
   it('AC2: reject leaves the event unchanged and stores an optional reason', async () => {
@@ -389,6 +404,13 @@ describe('SCRUM-35 decideChangeRequest', () => {
       'event_change_request',
       50,
       expect.objectContaining({ eventId: 3, reason: 'Venue already booked that week' })
+    );
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      1,
+      'CHANGE_REQUEST_DECIDED',
+      'Change request rejected',
+      expect.stringContaining('Venue already booked that week'),
+      3
     );
   });
 
@@ -452,6 +474,424 @@ describe('SCRUM-35 decideChangeRequest', () => {
     await expect(service.decideChangeRequest(coordinator, 3, 50, { approve: true }))
       .rejects.toMatchObject({ status: 404, code: 'NOT_FOUND' });
     expect(db.updateById).not.toHaveBeenCalled();
+  });
+});
+
+describe('SCRUM-69 decideChangeRequest apply', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /*
+   * AC:       SCRUM-69 AC1
+   * Scenario: Request includes only attendance; date/venue/equipment on the request are null.
+   * Setup:    Planning event attendance 40; pending row expected_attendance 80 and other
+   *           proposed columns null (those fields were not requested).
+   * Expected: Only expected_attendance is written onto the event; start/end/notes stay off
+   *           the patch so they are not blanked.
+   * Type:     normal
+   */
+  it('AC1: only the fields included in the request are written onto the event', async () => {
+    const pending = pendingRequest({
+      start_at: null,
+      end_at: null,
+      venue_requirements: null,
+      equipment_notes: null,
+      expected_attendance: 80,
+    });
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pending);
+
+    await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
+
+    const eventPatch = db.updateById.mock.calls.find((call) => call[0] === 'events')[2];
+    expect(eventPatch.expected_attendance).toBe(80);
+    expect(eventPatch).not.toHaveProperty('start_at');
+    expect(eventPatch).not.toHaveProperty('end_at');
+    expect(eventPatch).not.toHaveProperty('venue_requirements');
+    expect(eventPatch).not.toHaveProperty('equipment_notes');
+  });
+
+  /*
+   * AC:       SCRUM-69 AC2
+   * Scenario: Pending row has attendance 0 (not a usable headcount).
+   * Expected: 400; event and request stay unwritten so the request remains PENDING.
+   * Type:     boundary
+   */
+  it('AC2: attendance of 0 cannot be approved', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({ expected_attendance: 0 }));
+
+    await expect(service.decideChangeRequest(coordinator, 3, 50, { approve: true }))
+      .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(db.updateById).not.toHaveBeenCalled();
+    expect(audit.notifyUser).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-69 AC2
+   * Scenario: Pending row has negative attendance.
+   * Expected: 400; nothing is written.
+   * Type:     error
+   */
+  it('AC2: negative attendance cannot be approved', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({ expected_attendance: -1 }));
+
+    await expect(service.decideChangeRequest(coordinator, 3, 50, { approve: true }))
+      .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-69 AC2
+   * Scenario: Pending row has a fractional attendance (not a whole headcount).
+   * Expected: 400; nothing is written.
+   * Type:     error
+   */
+  it('AC2: a fractional attendance cannot be approved', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({ expected_attendance: 1.5 }));
+
+    await expect(service.decideChangeRequest(coordinator, 3, 50, { approve: true }))
+      .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-69 AC2
+   * Scenario: Stored start is not a real timestamp.
+   * Expected: 400; junk dates cannot be copied onto the event.
+   * Type:     error
+   */
+  it('AC2: an invalid start date cannot be approved', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({ start_at: 'not-a-date' }));
+
+    await expect(service.decideChangeRequest(coordinator, 3, 50, { approve: true }))
+      .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-69 AC2
+   * Scenario: Stored end is not a real timestamp.
+   * Setup:    end_at is "not-a-date"; start is a valid future time.
+   * Expected: 400 before any write — junk ends must not be copied onto the event
+   *           (validateDateRange used to skip NaN and let the patch through).
+   * Type:     error
+   */
+  it('AC2: an invalid end date cannot be approved', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({ end_at: 'not-a-date' }));
+
+    await expect(service.decideChangeRequest(coordinator, 3, 50, { approve: true }))
+      .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-69 AC2
+   * Scenario: Requested start is before the moment of approve.
+   * Setup:    now is 15 Oct 2026 12:00 UTC; request start is 14 Oct 2026.
+   * Expected: 400; request stays PENDING.
+   * Type:     error
+   */
+  it('AC2: a start date/time in the past cannot be approved', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-15T12:00:00.000Z'));
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({
+        start_at: '2026-10-14T09:00:00.000Z',
+        end_at: '2026-10-14T17:00:00.000Z',
+      }));
+
+    await expect(service.decideChangeRequest(coordinator, 3, 50, { approve: true }))
+      .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(db.updateById).not.toHaveBeenCalled();
+    jest.useRealTimers();
+  });
+
+  /*
+   * AC:       SCRUM-69 AC2
+   * Scenario: Requested start is exactly the approve time (not yet in the past).
+   * Setup:    now and start_at are both 15 Oct 2026 12:00 UTC.
+   * Expected: Approve proceeds; start is written.
+   * Type:     boundary
+   */
+  it('AC2: a start equal to now can be approved', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-15T12:00:00.000Z'));
+    const pending = pendingRequest({
+      start_at: '2026-10-15T12:00:00.000Z',
+      end_at: '2026-10-15T17:00:00.000Z',
+    });
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pending);
+
+    await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
+
+    expect(db.updateById).toHaveBeenCalledWith(
+      'events',
+      3,
+      expect.objectContaining({ start_at: '2026-10-15T12:00:00.000Z' })
+    );
+    jest.useRealTimers();
+  });
+
+  /*
+   * AC:       SCRUM-69 AC2
+   * Scenario: Request has no start; the event's existing start is already in the past.
+   * Setup:    Event start 10 Nov is before now 20 Nov; request only changes attendance.
+   * Expected: Approve is allowed — AC2 checks requested values, not the current event.
+   * Type:     boundary
+   */
+  it('AC2: an existing past start does not block approve when start was not requested', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-11-20T12:00:00.000Z'));
+    event = planningEvent();
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({
+        start_at: null,
+        end_at: null,
+        venue_requirements: null,
+        equipment_notes: null,
+        expected_attendance: 80,
+      }));
+
+    await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
+
+    expect(db.updateById).toHaveBeenCalledWith(
+      'events',
+      3,
+      expect.objectContaining({ expected_attendance: 80 })
+    );
+    jest.useRealTimers();
+  });
+
+  /*
+   * AC:       SCRUM-69 AC2
+   * Scenario: Requested start is after the requested end.
+   * Expected: 400 from the merged-window check; event not written.
+   * Type:     error
+   */
+  it('AC2: an end before the start cannot be approved', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({
+        start_at: '2026-11-20T17:00:00.000Z',
+        end_at: '2026-11-20T09:00:00.000Z',
+      }));
+
+    await expect(service.decideChangeRequest(coordinator, 3, 50, { approve: true }))
+      .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC:       SCRUM-69 AC3
+   * Scenario: Coordinator rejects a request whose attendance would be invalid if approved.
+   * Setup:    expected_attendance 0 on the pending row.
+   * Expected: Request REJECTED; events table is not written (invalid values do not apply).
+   * Type:     conflict
+   */
+  it('AC3: reject leaves the event unchanged even when requested values would be invalid', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({ expected_attendance: 0 }));
+
+    const result = await service.decideChangeRequest(coordinator, 3, 50, { approve: false });
+
+    expect(result.status).toBe('REJECTED');
+    expect(db.updateById).not.toHaveBeenCalledWith('events', expect.anything(), expect.anything());
+    expect(db.updateById).toHaveBeenCalledWith(
+      'event_change_requests',
+      50,
+      expect.objectContaining({ status: 'REJECTED' })
+    );
+  });
+
+  /*
+   * AC:       SCRUM-69 AC4
+   * Scenario: Approve a request that changes every permitted field.
+   * Setup:    Event has the planning defaults; request has WINDOW / 80 / Banquet / 4 mics.
+   * Expected: Audit CHANGE_REQUEST_APPROVED includes decidedBy, decidedAt, and previous/new
+   *           for each included field.
+   * Type:     normal
+   */
+  it('AC4: approve audit records who, when, and previous and new values per field', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest());
+
+    await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
+
+    expect(audit.writeAudit).toHaveBeenCalledWith(
+      2,
+      'CHANGE_REQUEST_APPROVED',
+      'event_change_request',
+      50,
+      expect.objectContaining({
+        eventId: 3,
+        decidedBy: 2,
+        decidedAt: expect.any(String),
+        fields: [
+          { field: 'startAt', previous: event.start_at, next: WINDOW.startAt },
+          { field: 'endAt', previous: event.end_at, next: WINDOW.endAt },
+          { field: 'expectedAttendance', previous: 40, next: 80 },
+          { field: 'venueRequirements', previous: 'Lecture theatre', next: 'Banquet' },
+          { field: 'equipmentNotes', previous: '2 mics', next: '4 mics' },
+        ],
+      })
+    );
+  });
+
+  /*
+   * AC:       SCRUM-69 AC4
+   * Scenario: Approve a request that includes only attendance.
+   * Expected: Audit fields array has only expectedAttendance (omitted columns are not listed).
+   * Type:     boundary
+   */
+  /*
+   * AC:       SCRUM-69 AC4
+   * Scenario: Supabase returns Date objects for timestamps instead of ISO strings.
+   * Setup:    Event and request start/end are Date instances.
+   * Expected: Audit previous/next are ISO strings so the log is JSON-safe.
+   * Type:     boundary
+   */
+  it('AC4: Date values in the request are stored as ISO strings in the audit', async () => {
+    const start = new Date('2026-11-20T09:00:00.000Z');
+    const end = new Date('2026-11-20T17:00:00.000Z');
+    const existingStart = new Date('2026-11-10T09:00:00.000Z');
+    event = planningEvent({ start_at: existingStart, end_at: new Date('2026-11-10T17:00:00.000Z') });
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({ start_at: start, end_at: end }));
+
+    await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
+
+    const metadata = audit.writeAudit.mock.calls[0][4];
+    expect(metadata.fields.find((row) => row.field === 'startAt')).toEqual({
+      field: 'startAt',
+      previous: existingStart.toISOString(),
+      next: start.toISOString(),
+    });
+  });
+
+  it('AC4: audit lists only the fields included in the request', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({
+        start_at: null,
+        end_at: null,
+        venue_requirements: null,
+        equipment_notes: null,
+        expected_attendance: 80,
+      }));
+
+    await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
+
+    const metadata = audit.writeAudit.mock.calls[0][4];
+    expect(metadata.fields).toEqual([
+      { field: 'expectedAttendance', previous: 40, next: 80 },
+    ]);
+  });
+
+  /*
+   * AC:       SCRUM-69 AC5
+   * Scenario: Approve a change that includes date, attendance, venue and equipment notes.
+   * Setup:    Same as the happy-path request. SCRUM-41/42 are not in this codebase.
+   * Expected: Writes are only to events and event_change_requests — no invented review flag
+   *           on venue bookings or equipment requests.
+   * Type:     normal
+   */
+  it('AC5: approve does not flag venue or equipment rows (SCRUM-41/42 not built)', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest());
+
+    await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
+
+    const tables = db.updateById.mock.calls.map((call) => call[0]);
+    expect(tables).toEqual(['events', 'event_change_requests']);
+  });
+
+  /*
+   * AC:       SCRUM-69 AC6
+   * Scenario: Approve a valid request.
+   * Expected: One CHANGE_REQUEST_DECIDED notice to the event organiser, after the writes.
+   * Type:     normal
+   */
+  it('AC6: the organiser is notified when the request is approved', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest());
+
+    await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
+
+    expect(audit.notifyUser).toHaveBeenCalledTimes(1);
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      1,
+      'CHANGE_REQUEST_DECIDED',
+      'Change request approved',
+      'Your change request for Workshop was approved. The event record has been updated.',
+      3
+    );
+  });
+
+  /*
+   * AC:       SCRUM-69 AC6
+   * Scenario: Reject with no reason.
+   * Expected: Organiser is still notified; body has no reason line.
+   * Type:     normal
+   */
+  it('AC6: the organiser is notified when the request is rejected', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest());
+
+    await service.decideChangeRequest(coordinator, 3, 50, { approve: false });
+
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      1,
+      'CHANGE_REQUEST_DECIDED',
+      'Change request rejected',
+      'Your change request for Workshop was rejected.',
+      3
+    );
+  });
+
+  /*
+   * AC:       SCRUM-69 AC6
+   * Scenario: Event has no organiser_id.
+   * Expected: Decision still saves; notifyUser is called with a falsy user id and no-ops.
+   * Type:     boundary
+   */
+  it('AC6: a missing organiser still records the decision', async () => {
+    event = planningEvent({ organiser_id: null });
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest());
+
+    const result = await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
+
+    expect(result.status).toBe('APPROVED');
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      null,
+      'CHANGE_REQUEST_DECIDED',
+      'Change request approved',
+      expect.any(String),
+      3
+    );
   });
 });
 
@@ -572,6 +1012,32 @@ describe('SCRUM-34/35 HTTP routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.changeRequest.status).toBe('APPROVED');
+  });
+
+  /*
+   * AC:       SCRUM-69 AC2
+   * Scenario: Assigned coordinator approves a request whose start is already in the past.
+   * Setup:    Session cookie for coordinator 2; pending start 14 Oct 2026; now 15 Oct 2026.
+   * Expected: 400; events table is not written.
+   * Type:     error
+   */
+  it('assigned coordinator cannot approve a past start through the API (400)', async () => {
+    asUser(2, ROLES.EVENT_COORDINATOR);
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({
+        start_at: '2020-01-01T09:00:00.000Z',
+        end_at: '2020-01-01T17:00:00.000Z',
+      }));
+
+    const res = await request(app)
+      .post('/api/events/3/change-requests/50/decision')
+      .set('Cookie', `${env.sessionCookieName}=${coordinatorToken}`)
+      .send({ approve: true });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('VALIDATION_ERROR');
+    expect(db.updateById).not.toHaveBeenCalled();
   });
 
   /*
