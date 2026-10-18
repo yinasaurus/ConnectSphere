@@ -589,6 +589,10 @@ it('loads an attendee event without requesting restricted planning data', async 
     // SCRUM-52: the Register button shows once the Coordinator has opened registration.
     if (path === '/api/events/3') return { event: { id: 3, name: 'Public event', status: 'CONFIRMED', registrationOpen: true } };
     if (path === '/api/events/3/venue-bookings') return { bookings: [] };
+    // SCRUM-51: Attendees also load their registration status.
+    if (path === '/api/events/3/registration-status') {
+      return { registrationStatus: { state: 'OPEN', opensAt: '2026-11-01T09:00:00Z', closesAt: '2026-11-08T09:00:00Z', capacity: 50, placesLeft: 50, myRegistration: null } };
+    }
     throw new Error('Forbidden planning information');
   });
   render(
