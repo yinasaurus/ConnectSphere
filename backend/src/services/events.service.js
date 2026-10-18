@@ -823,7 +823,7 @@ async function isReadyToConfirm(event) {
   }
 
   // AC6: no booking or equipment can be marked as needing review or needing alternative
-  // Check venue bookings for decision_reason or alternative_suggestion indicating issues
+  // Check venue bookings for alternative_suggestion indicating alternative arrangements needed
   const bookingsWithIssues = await fetchMany(
     supabase
       .from('venue_bookings')
@@ -834,8 +834,7 @@ async function isReadyToConfirm(event) {
 
   const hasBookingIssues = bookingsWithIssues.some(
     (booking) => 
-      (booking.decision_reason && booking.decision_reason.trim().length > 0) ||
-      (booking.alternative_suggestion && booking.alternative_suggestion.trim().length > 0)
+      booking.alternative_suggestion && booking.alternative_suggestion.trim().length > 0
   );
 
   if (hasBookingIssues) {

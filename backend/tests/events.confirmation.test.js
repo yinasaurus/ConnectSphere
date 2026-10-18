@@ -23,7 +23,6 @@ jest.mock('../src/services/audit.service', () => ({
 const db = require('../src/config/db');
 const audit = require('../src/services/audit.service');
 const events = require('../src/services/events.service');
-const access = require('../src/services/access.service');
 const { createApp } = require('../src/app');
 const { ROLES } = require('../src/constants/roles');
 const { env } = require('../src/config/env');
@@ -31,7 +30,6 @@ const { env } = require('../src/config/env');
 const coordinator = { id: 2, roles: [ROLES.EVENT_COORDINATOR] };
 const otherCoordinator = { id: 9, roles: [ROLES.EVENT_COORDINATOR] };
 const organiser = { id: 1, roles: [ROLES.EVENT_ORGANISER] };
-const safetyOfficer = { id: 12, roles: [ROLES.SAFETY_OFFICER] };
 const app = createApp();
 const organiserToken = jwt.sign({ sub: organiser.id }, env.jwtSecret);
 
@@ -288,23 +286,35 @@ describe('SCRUM-73 event confirmation service rules', () => {
   });
 
   /*
-   * Purpose: block venue arrangements marked for review or alternative arrangements.
-   * AC: SCRUM-73 AC6, AC7 — both issue fields prevent confirmation until cleared.
-   * Inputs: an approved booking with a review reason or alternative suggestion.
+   * Purpose: block venue arrangements marked for alternative arrangements.
+   * AC: SCRUM-73 AC6, AC7 — alternative suggestions prevent confirmation until cleared.
+   * Inputs: an approved booking with an alternative suggestion.
    * Output: 409 NOT_READY_TO_CONFIRM and an unchanged event.
-   * Failure: fails if either outstanding venue issue is overlooked.
+   * Failure: fails if outstanding alternative arrangements are overlooked.
    */
-  it.each([
-    ['review reason', { decision_reason: 'Needs review' }],
-    ['alternative suggestion', { alternative_suggestion: 'Use another room' }],
-  ])('blocks confirmation when a venue booking has a %s', async (_issue, issue) => {
-    tables.venue_bookings[0] = { ...tables.venue_bookings[0], ...issue };
+  it('blocks confirmation when a venue booking has an alternative suggestion', async () => {
+    tables.venue_bookings[0] = { ...tables.venue_bookings[0], alternative_suggestion: 'Use another room' };
 
     await expectBlocked(
       events.confirmEvent(coordinator, 3),
       409,
       'NOT_READY_TO_CONFIRM'
     );
+  });
+
+  /*
+   * Purpose: allow confirmation when an approved venue booking includes a decision note.
+   * AC: SCRUM-73 AC4, AC6 — an approval reason/note does not block confirmation.
+   * Inputs: an approved booking with a decision note.
+   * Output: successful confirmation (CONFIRMED status).
+   * Failure: fails if decision notes on approved bookings are incorrectly treated as blockers.
+   */
+  it('confirms when an approved venue booking has an approval note in decision_reason', async () => {
+    tables.venue_bookings[0] = { ...tables.venue_bookings[0], decision_reason: 'Approved with standard AV setup' };
+
+    const result = await events.confirmEvent(coordinator, 3);
+    expect(result.status).toBe('CONFIRMED');
+    expect(event.status).toBe('CONFIRMED');
   });
 
   /*

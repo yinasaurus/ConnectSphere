@@ -265,4 +265,15 @@ describe('SCRUM-5 POST /api/events/:id/status (route)', () => {
     expect(res.status).toBe(200);
     expect(db.updateById).toHaveBeenCalledWith('events', '3', expect.objectContaining({ status: 'APPROVED' }));
   });
+
+  // SCRUM-73: UI confirms via POST /api/events/:id/status { status: 'CONFIRMED' }
+  // Route refuses confirmation with 409 NOT_READY_TO_CONFIRM when arrangements are incomplete.
+  it('US5-R04: confirming via the status route is refused when arrangements are incomplete', async () => {
+    event.status = 'PREPARATION';
+    tables.venue_bookings[0].status = 'PENDING';
+    const res = await asCoordinator().send({ status: 'CONFIRMED' });
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ error: 'NOT_READY_TO_CONFIRM' });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
 });
