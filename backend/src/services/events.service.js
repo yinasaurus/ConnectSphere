@@ -472,6 +472,36 @@ async function updateEvent(user, id, payload) {
   patch.updated_at = new Date().toISOString();
   await updateById('events', id, patch);
   await writeAudit(user.id, 'EVENT_UPDATED', 'event', id, payload);
+
+  /*
+   * Purpose: notify organiser and coordinator when critical event details change
+   * AC: SCRUM-44 AC1b — emit notifications for start_at, end_at, or expected_attendance changes
+   * Inputs: existing event row, patch object, user. Output: notifyUser calls for affected parties.
+   * Failure: notifications are skipped if recipient is the acting user (self-exclusion)
+   */
+  const criticalFields = ['start_at', 'end_at', 'expected_attendance'];
+  const changedCriticals = criticalFields.filter((field) => {
+    return patch[field] !== undefined && patch[field] !== existing[field];
+  });
+
+  if (changedCriticals.length > 0) {
+    const fieldLabels = {
+      start_at: 'start time',
+      end_at: 'end time',
+      expected_attendance: 'expected attendance',
+    };
+    const changedList = changedCriticals.map((f) => fieldLabels[f]).join(', ');
+    const notificationTitle = 'Event details updated';
+    const notificationBody = `${existing.name} has updated ${changedList}.`;
+
+    if (existing.organiser_id && existing.organiser_id !== user.id) {
+      await notifyUser(existing.organiser_id, 'EVENT_UPDATED', notificationTitle, notificationBody, id);
+    }
+    if (existing.coordinator_id && existing.coordinator_id !== user.id) {
+      await notifyUser(existing.coordinator_id, 'EVENT_UPDATED', notificationTitle, notificationBody, id);
+    }
+  }
+
   return getEvent(user, id);
 }
 
@@ -777,6 +807,17 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
   if (existing.organiser_id) {
     const { title, body } = statusNotification(existing.name, existing.status, nextStatus, note);
     await notifyUser(existing.organiser_id, 'EVENT_STATUS_CHANGED', title, body, id);
+  }
+
+  /*
+   * Purpose: notify coordinator when event status changes
+   * AC: SCRUM-44 AC1a — emit notifications to coordinator for status changes
+   * Inputs: existing event row, user. Output: notifyUser call for coordinator.
+   * Failure: notification is skipped if coordinator is the acting user (self-exclusion)
+   */
+  if (existing.coordinator_id && existing.coordinator_id !== user.id) {
+    const { title, body } = statusNotification(existing.name, existing.status, nextStatus, note);
+    await notifyUser(existing.coordinator_id, 'EVENT_STATUS_CHANGED', title, body, id);
   }
 
   return getEvent(user, id);
