@@ -18,6 +18,12 @@ const withdraw = asyncHandler(async (req, res) => {
   res.json({ registration });
 });
 
+// SCRUM-51: the event's registration details and the caller's own status.
+const status = asyncHandler(async (req, res) => {
+  const registrationStatus = await registrationsService.getRegistrationStatus(req.user, req.params.id);
+  res.json({ registrationStatus });
+});
+
 // SCRUM-63: the assigned Coordinator opens registration (window + capacity).
 const enable = asyncHandler(async (req, res) => {
   const settings = await registrationSettings.enableRegistration(req.user, req.params.id, req.body);
@@ -30,4 +36,4 @@ const changeSettings = asyncHandler(async (req, res) => {
   res.json({ settings });
 });
 
-module.exports = { list, register, withdraw, enable, changeSettings };
+module.exports = { list, register, withdraw, enable, changeSettings, status };

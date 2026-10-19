@@ -43,7 +43,12 @@ function eventWith(overrides = {}) {
   };
 }
 
-function stubApi(eventData, registerResult, calls = []) {
+const openStatus = {
+  state: 'OPEN', opensAt: '2026-11-01T09:00:00.000Z', closesAt: '2026-11-08T09:00:00.000Z',
+  capacity: 50, placesLeft: 40, myRegistration: null,
+};
+
+function stubApi(eventData, registerResult, calls = [], registrationStatus = openStatus) {
   api.mockImplementation((path, options = {}) => {
     calls.push({ path, ...options });
     if (path === '/api/auth/me') return Promise.resolve({ user: attendee });
@@ -53,6 +58,7 @@ function stubApi(eventData, registerResult, calls = []) {
     if (path === '/api/venues') return Promise.resolve({ venues: [] });
     if (path === '/api/events/3/venue-bookings') return Promise.resolve({ bookings: [] });
     if (path === '/api/events/3/equipment-requests') return Promise.resolve({ requests: [] });
+    if (path === '/api/events/3/registration-status') return Promise.resolve({ registrationStatus });
     if (path === '/api/events/3/registrations') return registerResult();
     return Promise.reject(new Error(`Unhandled api: ${path}`));
   });
@@ -147,15 +153,103 @@ describe('SCRUM-52 Register button (event page)', () => {
   });
 
   /*
-   * AC: SCRUM-52 AC3
+   * AC: SCRUM-52 AC3, SCRUM-51 AC1
    * Scenario: The event is Confirmed but registration has not been enabled.
    * Expected: no Register button, and a note that registration is not open.
    */
   it('US52-F04: there is no Register button until registration is enabled', async () => {
-    stubApi(eventWith({ registrationOpen: false }), () => Promise.reject(new Error('should not be called')));
+    stubApi(
+      eventWith({ registrationOpen: false }),
+      () => Promise.reject(new Error('should not be called')),
+      [],
+      { state: 'NOT_OPEN', opensAt: null, closesAt: null, capacity: null, placesLeft: null, myRegistration: null }
+    );
     renderEvent();
 
     expect(await screen.findByText('Registration is not open for this event.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Register' })).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-51 AC1, AC2
+   * Scenario: An Attendee opens the event page.
+   * Expected: the page asks for the registration status and shows the card with places left.
+   */
+  it('US51-F08: the event page loads and shows the Attendee\'s registration status', async () => {
+    const calls = [];
+    stubApi(eventWith(), () => Promise.resolve({}), calls);
+    renderEvent();
+
+    expect(await screen.findByText('40 of 50')).toBeInTheDocument();
+    expect(screen.getByText('Not registered')).toBeInTheDocument();
+    expect(calls).toContainEqual(expect.objectContaining({ path: '/api/events/3/registration-status' }));
+  });
+
+  /*
+   * AC: SCRUM-51 AC2
+   * Scenario: The Attendee registers, then withdraws, from the card on the event page.
+   * Expected: after each action the page reloads the status, so the card shows the new status
+   *   ("Registered on ..." then "Withdrawn on ...") without a manual refresh.
+   */
+  it('US51-F11: the card shows the new status after registering and after withdrawing', async () => {
+    const calls = [];
+    const registeredAt = '2026-11-05T09:00:00.000Z';
+    const withdrawnAt = '2026-11-05T10:00:00.000Z';
+    let current = openStatus;
+    stubApi(eventWith(), () => {
+      current = { ...openStatus, placesLeft: 39, myRegistration: { status: 'REGISTERED', registeredAt, withdrawnAt: null } };
+      return Promise.resolve({ registration: { id: 99 }, placesLeft: 39 });
+    }, calls);
+    const base = api.getMockImplementation();
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/api/events/3/registration-status') {
+        calls.push({ path, ...options });
+        return Promise.resolve({ registrationStatus: current });
+      }
+      if (path === '/api/events/3/registrations/withdraw') {
+        calls.push({ path, ...options });
+        current = { ...openStatus, myRegistration: { status: 'WITHDRAWN', registeredAt, withdrawnAt } };
+        return Promise.resolve({ registration: { id: 99, status: 'WITHDRAWN' } });
+      }
+      return base(path, options);
+    });
+    renderEvent();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Register' }));
+    expect(await screen.findByText(`Registered on ${new Date(registeredAt).toLocaleString()}`)).toBeInTheDocument();
+    expect(screen.getByText('39 of 50')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Withdraw' }));
+    expect(await screen.findByText(`Withdrawn on ${new Date(withdrawnAt).toLocaleString()}`)).toBeInTheDocument();
+    expect(calls).toContainEqual(expect.objectContaining({ path: '/api/events/3/registrations/withdraw', method: 'POST' }));
+    expect(screen.getByRole('button', { name: 'Register' })).toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-51 (as an Attendee)
+   * Scenario: An Organiser (not an Attendee) opens the same event.
+   * Expected: no Registration card and no request for the Attendee's registration status.
+   */
+  it('US51-F12: a user without the Attendee role does not get the registration card', async () => {
+    const calls = [];
+    mockAuth({ id: 1, fullName: 'Olivia', roles: ['EVENT_ORGANISER'] });
+    stubApi(eventWith(), () => Promise.reject(new Error('should not be called')), calls);
+    renderEvent();
+
+    expect(await screen.findByRole('heading', { name: 'Workshop' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Registration' })).not.toBeInTheDocument();
+    expect(calls).not.toContainEqual(expect.objectContaining({ path: '/api/events/3/registration-status' }));
+  });
+
+  it('US51-F09: the page still opens if the registration status cannot be loaded', async () => {
+    api.mockImplementation((path) => {
+      if (path === '/api/events/3') return Promise.resolve({ event: eventWith() });
+      if (path === '/api/events/3/venue-bookings') return Promise.resolve({ bookings: [] });
+      return Promise.reject(new Error('Server error'));
+    });
+    renderEvent();
+
+    expect(await screen.findByText('Registration details are not available right now.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Workshop' })).toBeInTheDocument();
   });
 });

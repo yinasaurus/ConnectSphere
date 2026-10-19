@@ -64,6 +64,7 @@ router.post(
   controller.decide
 );
 router.post('/:id/status', requireRole(ROLES.EVENT_COORDINATOR), controller.changeStatus);
+router.post('/:id/confirm', requireRole(ROLES.EVENT_COORDINATOR), controller.confirm);
 router.post('/:id/clarification', requireRole(ROLES.EVENT_COORDINATOR), controller.requestClarification);
 router.post('/:id/clarification/respond', controller.respondClarification);
 router.get('/:id/history', controller.history);
@@ -87,6 +88,7 @@ router.post(
 router.post('/:id/registration/enable', requireRole(ROLES.EVENT_COORDINATOR), registrations.enable);
 router.patch('/:id/registration', requireRole(ROLES.EVENT_COORDINATOR), registrations.changeSettings);
 router.get('/:id/registrations', registrations.list);
+router.get('/:id/registration-status', registrations.status);
 router.post('/:id/registrations', registrations.register);
 router.post('/:id/registrations/withdraw', registrations.withdraw);
 

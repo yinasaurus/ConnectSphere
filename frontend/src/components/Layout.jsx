@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
-import { ROLE_LABELS, ROLES } from '../constants';
+import { LIVE_REFRESH_MS, ROLE_LABELS, ROLES } from '../constants';
+import { api } from '../api';
 
 /**
  * Purpose: signed-in chrome: nav links limited to roles the session holds, and
@@ -8,11 +10,14 @@ import { ROLE_LABELS, ROLES } from '../constants';
  * AC: SCRUM-54 AC1 (role labels), AC2 (hybrid accounts see every function they hold),
  *     AC3 (Unassigned queue / Assignments only for Lead).
  *     SCRUM-65 AC1 — the Lead gets an Unassigned queue nav item; other roles do not.
+ *     SCRUM-44 AC2-AC3 — the Notifications link displays the signed-in user's unread count.
  */
 export default function Layout() {
   const { user, logout, hasRole } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationError, setNotificationError] = useState('');
   /* 
     This code change checks whether the user is currently viewing the venue booking page so 
     the main layout component can adapt its design (specifically for mobile screens).
@@ -24,6 +29,36 @@ export default function Layout() {
   */
   // Mark the booking page so its layout can hide the navigation sidebar on mobile.
   const isVenueBookingPage = /\/events\/[^/]+\/venue-booking$/.test(location.pathname);
+
+  /*
+  - Purpose: refresh the authenticated user's unread notification count while the app is open.
+  - AC: SCRUM-44 AC2-AC3 — count comes from the user-scoped notifications endpoint.
+  - Inputs: none. Output: current unread count for the Notifications navigation badge.
+  - Failure: API errors leave the last known count unchanged; the polling timer is cleaned up on unmount.
+  */
+  useEffect(() => {
+    let active = true;
+    async function refreshUnreadCount() {
+      try {
+        const data = await api('/api/notifications');
+        if (active) {
+          setUnreadCount(data.unread || 0);
+          setNotificationError('');
+        }
+      } catch (error) {
+        if (active) {
+          setNotificationError(error.message || 'Unread notification count could not be loaded.');
+        }
+      }
+    }
+
+    refreshUnreadCount();
+    const timer = setInterval(refreshUnreadCount, LIVE_REFRESH_MS);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
 
   return (
     <div className={`app-shell${isVenueBookingPage ? ' venue-booking-shell' : ''}`}>
@@ -56,9 +91,19 @@ export default function Layout() {
           {hasRole(ROLES.EVENT_COORDINATOR, ROLES.TECHNICAL_SUPPORT) && (
             <NavLink to="/app/equipment">Equipment</NavLink>
           )}
-          <NavLink to="/app/notifications">Notifications</NavLink>
+          <NavLink
+            to="/app/notifications"
+            aria-label={`Notifications, ${unreadCount} unread`}
+            className="notification-nav-link"
+          >
+            <span>Notifications</span>
+            {unreadCount > 0 && (
+              <span className="notification-count" aria-hidden="true">{unreadCount}</span>
+            )}
+          </NavLink>
           <NavLink to="/app/profile">Profile</NavLink>
         </nav>
+        {notificationError && <p className="notification-count-error" role="status">{notificationError}</p>}
         {/* SCRUM-82: Sign out lives in this chip, pinned below the scrolling nav. */}
         <div className="user-chip">
           <strong>{user.fullName}</strong>
