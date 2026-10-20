@@ -50,6 +50,16 @@ function toDateTimeLocal(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/**
+ * Purpose: create a new event request, or edit an existing one when the caller is allowed.
+ * AC: SCUM-14 / SCUM-15 (required fields on submit; draft saves skip them).
+ *     SCRUM-28 AC1/AC4 (submit → unassigned queue).
+ *     SCRUM-40 1C / 2A / 3A — edit route opens only for Organiser Draft or clarification
+ *     ACTION_REQUIRED, or for the assigned Coordinator before Confirmed; Confirmed and
+ *     terminal statuses show a locked message (critical Confirmed changes use change requests).
+ * Inputs: optional `:id` route param; session user and roles.
+ * Failure: locked or unauthorised edit shows an error and no form.
+ */
 export default function NewEvent() {
   const navigate = useNavigate();
   const { id } = useParams();

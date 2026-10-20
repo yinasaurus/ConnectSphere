@@ -61,6 +61,8 @@ function formatBookingStatus(status) {
  *     SCRUM-78 AC1-AC3 (the Venue Staff card sends the reason and alternative staff typed, or none).
  *     SCRUM-34 AC1 + AC2 (organiser change-request form: date/time, attendance, venue/equipment).
  *     SCRUM-35 AC1 + AC2 (assigned coordinator approve/reject; approve applies the fields).
+ *     SCRUM-40 1C / 2A: assigned Coordinator gets "Edit event details" before Confirmed;
+ *     Confirmed shows a change-request note instead of the edit link.
  *     SCRUM-42 AC2: "Requires review" on flagged venue bookings and equipment requests;
  *     the status badge itself is unchanged.
  * Failure: load errors are shown in place of the event; action errors are shown above it.
