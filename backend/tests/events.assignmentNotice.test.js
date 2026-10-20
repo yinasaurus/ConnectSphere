@@ -344,6 +344,52 @@ describe('SCRUM-45 AC1 smoke (existing paths; no duplicate product behaviour)', 
     );
   });
 
+  /*
+   * AC:       SCRUM-45 AC1 (approval → Organiser)
+   * Scenario: Assigned Coordinator approves an Under Review request.
+   * Setup:    UNDER_REVIEW, coordinator 2, organiser 1.
+   * Expected: Organiser 1 receives EVENT_STATUS_CHANGED; only organiser/coordinator ids notified.
+   * Type:     normal
+   */
+  it('US45-B11: approving notifies only that event Organiser (and assigned Coordinator if distinct)', async () => {
+    event.status = 'UNDER_REVIEW';
+    event.coordinator_id = 2;
+    event.sub_state = 'IN_REVIEW';
+    db.fetchOne.mockResolvedValue(event);
+
+    await events.changeStatus(coordinator, 3, 'APPROVED');
+
+    const orgNotices = audit.notifyUser.mock.calls.filter(
+      ([userId, type]) => userId === 1 && type === 'EVENT_STATUS_CHANGED'
+    );
+    expect(orgNotices.length).toBeGreaterThanOrEqual(1);
+    expect(audit.notifyUser.mock.calls.every(([userId]) => userId === 1 || userId === 2)).toBe(true);
+  });
+
+  /*
+   * AC:       SCRUM-45 AC2 (clarification response → Coordinator)
+   * Scenario: Organiser responds to an ACTION_REQUIRED clarification.
+   * Setup:    UNDER_REVIEW + ACTION_REQUIRED; coordinator 2.
+   * Expected: One CLARIFICATION_PROVIDED to Coordinator 2 only.
+   * Type:     normal
+   */
+  it('US45-B12: clarification response notifies only the assigned Coordinator', async () => {
+    event.status = 'UNDER_REVIEW';
+    event.coordinator_id = 2;
+    event.sub_state = 'ACTION_REQUIRED';
+    db.fetchOne.mockResolvedValue(event);
+
+    await events.respondClarification(organiser, 3, 'Attendance confirmed at 40.');
+
+    expect(audit.notifyUser).toHaveBeenCalledTimes(1);
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      2,
+      'CLARIFICATION_PROVIDED',
+      expect.any(String),
+      expect.stringMatching(/Leadership Forum|Attendance confirmed/i),
+      3
+    );
+  });
 });
 
 describe('SCRUM-45 assignment notice HTTP route', () => {
