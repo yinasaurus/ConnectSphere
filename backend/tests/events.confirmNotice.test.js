@@ -245,6 +245,24 @@ describe('SCRUM-70 confirmation notice via changeStatus (UI Confirm)', () => {
     expect(event.status).toBe('CONFIRMED');
     expect(confirmationNotices()).toHaveLength(0);
   });
+
+  /*
+   * AC:       SCRUM-70 AC1, AC4
+   * Scenario: A refused confirm must not create a confirmation notice — status never
+   *           becomes Confirmed, so AC1's trigger does not fire.
+   * Setup:    Preparation event with no venue bookings → NOT_READY_TO_CONFIRM.
+   * Expected: 409; status stays PREPARATION; zero EVENT_CONFIRMED calls.
+   * Type:     error
+   */
+  it('US70-B11: a refused confirm creates no EVENT_CONFIRMED notice', async () => {
+    tables.venue_bookings = [];
+    await expect(events.changeStatus(coordinator, 3, 'CONFIRMED')).rejects.toMatchObject({
+      status: 409,
+      code: 'NOT_READY_TO_CONFIRM',
+    });
+    expect(event.status).toBe('PREPARATION');
+    expect(confirmationNotices()).toHaveLength(0);
+  });
 });
 
 describe('SCRUM-70 confirmation notice via confirmEvent (API path)', () => {
