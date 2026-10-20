@@ -728,13 +728,37 @@ function statusNotification(name, fromStatus, nextStatus, note) {
 }
 
 /**
+ * Purpose: tell that event's Organiser the event has been confirmed (dedicated notice).
+ * AC: SCRUM-70 AC1 (created when status becomes Confirmed), AC2 (names the event and says
+ *     it is confirmed), AC3 (only callers that pass CONFIRMED use this helper), AC4 (one call
+ *     per successful confirm), AC5 (organiser_id only — coordinator is not notified here).
+ * Business rule: Customer Briefing — notifications include confirmation; Week 4 Q&A —
+ *     notifications cover event confirmation.
+ * Inputs: event row with id, name, organiser_id. Output: nothing.
+ * Failure: missing organiser_id → no notice (notifyUser no-ops).
+ */
+async function notifyOrganiserEventConfirmed(eventRow) {
+  if (!eventRow?.organiser_id) return;
+  const name = eventRow.name || 'An event';
+  await notifyUser(
+    eventRow.organiser_id,
+    'EVENT_CONFIRMED',
+    'Event confirmed',
+    `Your event "${name}" has been confirmed. Registration can now be opened.`,
+    eventRow.id
+  );
+}
+
+/**
  * Purpose: approve, reject, confirm, or otherwise move an event's status.
  * Only the assigned Event Coordinator may do this; anyone else is refused and
  * the event is unchanged. When the move is to Awaiting Safety Check, every active
- * Safety Officer is notified after a successful write (SCRUM-81).
+ * Safety Officer is notified after a successful write (SCRUM-81). When the move is
+ * to Confirmed, the event's Organiser gets a dedicated EVENT_CONFIRMED notice (SCRUM-70).
  * AC: SCRUM-54 AC5, AC7; SCRUM-81 AC1, AC2, AC6, AC7 — readiness notice only after
  *     the arrangement gate passes and the status update succeeds; sending again
  *     after request-changes notifies SOs again; incomplete arrangements → no notice.
+ *     SCRUM-70 AC1–AC5 — EVENT_CONFIRMED only on becoming Confirmed, Organiser only.
  * Business rule: W7 #5 — Coordinators manage only their assigned events.
  * Inputs: user, event id, next status, optional reason.
  * Output: the updated visible event.
@@ -832,6 +856,12 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
   if (existing.coordinator_id && existing.coordinator_id !== user.id) {
     const { title, body } = statusNotification(existing.name, existing.status, nextStatus, note);
     await notifyUser(existing.coordinator_id, 'EVENT_STATUS_CHANGED', title, body, id);
+  }
+
+  // SCRUM-70 AC1–AC5: dedicated confirmation notice for the Organiser only (UI Confirm uses this path).
+  // Kept separate from EVENT_STATUS_CHANGED so AC4 counts one EVENT_CONFIRMED per confirm.
+  if (nextStatus === EVENT_STATUS.CONFIRMED) {
+    await notifyOrganiserEventConfirmed(existing);
   }
 
   // SCRUM-81 AC1, AC6, AC7: after a successful Send to safety check, every active SO is told.
@@ -1078,6 +1108,7 @@ async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
  *     The Safety Officer check (SCRUM-56) is a mandatory prerequisite; the event reaches
  *     Preparation only after the Safety Officer approves, so confirming implicitly
  *     means the safety check already passed.
+ *     SCRUM-70 AC1–AC5 — Organiser receives one EVENT_CONFIRMED notice naming the event.
  * Business rule: W4 — Confirmed means essential arrangements completed; registration opens only for Confirmed events.
  * Inputs: user (coordinator), event id. Output: the updated event with status CONFIRMED.
  * Failure: 403 if not the assigned coordinator; 404 if event not found; 409 if not ready to confirm.
@@ -1125,16 +1156,8 @@ async function confirmEvent(user, id) {
     to: EVENT_STATUS.CONFIRMED,
   });
 
-  // Notify the organiser
-  if (existing.organiser_id) {
-    await notifyUser(
-      existing.organiser_id,
-      'EVENT_CONFIRMED',
-      'Event confirmed',
-      `Your event "${existing.name}" has been confirmed. Registration can now be opened.`,
-      id
-    );
-  }
+  // SCRUM-70 / SCRUM-73: dedicated confirmation notice (POST /confirm path).
+  await notifyOrganiserEventConfirmed(existing);
 
   return getEvent(user, id);
 }
