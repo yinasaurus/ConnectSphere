@@ -1018,13 +1018,16 @@ async function listAssignableCoordinators(user) {
 }
 
 /**
- * Purpose: let a Lead set the one primary Coordinator on a Submitted event that has none.
- * AC: SCRUM-71 AC1, AC2, AC3, AC4, AC5, AC6
- * Business rule: W7 #5 (Lead assigns new requests), W2/W4 (exactly one primary Coordinator).
+ * Purpose: let a Lead set the one primary Coordinator on a Submitted event that has none,
+ *   then tell that Coordinator and the event's Organiser (assignment notice).
+ * AC: SCRUM-71 AC1–AC6 (assignment itself); SCRUM-45 AC2, AC3, AC5 — Coordinator notified
+ *     when the Lead assigns them; Organiser notified that a Coordinator was assigned;
+ *     only those two relevant users. SCRUM-29 refers to this same notice (tested once here).
+ * Business rule: W7 #5 (Lead assigns; relevant users notified of assignments).
  * Inputs: Lead user, event id, coordinatorId to assign.
  * Output: the updated event. Failure: 403 if not Lead; 404 if the event is missing;
  *   409 if the event is not Submitted, already has a Coordinator, or the chosen user is
- *   inactive / not a Coordinator. On failure the event is not written.
+ *   inactive / not a Coordinator. On failure the event is not written and no notice is sent.
  */
 async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)) {
@@ -1066,7 +1069,25 @@ async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
     'Coordinator assigned'
   );
   await writeAudit(user.id, 'COORDINATOR_ASSIGNED', 'event', eventId, { coordinatorId });
-  // Organiser / Coordinator notices are SCRUM-29 and SCRUM-45 — do not notify here.
+
+  // SCRUM-45 AC2, AC3, AC5 / SCRUM-29: only the newly assigned Coordinator and this event's Organiser.
+  const eventName = existing.name || 'An event';
+  await notifyUser(
+    coordinatorId,
+    'COORDINATOR_ASSIGNED',
+    'Event assigned to you',
+    `You have been assigned as Coordinator for "${eventName}".`,
+    eventId
+  );
+  if (existing.organiser_id) {
+    await notifyUser(
+      existing.organiser_id,
+      'COORDINATOR_ASSIGNED',
+      'Coordinator assigned',
+      `A Coordinator has been assigned to your event "${eventName}".`,
+      eventId
+    );
+  }
 
   return getEvent(user, eventId);
 }
@@ -1139,6 +1160,14 @@ async function confirmEvent(user, id) {
   return getEvent(user, id);
 }
 
+/**
+ * Purpose: current Coordinator asks another Coordinator to take over the event.
+ * AC: SCRUM-45 AC2 — the incoming Coordinator is notified of the reassignment request.
+ * Business rule: Week 4 Q&A — reassignment is agreed offline; original Coordinator requests,
+ *   new Coordinator accepts.
+ * Inputs: current assigned Coordinator, event id, newCoordinatorId.
+ * Output: { ok: true }. Failure: 404 no event; 403 if caller is not the current Coordinator.
+ */
 async function requestCoordinatorChange(user, eventId, newCoordinatorId) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
@@ -1164,6 +1193,15 @@ async function requestCoordinatorChange(user, eventId, newCoordinatorId) {
   return { ok: true };
 }
 
+/**
+ * Purpose: incoming Coordinator accepts a pending reassignment; Organiser and outgoing
+ *   Coordinator are told the assignment changed.
+ * AC: SCRUM-45 AC2 (reassign to/from — outgoing notified here; incoming was notified on
+ *     request), AC3 (only those parties), AC5 (Organiser notified when assigned Coordinator changes).
+ * Business rule: W7 #5 — relevant users notified of reassignments.
+ * Inputs: accepting Coordinator (must be to_coordinator_id), event id.
+ * Output: updated event. Failure: 404 if no pending reassignment or event missing.
+ */
 async function acceptCoordinatorChange(user, eventId) {
   const request = await fetchOne(
     supabase
@@ -1175,6 +1213,9 @@ async function acceptCoordinatorChange(user, eventId) {
   );
   if (!request) throw httpError(404, 'No pending reassignment found', 'NOT_FOUND');
 
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+
   await updateById('events', eventId, {
     coordinator_id: user.id,
     updated_at: new Date().toISOString(),
@@ -1183,6 +1224,28 @@ async function acceptCoordinatorChange(user, eventId) {
     status: 'ACCEPTED',
     resolved_at: new Date().toISOString(),
   });
+
+  // Incoming Coordinator already received COORDINATOR_REASSIGN on request — do not notify them again.
+  const eventName = existing.name || 'An event';
+  if (existing.organiser_id) {
+    await notifyUser(
+      existing.organiser_id,
+      'COORDINATOR_CHANGED',
+      'Coordinator changed',
+      `The Coordinator for your event "${eventName}" has changed.`,
+      eventId
+    );
+  }
+  if (request.from_coordinator_id && request.from_coordinator_id !== user.id) {
+    await notifyUser(
+      request.from_coordinator_id,
+      'COORDINATOR_UNASSIGNED',
+      'You are no longer assigned',
+      `You are no longer the Coordinator for "${eventName}".`,
+      eventId
+    );
+  }
+
   return getEvent(user, eventId);
 }
 
