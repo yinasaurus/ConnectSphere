@@ -34,6 +34,8 @@ const EVENT_DECISION = {
 
 const MIN_REJECTION_REASON_LENGTH = 10;
 
+// Historically named the “significant” Confirmed lock set. SCRUM-40 2A now locks
+// every direct edit on Confirmed; critical Confirmed changes use CHANGE_REQUEST_FIELDS.
 const SIGNIFICANT_FIELDS = [
   'startAt',
   'endAt',

@@ -5,11 +5,19 @@ const {
   EVENT_SUB_STATE,
   EVENT_DECISION,
   MIN_REJECTION_REASON_LENGTH,
-  SIGNIFICANT_FIELDS,
   BOOKING_STATUS,
   CHANGE_REQUEST_STATUS,
   CHANGE_REQUEST_FIELDS,
 } = require('../constants/statuses');
+
+// SCRUM-40 1C/2A: assigned Coordinator may direct-edit only before Confirmed.
+// Confirmed (and terminal) statuses require a change request for critical fields.
+const DIRECT_EDIT_LOCKED_STATUSES = new Set([
+  EVENT_STATUS.CONFIRMED,
+  EVENT_STATUS.COMPLETED,
+  EVENT_STATUS.CANCELLED,
+  EVENT_STATUS.REJECTED,
+]);
 const { REJECTION_REASON_MESSAGE } = require('../validators/events.validators');
 const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
@@ -407,15 +415,21 @@ async function createEvent(user, payload) {
 }
 
 /**
- * Purpose: patch an event the organiser still owns as a draft, or the assigned coordinator may edit.
+ * Purpose: patch event details the organiser still owns as a draft/clarification amend,
+ *     or the assigned coordinator may edit before Confirmed.
  * AC: SCRUM-28 AC4 — saving more draft fields does not submit or place the request in the queue.
+ *     SCRUM-38 — organiser cannot direct-edit after submit (except ACTION_REQUIRED amend).
+ *     SCRUM-40 1C — assigned Coordinator may edit in any status before Confirmed.
+ *     SCRUM-40 2A — Confirmed (and terminal) statuses reject every direct field patch.
+ *     SCRUM-40 3A — Organiser direct-edits only Draft and clarification ACTION_REQUIRED.
+ *     SCRUM-40 4A — ordinary fields via this path; critical Confirmed changes use change requests.
  *     SCRUM-54 AC5, AC6, AC7 — a Coordinator who is not assigned is refused and the row is unchanged.
  *     SCRUM-41 / SCRUM-42 — after a successful write, critical field changes flag affected
  *     venue/equipment rows for review (status unchanged).
  * Inputs: user, event id, payload of fields to change
  * Outputs: mapped event after the patch
  * Failure: 404 if missing; 403 FORBIDDEN with no event body when the coordinator is not assigned;
- *     409 if the organiser is locked after submit
+ *     409 EDIT_LOCKED when the status or role blocks a direct edit
  */
 async function updateEvent(user, id, payload) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
@@ -425,6 +439,7 @@ async function updateEvent(user, id, payload) {
   const isAssignedCoordinator = existing.coordinator_id === user.id
     && hasRole(user, ROLES.EVENT_COORDINATOR);
 
+  // SCRUM-40 3A: Draft, or Under Review + ACTION_REQUIRED clarification amend only.
   const canOrganiserEdit = existing.status === EVENT_STATUS.DRAFT
     || (existing.status === EVENT_STATUS.UNDER_REVIEW && existing.sub_state === EVENT_SUB_STATE.ACTION_REQUIRED);
 
@@ -434,17 +449,6 @@ async function updateEvent(user, id, payload) {
       'After submission, organisers request changes through the assigned coordinator',
       'EDIT_LOCKED'
     );
-  }
-
-  if (existing.status === EVENT_STATUS.CONFIRMED && isAssignedCoordinator) {
-    const significant = SIGNIFICANT_FIELDS.filter((field) => payload[field] !== undefined);
-    if (significant.length) {
-      throw httpError(
-        409,
-        'Confirmed events cannot be edited directly. Create a change request instead.',
-        'EDIT_LOCKED'
-      );
-    }
   }
 
   if (!isOrganiser && !isAssignedCoordinator && !hasRole(user, ROLES.EVENT_COORDINATOR)) {
@@ -457,6 +461,7 @@ async function updateEvent(user, id, payload) {
 
   // SCRUM-63: opening registration, its window, and capacity once open must go through
   // enableRegistration / changeRegistrationSettings so AC1-AC6 are always checked.
+  // Checked before the Confirmed lock so the more specific registration error wins.
   const registrationLocked = ['registrationOpen', 'registrationOpensAt', 'registrationClosesAt']
     .filter((field) => payload[field] !== undefined);
   if (existing.registration_open && payload.registrationCapacity !== undefined) {
@@ -467,6 +472,17 @@ async function updateEvent(user, id, payload) {
       409,
       'Registration settings are changed through the registration actions, not a general edit',
       'REGISTRATION_SETTINGS_LOCKED'
+    );
+  }
+
+  // SCRUM-40 1C + 2A: assigned Coordinator direct-edits only before Confirmed.
+  if (isAssignedCoordinator && DIRECT_EDIT_LOCKED_STATUSES.has(existing.status)) {
+    throw httpError(
+      409,
+      existing.status === EVENT_STATUS.CONFIRMED
+        ? 'Confirmed events cannot be edited directly. Create a change request instead.'
+        : 'This event can no longer be edited directly.',
+      'EDIT_LOCKED'
     );
   }
 
@@ -1738,7 +1754,7 @@ async function decideChangeRequest(user, eventId, requestId, { approve, reason }
   if (decided) {
     assertRequestedValuesApprovable(request, now);
     eventPatch = proposedEventPatch(request, event);
-    // Bypass updateEvent so Confirmed SIGNIFICANT_FIELDS stay locked to direct edits
+    // Bypass updateEvent so Confirmed stays locked to every direct edit (SCRUM-40 2A)
     // but an approved change request can still apply date/time/attendance/requirements.
     await updateById('events', event.id, eventPatch);
     // Flag before APPROVED so a DB error here leaves the request PENDING (retryable).

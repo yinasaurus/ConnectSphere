@@ -75,12 +75,21 @@ export default function NewEvent() {
     api('/api/events/' + id).then((res) => {
       const event = res.event || res;
       setEventData(event);
+      // SCRUM-40 3A: organiser Draft or clarification amend only.
       const ownsDraft = event.organiserId === user?.id && (
         event.status === 'DRAFT' || (event.status === 'UNDER_REVIEW' && event.subState === 'ACTION_REQUIRED')
       );
-      const assigned = canCoordinate && event.coordinatorId === user?.id;
+      // SCRUM-40 1C/2A: assigned Coord may edit only before Confirmed (not terminal).
+      const editLockedStatuses = ['CONFIRMED', 'COMPLETED', 'CANCELLED', 'REJECTED'];
+      const assigned = canCoordinate
+        && event.coordinatorId === user?.id
+        && !editLockedStatuses.includes(event.status);
       if (!ownsDraft && !assigned) {
-        setError('You do not have access to edit this event.');
+        setError(
+          editLockedStatuses.includes(event.status) && canCoordinate && event.coordinatorId === user?.id
+            ? 'Confirmed and closed events cannot be edited directly. Use a change request for critical fields.'
+            : 'You do not have access to edit this event.'
+        );
         return;
       }
       setEditable(true);
