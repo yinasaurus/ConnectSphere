@@ -2,9 +2,15 @@ const registrationsService = require('../services/registrations.service');
 const registrationSettings = require('../services/registrationSettings.service');
 const { asyncHandler } = require('../utils/asyncHandler');
 
+// SCRUM-74: the event's manager gets registrations plus the active count against capacity;
+// anyone else gets just their own registration(s), with no capacity summary to leak.
 const list = asyncHandler(async (req, res) => {
-  const registrations = await registrationsService.listForEvent(req.user, req.params.id);
-  res.json({ registrations });
+  const result = await registrationsService.listForEvent(req.user, req.params.id);
+  if (Array.isArray(result)) {
+    res.json({ registrations: result, activeCount: null, capacity: null });
+  } else {
+    res.json(result);
+  }
 });
 
 // SCRUM-52: an Attendee registers; the response says how many places are left.

@@ -6,6 +6,7 @@ import ConflictModal from '../components/ConflictModal';
 import EventDecisionPanel from '../components/EventDecisionPanel';
 import AttendeeRegistrationCard from '../components/AttendeeRegistrationCard';
 import RegistrationSettingsCard from '../components/RegistrationSettingsCard';
+import EventRegistrationsCard from '../components/EventRegistrationsCard';
 import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
 
@@ -138,6 +139,7 @@ export default function EventDetail() {
   const [changeRequestError, setChangeRequestError] = useState('');
   const [changeForm, setChangeForm] = useState(emptyChangeForm);
   const [changeRejectReasons, setChangeRejectReasons] = useState({});
+  const [eventRegistrations, setEventRegistrations] = useState(null);
 
   // Loads the event, its venue bookings and, for planning roles only, history, comments,
   // venues and equipment requests; other roles never request planning data they aren't
@@ -190,6 +192,14 @@ export default function EventDetail() {
       }));
       setChangeRequests(changeRes.changeRequests || []);
       setChangeRequestError(changeRes.loadError || '');
+    }
+    // SCRUM-74: the same "owns or is assigned to this event" check as change requests —
+    // the API rejects anyone else, so there is nothing to gain by asking on their behalf.
+    if (!canSeeChangeRequests) {
+      setEventRegistrations(null);
+    } else {
+      const registrationsRes = await api(`/api/events/${id}/registrations`).catch(() => null);
+      setEventRegistrations(Array.isArray(registrationsRes?.registrations) ? registrationsRes : null);
     }
   }, [id, canViewPlanning, isLead, isAttendee, user]);
 
@@ -728,6 +738,10 @@ export default function EventDetail() {
               onWithdraw={() => run(() => api(`/api/events/${id}/registrations/withdraw`, { method: 'POST' }))}
             />
           )}
+
+          {/* SCRUM-74: the Organiser and assigned Coordinator see who registered and the
+              active count against capacity; everyone else never requests this. */}
+          {(isOrganiser || isCoordinator) && <EventRegistrationsCard data={eventRegistrations} />}
 
           {canViewPlanning && <div className="card">
             <h3>Discussion</h3>

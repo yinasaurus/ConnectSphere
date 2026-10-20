@@ -7,13 +7,36 @@ const { notifyUser } = require('./audit.service');
 const { countActiveRegistrations } = require('./registrationSettings.service');
 const { getEvent } = require('./events.service');
 
+/**
+ * Purpose: the Organiser or assigned Coordinator's view of who has registered for their event,
+ *   with the count of active registrations against capacity. Anyone else sees only their own
+ *   registration, if they have one.
+ * AC: SCRUM-74 AC1 (Organiser sees registrations), AC2 (assigned Coordinator sees the same),
+ *   AC3 (active count against capacity; withdrawn listed but not counted), AC4 (zero when
+ *   there are none), AC5 (an Organiser/Coordinator who does not manage this event is rejected,
+ *   nothing is shown), AC6 (an Attendee never sees another attendee's registration).
+ * Inputs: user, event id.
+ * Output: { registrations, activeCount, capacity } for the event's manager; a plain array of
+ *   just the caller's own registration(s) otherwise.
+ * Failure: 404 no event; 403 FORBIDDEN if the caller holds an Organiser/Coordinator role but
+ *   does not manage this specific event.
+ */
 async function listForEvent(user, eventId) {
   const event = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
   if (!event) throw httpError(404, 'Event not found', 'NOT_FOUND');
 
-  const canSeeAll = hasRole(user, ROLES.EVENT_COORDINATOR)
-    || hasRole(user, ROLES.EVENT_ORGANISER);
-  if (!canSeeAll) {
+  const isManager = event.organiser_id === user.id || event.coordinator_id === user.id;
+  const holdsManagerRole = hasRole(user, ROLES.EVENT_ORGANISER) || hasRole(user, ROLES.EVENT_COORDINATOR);
+
+  // AC5: holding the role is not enough — only this event's own Organiser or assigned
+  // Coordinator may see its registrations. Everyone else with the role is rejected outright,
+  // rather than silently falling back to an attendee-style view that doesn't apply to them.
+  if (holdsManagerRole && !isManager) {
+    throw httpError(403, 'You do not manage this event', 'FORBIDDEN');
+  }
+
+  if (!isManager) {
+    // AC6: an Attendee (or any other role) only ever sees their own registration.
     return fetchMany(
       supabase
         .from('registrations')
@@ -29,11 +52,18 @@ async function listForEvent(user, eventId) {
       .select('*, attendee:users!attendee_id ( full_name, email )')
       .eq('event_id', eventId)
   );
-  return rows.map((row) => ({
+  const registrations = rows.map((row) => ({
     ...row,
     attendee_name: row.attendee?.full_name,
     attendee_email: row.attendee?.email,
   }));
+  // AC3/AC4: count every non-withdrawn registration, same rule SCRUM-52/63 use elsewhere,
+  // so this number always agrees with "places left" shown on the Attendee's own card.
+  const activeCount = await countActiveRegistrations(eventId);
+  // Registration may never have been enabled (SCRUM-63) for this event — null, not 0, so the
+  // page can tell "no cap set yet" apart from "capacity is genuinely zero".
+  const capacity = event.registration_capacity != null ? Number(event.registration_capacity) : null;
+  return { registrations, activeCount: Number(activeCount), capacity };
 }
 
 /**
