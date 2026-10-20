@@ -153,6 +153,26 @@ describe('SCRUM-45 Lead assignment notices (AC2, AC3, AC5)', () => {
     });
     expect(audit.notifyUser).not.toHaveBeenCalled();
   });
+
+  /*
+   * AC:       SCRUM-45 AC2, AC5
+   * Scenario: Lead assigns when the event name is missing.
+   * Setup:    name null; otherwise ready Submitted unassigned event.
+   * Expected: Both notices use the "An event" fallback in the body.
+   * Type:     boundary
+   */
+  it('US45-B09: Lead assign with a missing event name uses the An event fallback', async () => {
+    event.name = null;
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce({ id: 2, full_name: 'Chloe Lim', is_active: true })
+      .mockResolvedValue(event);
+
+    await events.assignPrimaryCoordinator(lead, 3, 2);
+
+    expect(audit.notifyUser).toHaveBeenCalledTimes(2);
+    expect(audit.notifyUser.mock.calls.every(([, , , body]) => /An event/.test(body))).toBe(true);
+  });
 });
 
 describe('SCRUM-45 reassignment notices (AC2, AC3, AC5)', () => {
