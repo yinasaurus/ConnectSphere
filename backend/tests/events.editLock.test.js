@@ -314,3 +314,59 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
     );
   });
 });
+
+describe('SCRUM-40 edit lock HTTP route', () => {
+  const request = require('supertest');
+  const jwt = require('jsonwebtoken');
+  const { createApp } = require('../src/app');
+  const { env } = require('../src/config/env');
+  const app = createApp();
+  const token = jwt.sign({ sub: 2 }, env.jwtSecret);
+  let event;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    event = {
+      id: 3,
+      organiser_id: 1,
+      organisation_id: 10,
+      coordinator_id: 2,
+      status: EVENT_STATUS.CONFIRMED,
+      name: 'Workshop',
+      purpose: 'Learn',
+      description: 'A workshop',
+      start_at: '2026-11-20T10:00:00Z',
+      end_at: '2026-11-20T12:00:00Z',
+      expected_attendance: 40,
+      registration_open: false,
+    };
+    db.supabase.from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      in: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+    });
+    db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }]);
+    db.updateById.mockResolvedValue(event);
+  });
+
+  /*
+   * AC:       SCRUM-40 AC3 / product 2A
+   * Scenario: Assigned Coordinator PATCHes a Confirmed event over HTTP.
+   * Setup:    Session user 2 is the assigned coordinator; status CONFIRMED; ordinary name field.
+   * Expected: 409 EDIT_LOCKED; updateById not called.
+   * Type:     error
+   */
+  it('US40-R01 (AC3/2A): PATCH Confirmed returns EDIT_LOCKED for the assigned Coordinator', async () => {
+    db.fetchOne
+      .mockResolvedValueOnce({ id: 2, is_active: true })
+      .mockResolvedValueOnce(event);
+    const res = await request(app)
+      .patch('/api/events/3')
+      .set('Cookie', `${env.sessionCookieName}=${token}`)
+      .send({ name: 'Still locked over HTTP' });
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ error: 'EDIT_LOCKED' });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+});
