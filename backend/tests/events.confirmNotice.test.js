@@ -130,13 +130,13 @@ beforeEach(() => {
 
 describe('SCRUM-70 confirmation notice via changeStatus (UI Confirm)', () => {
   /*
-   * AC:       SCRUM-70 AC1, AC2
+   * AC:       SCRUM-70 AC1, AC2, AC4
    * Scenario: Assigned Coordinator confirms a Preparation event through changeStatus
    *           (the EventDetail Confirm button path).
    * Setup:    Event 3 in PREPARATION with one APPROVED venue booking; organiser 1;
    *           name "Leadership Forum".
    * Expected: Exactly one EVENT_CONFIRMED to user 1; title/body name the event and
-   *           say it is confirmed; event_id 3 is attached.
+   *           say it is confirmed; event_id 3 is attached (AC4: no duplicate on one confirm).
    * Type:     normal
    */
   it('US70-B01: confirming via changeStatus notifies the Organiser that the event is confirmed', async () => {
@@ -150,18 +150,6 @@ describe('SCRUM-70 confirmation notice via changeStatus (UI Confirm)', () => {
       expect.stringMatching(/Leadership Forum[\s\S]*confirmed/i),
       3,
     ]);
-  });
-
-  /*
-   * AC:       SCRUM-70 AC4
-   * Scenario: One successful confirm must not produce duplicate EVENT_CONFIRMED rows.
-   * Setup:    Same ready Preparation event; confirm once via changeStatus.
-   * Expected: notifyUser(..., EVENT_CONFIRMED, ...) is called exactly once.
-   * Type:     boundary
-   */
-  it('US70-B02: confirming once creates exactly one EVENT_CONFIRMED notice', async () => {
-    await events.changeStatus(coordinator, 3, 'CONFIRMED');
-    expect(confirmationNotices()).toHaveLength(1);
   });
 
   /*
