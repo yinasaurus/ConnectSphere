@@ -735,7 +735,7 @@ function statusNotification(name, fromStatus, nextStatus, note) {
  * Business rule: Customer Briefing — notifications include confirmation; Week 4 Q&A —
  *     notifications cover event confirmation.
  * Inputs: event row with id, name, organiser_id. Output: nothing.
- * Failure: missing organiser_id → no notice (notifyUser no-ops).
+ * Failure: missing organiser_id → helper returns without calling notifyUser.
  */
 async function notifyOrganiserEventConfirmed(eventRow) {
   if (!eventRow?.organiser_id) return;
