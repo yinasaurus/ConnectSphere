@@ -46,6 +46,9 @@ describe('SCRUM-45 notification new / viewed status (AC4)', () => {
 
     const result = await notifications.listMine(1);
 
+    // AC4: scoped to this user so another person's notices cannot appear as "new" or "viewed" here.
+    expect(db.supabase.from).toHaveBeenCalledWith('notifications');
+    expect(builder.eq).toHaveBeenCalledWith('user_id', 1);
     expect(result).toEqual(rows);
     expect(result[0].read_at).toBeNull();
     expect(result[1].read_at).toBeTruthy();
