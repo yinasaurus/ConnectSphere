@@ -12,7 +12,7 @@
  *   SCRUM-69 AC2  Approve is refused when requested values are invalid.
  *   SCRUM-69 AC3  Reject still leaves the event unchanged.
  *   SCRUM-69 AC4  Approve audit records who, when, and previous/new per field.
- *   SCRUM-69 AC5  Deferred — SCRUM-41/42 review flags are not built.
+ *   SCRUM-69 AC5  Approve flags affected venue/equipment rows for review (SCRUM-41/42).
  *   SCRUM-69 AC6  Organiser is notified on approve and on reject.
  */
 const request = require('supertest');
@@ -86,6 +86,7 @@ beforeEach(() => {
   db.supabase.from.mockReturnValue({
     select: jest.fn().mockReturnThis(),
     eq: jest.fn().mockReturnThis(),
+    in: jest.fn().mockReturnThis(),
     order: jest.fn().mockReturnThis(),
   });
   db.fetchOne.mockImplementation(async () => event);
@@ -398,6 +399,8 @@ describe('SCRUM-35 decideChangeRequest', () => {
       })
     );
     expect(db.updateById).not.toHaveBeenCalledWith('events', expect.anything(), expect.anything());
+    expect(db.updateById).not.toHaveBeenCalledWith('venue_bookings', expect.anything(), expect.anything());
+    expect(db.updateById).not.toHaveBeenCalledWith('equipment_requests', expect.anything(), expect.anything());
     expect(audit.writeAudit).toHaveBeenCalledWith(
       2,
       'CHANGE_REQUEST_REJECTED',
@@ -713,6 +716,8 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
 
     expect(result.status).toBe('REJECTED');
     expect(db.updateById).not.toHaveBeenCalledWith('events', expect.anything(), expect.anything());
+    expect(db.updateById).not.toHaveBeenCalledWith('venue_bookings', expect.anything(), expect.anything());
+    expect(db.updateById).not.toHaveBeenCalledWith('equipment_requests', expect.anything(), expect.anything());
     expect(db.updateById).toHaveBeenCalledWith(
       'event_change_requests',
       50,
@@ -779,7 +784,8 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
 
     await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
 
-    const metadata = audit.writeAudit.mock.calls[0][4];
+    const approved = audit.writeAudit.mock.calls.find((call) => call[1] === 'CHANGE_REQUEST_APPROVED');
+    const metadata = approved[4];
     expect(metadata.fields.find((row) => row.field === 'startAt')).toEqual({
       field: 'startAt',
       previous: existingStart.toISOString(),
@@ -800,29 +806,56 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
 
     await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
 
-    const metadata = audit.writeAudit.mock.calls[0][4];
+    const approved = audit.writeAudit.mock.calls.find((call) => call[1] === 'CHANGE_REQUEST_APPROVED');
+    const metadata = approved[4];
     expect(metadata.fields).toEqual([
       { field: 'expectedAttendance', previous: 40, next: 80 },
     ]);
   });
 
   /*
-   * AC:       SCRUM-69 AC5
-   * Scenario: Approve a change that includes date, attendance, venue and equipment notes.
-   * Setup:    Same as the happy-path request. SCRUM-41/42 are not in this codebase.
-   * Expected: Writes are only to events and event_change_requests — no invented review flag
-   *           on venue bookings or equipment requests.
+   * AC:       SCRUM-69 AC5 / SCRUM-41 AC3 / SCRUM-42 AC1 + AC2
+   * Scenario: Approve an attendance-only change that a booked room cannot hold.
+   * Setup:    Attendance 40 → 80; one APPROVED booking at a 50-capacity venue; one PENDING
+   *           equipment request.
+   * Expected: Event and request are written; the booking and equipment row get needs_review
+   *           true; their status is not in the patch (W4).
    * Type:     normal
    */
-  it('AC5: approve does not flag venue or equipment rows (SCRUM-41/42 not built)', async () => {
+  it('AC5: approve flags over-capacity venue booking and equipment for review', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
-      .mockResolvedValueOnce(pendingRequest());
+      .mockResolvedValueOnce(pendingRequest({
+        start_at: null,
+        end_at: null,
+        venue_requirements: null,
+        equipment_notes: null,
+        expected_attendance: 80,
+      }));
+    db.fetchMany
+      .mockResolvedValueOnce([{
+        id: 7, event_id: 3, venue_id: 8, status: 'APPROVED',
+        start_at: event.start_at, end_at: event.end_at,
+      }])
+      .mockResolvedValueOnce([{ id: 12, event_id: 3, status: 'PENDING' }])
+      .mockResolvedValueOnce([{ id: 8, capacity: 50 }]);
 
     await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
 
-    const tables = db.updateById.mock.calls.map((call) => call[0]);
-    expect(tables).toEqual(['events', 'event_change_requests']);
+    expect(db.updateById).toHaveBeenCalledWith(
+      'venue_bookings',
+      7,
+      expect.objectContaining({ needs_review: true })
+    );
+    const bookingPatch = db.updateById.mock.calls.find((call) => call[0] === 'venue_bookings')[2];
+    expect(bookingPatch.status).toBeUndefined();
+    expect(db.updateById).toHaveBeenCalledWith(
+      'equipment_requests',
+      12,
+      expect.objectContaining({ needs_review: true })
+    );
+    const equipmentPatch = db.updateById.mock.calls.find((call) => call[0] === 'equipment_requests')[2];
+    expect(equipmentPatch.status).toBeUndefined();
   });
 
   /*

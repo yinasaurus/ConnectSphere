@@ -13,9 +13,11 @@ jest.mock('../src/config/db', () => {
             eq: () => ({
               order: () => Promise.resolve({ data: [] }),
             }),
+            in: () => Promise.resolve({ data: [] }),
             order: () => Promise.resolve({ data: [] }),
             maybeSingle: async () => ({ data: store[val] || null, error: null }),
           }),
+          in: () => Promise.resolve({ data: [] }),
           order: () => Promise.resolve({ data: Object.values(store) }),
         }),
       }),

@@ -234,10 +234,32 @@ describe('SCRUM-39 GET /api/events/:id/venue-bookings (venue, AC2)', () => {
     const res = await get('/api/events/3/venue-bookings');
     expect(res.status).toBe(200);
     expect(res.body.bookings).toEqual([{
-      id: 7, event_id: 3, venue_id: 8, status: 'APPROVED', venue_name: 'Helix Hall',
+      id: 7, event_id: 3, venue_id: 8, status: 'APPROVED', needs_review: false, venue_name: 'Helix Hall',
       venue_details: { capacity: undefined, facilities: undefined, accessibility: undefined, layouts: [] },
     }]);
     expect(chain.eq).toHaveBeenCalledWith('event_id', 3);
+  });
+
+  /*
+   * AC:       SCRUM-42 AC2
+   * Scenario: A flagged booking is listed for the event page.
+   * Setup:    Coordinator; one APPROVED booking with needs_review true.
+   * Expected: needs_review is true and status is still APPROVED.
+   * Type:     normal
+   */
+  it('SCRUM-42 AC2: a flagged venue booking keeps its status and exposes needs_review', async () => {
+    const get = as([ROLES.EVENT_COORDINATOR]);
+    fetchOne.mockResolvedValueOnce(eventRow());
+    fetchMany.mockResolvedValueOnce([{
+      id: 7, event_id: 3, venue_id: 8, status: 'APPROVED', needs_review: true, venues: { name: 'Helix Hall' },
+    }]);
+    const res = await get('/api/events/3/venue-bookings');
+    expect(res.status).toBe(200);
+    expect(res.body.bookings[0]).toEqual(expect.objectContaining({
+      status: 'APPROVED',
+      needs_review: true,
+      venue_name: 'Helix Hall',
+    }));
   });
 
   /*
@@ -255,7 +277,7 @@ describe('SCRUM-39 GET /api/events/:id/venue-bookings (venue, AC2)', () => {
     const res = await get('/api/events/3/venue-bookings');
     expect(res.status).toBe(200);
     expect(res.body.bookings).toEqual([{
-      id: 9, event_id: 3, venue_id: 8, status: 'PENDING', venue_name: null, venue_details: null,
+      id: 9, event_id: 3, venue_id: 8, status: 'PENDING', needs_review: false, venue_name: null, venue_details: null,
     }]);
   });
 });
@@ -280,12 +302,34 @@ describe('SCRUM-39 GET /api/events/:id/equipment-requests (equipment, AC2)', () 
     const res = await get('/api/events/3/equipment-requests');
     expect(res.status).toBe(200);
     expect(res.body.requests).toEqual([
-      { id: 12, event_id: 3, equipment_id: 4, equipment_name: 'Projector', quantity: 2, status: 'PENDING' },
-      { id: 11, event_id: 3, equipment_id: 6, equipment_name: 'Wireless mic', quantity: 4, status: 'RESERVED' },
+      { id: 12, event_id: 3, equipment_id: 4, equipment_name: 'Projector', quantity: 2, status: 'PENDING', needs_review: false },
+      { id: 11, event_id: 3, equipment_id: 6, equipment_name: 'Wireless mic', quantity: 4, status: 'RESERVED', needs_review: false },
     ]);
     // Scoped in the database to this event, not filtered after reading everyone's requests.
     expect(supabase.from).toHaveBeenCalledWith('equipment_requests');
     expect(chain.eq).toHaveBeenCalledWith('event_id', 3);
+  });
+
+  /*
+   * AC:       SCRUM-42 AC2
+   * Scenario: A flagged equipment request is listed for the event page.
+   * Setup:    Coordinator; one PENDING request with needs_review true.
+   * Expected: needs_review is true and status is still PENDING.
+   * Type:     normal
+   */
+  it('SCRUM-42 AC2: a flagged equipment request keeps its status and exposes needs_review', async () => {
+    const get = as([ROLES.EVENT_COORDINATOR]);
+    fetchOne.mockResolvedValueOnce(eventRow());
+    fetchMany.mockResolvedValueOnce([
+      { id: 12, event_id: 3, equipment_id: 4, quantity: 2, status: 'PENDING', needs_review: true, equipment: { name: 'Projector' } },
+    ]);
+    const res = await get('/api/events/3/equipment-requests');
+    expect(res.status).toBe(200);
+    expect(res.body.requests[0]).toEqual(expect.objectContaining({
+      status: 'PENDING',
+      needs_review: true,
+      equipment_name: 'Projector',
+    }));
   });
 
   /*
@@ -307,7 +351,7 @@ describe('SCRUM-39 GET /api/events/:id/equipment-requests (equipment, AC2)', () 
     fetchOne.mockResolvedValueOnce(eventRow());
     fetchMany.mockResolvedValueOnce([{ id: 13, event_id: 3, equipment_id: null, quantity: 1, status: 'PENDING', equipment: null }]);
     expect((await get('/api/events/3/equipment-requests')).body.requests).toEqual([
-      { id: 13, event_id: 3, equipment_id: null, equipment_name: null, quantity: 1, status: 'PENDING' },
+      { id: 13, event_id: 3, equipment_id: null, equipment_name: null, quantity: 1, status: 'PENDING', needs_review: false },
     ]);
   });
 

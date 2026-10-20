@@ -24,7 +24,12 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
       id: 3, organiser_id: 1, organisation_id: 10, coordinator_id: 2, status: EVENT_STATUS.DRAFT,
       name: 'Workshop', purpose: 'Learn', description: 'A workshop',
     };
-    db.supabase.from.mockReturnValue({ select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), order: jest.fn().mockReturnThis() });
+    db.supabase.from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      in: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+    });
     db.fetchOne.mockImplementation(async () => event);
     db.fetchMany.mockResolvedValue([]);
     db.updateById.mockResolvedValue(event);

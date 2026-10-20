@@ -61,6 +61,8 @@ function formatBookingStatus(status) {
  *     SCRUM-78 AC1-AC3 (the Venue Staff card sends the reason and alternative staff typed, or none).
  *     SCRUM-34 AC1 + AC2 (organiser change-request form: date/time, attendance, venue/equipment).
  *     SCRUM-35 AC1 + AC2 (assigned coordinator approve/reject; approve applies the fields).
+ *     SCRUM-42 AC2: "Requires review" on flagged venue bookings and equipment requests;
+ *     the status badge itself is unchanged.
  * Failure: load errors are shown in place of the event; action errors are shown above it.
  */
 const CHANGE_BLOCKED_STATUSES = ['DRAFT', 'CANCELLED', 'REJECTED', 'COMPLETED'];
@@ -767,6 +769,7 @@ export default function EventDetail() {
                     </span>
                     <strong>{booking.venue_name || `Venue #${booking.venue_id}`}</strong>
                     <BookingStatusBadge status={booking.status} />
+                    {booking.needs_review && <span className="needs-review-flag">Requires review</span>}
                   </p>
                   <span className={`booking-status ${booking.status}`}>{formatBookingStatus(booking.status)}</span>
                 </div>
@@ -821,6 +824,7 @@ export default function EventDetail() {
               : equipmentRequests.length ? equipmentRequests.map((item) => (
               <p key={item.id}>
                 {item.equipment_name || 'Item no longer in catalogue'} × {item.quantity}: {item.status}
+                {item.needs_review && <span className="needs-review-flag">Requires review</span>}
               </p>
             )) : <p className="muted">No equipment requested yet.</p>}
           </div>}

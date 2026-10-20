@@ -19,7 +19,12 @@ describe('SCUM-13 event ownership and assigned coordinator permissions', () => {
       start_at: '2026-10-01T10:00:00Z', end_at: '2026-10-01T11:00:00Z',
       expected_attendance: 10, venue_requirements: 'Room', accessibility_needs: 'None',
     };
-    db.supabase.from.mockReturnValue({ select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), order: jest.fn().mockReturnThis() });
+    db.supabase.from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      in: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+    });
     db.fetchOne.mockImplementation(async () => event);
     db.fetchMany.mockResolvedValue([]);
     db.updateById.mockResolvedValue(event);

@@ -443,6 +443,13 @@ input.field-error, select.field-error, textarea.field-error {
   font-weight: 600;
   text-transform: capitalize;
 }
+.needs-review-flag {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #b45309;
+}
 .booking-status.PENDING { background: #fbf0cf; color: var(--warn); }
 .booking-status.APPROVED { background: #d8eee3; color: var(--ok); }
 .booking-status.REJECTED { background: #f7dcdc; color: var(--bad); }
