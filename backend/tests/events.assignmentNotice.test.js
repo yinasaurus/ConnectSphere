@@ -258,6 +258,41 @@ describe('SCRUM-45 reassignment notices (AC2, AC3, AC5)', () => {
     });
     expect(audit.notifyUser).not.toHaveBeenCalled();
   });
+
+  /*
+   * AC:       SCRUM-45 AC2, AC5
+   * Scenario: Accept reassignment when the event has no organiser_id.
+   * Setup:    Pending 2→4; organiser_id null.
+   * Expected: Only outgoing Coordinator 2 gets COORDINATOR_UNASSIGNED.
+   * Type:     boundary
+   */
+  it('US45-B10: accepting reassignment with no organiser notifies only the outgoing Coordinator', async () => {
+    event.organiser_id = null;
+    event.coordinator_id = 2;
+    event.status = 'PLANNING';
+    const pending = {
+      id: 9,
+      event_id: 3,
+      from_coordinator_id: 2,
+      to_coordinator_id: 4,
+      status: 'PENDING',
+    };
+    db.fetchOne
+      .mockResolvedValueOnce(pending)
+      .mockResolvedValueOnce(event)
+      .mockResolvedValue(event);
+
+    await events.acceptCoordinatorChange(otherCoordinator, 3);
+
+    expect(audit.notifyUser).toHaveBeenCalledTimes(1);
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      2,
+      'COORDINATOR_UNASSIGNED',
+      expect.any(String),
+      expect.any(String),
+      3
+    );
+  });
 });
 
 describe('SCRUM-45 AC1 smoke (existing paths; no duplicate product behaviour)', () => {
