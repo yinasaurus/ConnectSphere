@@ -263,6 +263,20 @@ describe('SCRUM-70 confirmation notice via changeStatus (UI Confirm)', () => {
     expect(event.status).toBe('PREPARATION');
     expect(confirmationNotices()).toHaveLength(0);
   });
+
+  /*
+   * AC:       SCRUM-70 AC2
+   * Scenario: Confirmation notice must still identify the event when the name is missing.
+   * Setup:    Ready Preparation event with name null; confirm via changeStatus.
+   * Expected: One EVENT_CONFIRMED whose body uses the "An event" fallback and says confirmed.
+   * Type:     boundary
+   */
+  it('US70-B12: confirming with a missing event name uses the An event fallback', async () => {
+    event.name = null;
+    await events.changeStatus(coordinator, 3, 'CONFIRMED');
+    expect(confirmationNotices()).toHaveLength(1);
+    expect(confirmationNotices()[0][3]).toMatch(/An event[\s\S]*confirmed/i);
+  });
 });
 
 describe('SCRUM-70 confirmation notice via confirmEvent (API path)', () => {
