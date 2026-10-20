@@ -478,8 +478,39 @@ async function updateEvent(user, id, payload) {
   patch.updated_at = new Date().toISOString();
   await updateById('events', id, patch);
   await writeAudit(user.id, 'EVENT_UPDATED', 'event', id, payload);
+
   // SCRUM-41 / SCRUM-42: after a real write, flag affected venue/equipment if a critical field changed.
   await flagArrangementsForReview(user, existing, { ...existing, ...patch });
+
+  /*
+   * Purpose: notify organiser and coordinator when critical event details change
+   * AC: SCRUM-44 AC1b — emit notifications for start_at, end_at, or expected_attendance changes
+   * Inputs: existing event row, patch object, user. Output: notifyUser calls for affected parties.
+   * Failure: notifications are skipped if recipient is the acting user (self-exclusion)
+   */
+  const criticalFields = ['start_at', 'end_at', 'expected_attendance'];
+  const changedCriticals = criticalFields.filter((field) => {
+    return patch[field] !== undefined && patch[field] !== existing[field];
+  });
+
+  if (changedCriticals.length > 0) {
+    const fieldLabels = {
+      start_at: 'start time',
+      end_at: 'end time',
+      expected_attendance: 'expected attendance',
+    };
+    const changedList = changedCriticals.map((f) => fieldLabels[f]).join(', ');
+    const notificationTitle = 'Event details updated';
+    const notificationBody = `${existing.name} has updated ${changedList}.`;
+
+    if (existing.organiser_id && existing.organiser_id !== user.id) {
+      await notifyUser(existing.organiser_id, 'EVENT_UPDATED', notificationTitle, notificationBody, id);
+    }
+    if (existing.coordinator_id && existing.coordinator_id !== user.id) {
+      await notifyUser(existing.coordinator_id, 'EVENT_UPDATED', notificationTitle, notificationBody, id);
+    }
+  }
+
   return getEvent(user, id);
 }
 
@@ -699,12 +730,16 @@ function statusNotification(name, fromStatus, nextStatus, note) {
 /**
  * Purpose: approve, reject, confirm, or otherwise move an event's status.
  * Only the assigned Event Coordinator may do this; anyone else is refused and
- * the event is unchanged.
- * AC: SCRUM-54 AC5, AC7
+ * the event is unchanged. When the move is to Awaiting Safety Check, every active
+ * Safety Officer is notified after a successful write (SCRUM-81).
+ * AC: SCRUM-54 AC5, AC7; SCRUM-81 AC1, AC2, AC6, AC7 — readiness notice only after
+ *     the arrangement gate passes and the status update succeeds; sending again
+ *     after request-changes notifies SOs again; incomplete arrangements → no notice.
  * Business rule: W7 #5 — Coordinators manage only their assigned events.
  * Inputs: user, event id, next status, optional reason.
  * Output: the updated visible event.
- * Failure: 403 FORBIDDEN with no event body when the caller is not assigned.
+ * Failure: 403 FORBIDDEN with no event body when the caller is not assigned;
+ *     409 NOT_READY_FOR_SAFETY_CHECK before any SAFETY_CHECK_READY notice (AC2).
  */
 async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expectedStatuses } = {}) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
@@ -760,6 +795,7 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
     patch.rejection_reason = note;
   }
   // SCRUM-5 AC6: every active venue booking approved, and any requested equipment reserved.
+  // SCRUM-81 AC2: refuse before any readiness notice is sent when arrangements are incomplete.
   if (nextStatus === EVENT_STATUS.AWAITING_SAFETY_CHECK) {
     const ready = await isReadyForSafetyCheck(existing.id);
     if (!ready.ok) {
@@ -785,6 +821,24 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
   if (existing.organiser_id) {
     const { title, body } = statusNotification(existing.name, existing.status, nextStatus, note);
     await notifyUser(existing.organiser_id, 'EVENT_STATUS_CHANGED', title, body, id);
+  }
+
+  /*
+   * Purpose: notify coordinator when event status changes
+   * AC: SCRUM-44 AC1a — emit notifications to coordinator for status changes
+   * Inputs: existing event row, user. Output: notifyUser call for coordinator.
+   * Failure: notification is skipped if coordinator is the acting user (self-exclusion)
+   */
+  if (existing.coordinator_id && existing.coordinator_id !== user.id) {
+    const { title, body } = statusNotification(existing.name, existing.status, nextStatus, note);
+    await notifyUser(existing.coordinator_id, 'EVENT_STATUS_CHANGED', title, body, id);
+  }
+
+  // SCRUM-81 AC1, AC6, AC7: after a successful Send to safety check, every active SO is told.
+  // AC6: sending again after request-changes hits this path a second time.
+  if (nextStatus === EVENT_STATUS.AWAITING_SAFETY_CHECK) {
+    const accessService = require('./access.service');
+    await accessService.notifySafetyOfficersEventReady(existing);
   }
 
   return getEvent(user, id);

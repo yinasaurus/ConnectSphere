@@ -179,6 +179,38 @@ input.field-error, select.field-error, textarea.field-error {
 }
 .nav a.active, .nav a:hover { background: var(--white); color: var(--ink); }
 
+/*
+- Purpose: place the unread-notification bubble directly beside its sidebar label.
+- AC: SCRUM-44 AC3 — make the unread total visually distinct in the navigation.
+- Inputs: notification-nav-link and notification-count classes. Output: aligned label and rounded count pill.
+- Failure: the link remains readable if the count is zero and no pill is rendered.
+*/
+.nav a.notification-nav-link {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+}
+.notification-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #C2552B;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.notification-count-error {
+  margin: -12px 0 0;
+  color: var(--bad);
+  font-size: 0.78rem;
+}
+
 .user-chip {
   margin-top: auto;
   flex-shrink: 0;
