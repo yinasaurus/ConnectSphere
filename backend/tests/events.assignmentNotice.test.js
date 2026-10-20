@@ -343,6 +343,7 @@ describe('SCRUM-45 AC1 smoke (existing paths; no duplicate product behaviour)', 
       3
     );
   });
+
 });
 
 describe('SCRUM-45 assignment notice HTTP route', () => {
@@ -387,5 +388,54 @@ describe('SCRUM-45 assignment notice HTTP route', () => {
       expect.any(String),
       expect.anything()
     );
+  });
+
+  /*
+   * AC:       SCRUM-45 AC2, AC5
+   * Scenario: Incoming Coordinator accepts through the real HTTP route.
+   * Setup:    Cookie for Coordinator 4; pending reassignment from 2; event owned by Organiser 1.
+   * Expected: 200; Organiser and outgoing Coordinator notified; incoming not notified again.
+   * Type:     normal
+   */
+  it('US45-R02: POST reassign/accept notifies Organiser and outgoing Coordinator', async () => {
+    const acceptApp = createApp();
+    const acceptToken = jwt.sign({ sub: 4 }, env.jwtSecret);
+    event.coordinator_id = 2;
+    event.status = 'PLANNING';
+    const pending = {
+      id: 9,
+      event_id: 3,
+      from_coordinator_id: 2,
+      to_coordinator_id: 4,
+      status: 'PENDING',
+    };
+    db.fetchOne
+      .mockResolvedValueOnce({ id: 4, is_active: true })
+      .mockResolvedValueOnce(pending)
+      .mockResolvedValueOnce(event)
+      .mockResolvedValue(event);
+    db.fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_COORDINATOR }]);
+
+    const res = await request(acceptApp)
+      .post('/api/events/3/reassign/accept')
+      .set('Cookie', `${env.sessionCookieName}=${acceptToken}`);
+
+    expect(res.status).toBe(200);
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      1,
+      'COORDINATOR_CHANGED',
+      expect.any(String),
+      expect.any(String),
+      expect.anything()
+    );
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      2,
+      'COORDINATOR_UNASSIGNED',
+      expect.any(String),
+      expect.any(String),
+      expect.anything()
+    );
+    const recipients = audit.notifyUser.mock.calls.map(([userId]) => userId);
+    expect(recipients).not.toContain(4);
   });
 });
