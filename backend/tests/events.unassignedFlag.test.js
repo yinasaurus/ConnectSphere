@@ -140,6 +140,11 @@ describe('SCRUM-30 unassigned flag stays visible', () => {
     expect(seenByOrganiser.coordinatorId).toBe(2);
     expect(service.isInUnassignedQueue(seenByOrganiser)).toBe(false);
 
+    const seenByLead = await service.getEvent(lead, 3);
+    expect(seenByLead.id).toBe(3);
+    expect(seenByLead.coordinatorId).toBe(2);
+    expect(service.isInUnassignedQueue(seenByLead)).toBe(false);
+
     db.fetchMany.mockResolvedValue([event]);
     const stillForOrganiser = await service.listEvents(organiser);
     const stillForLead = await service.listEvents(lead);
