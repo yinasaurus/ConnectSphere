@@ -362,8 +362,9 @@ describe('SCRUM-58 assumption: only confirmed bookings and active holds are cons
    * Scenario: A confirmed booking overlaps a pending request, a cancelled booking, a rejected
    *           booking, an expired hold and a booking that already ended.
    * Setup:    A 10:00-12:00 APPROVED. Others overlap A's padded window but are PENDING,
-   *           CANCELLED, REJECTED, TENTATIVE with an expiry before now, and APPROVED on a
-   *           day in the past (the past one is on 2020-06-01, ended before now).
+   *           CANCELLED, REJECTED and TENTATIVE with an expiry before now. A seventh, APPROVED
+   *           in 2020, is on another day so it can never clash (the past rule itself is
+   *           tested by US58-A05).
    * Expected: Nothing is flagged, including A: ignored rows must not count as the other side.
    * Type:     boundary
    */

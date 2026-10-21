@@ -172,6 +172,8 @@ create table if not exists venue_bookings (
   alternative_suggestion text,
   decided_at timestamptz,
   expires_at timestamptz,
+  -- Flagged for review: set by a critical event change (SCRUM-42) or when new venue setup /
+  -- turnaround times make this booking clash with another (SCRUM-58). Never cleared automatically.
   needs_review boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

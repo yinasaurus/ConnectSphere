@@ -605,6 +605,21 @@ async function flagBookingsClashingUnderVenueTimes(user, venue, now = new Date()
   return bookingIds;
 }
 
+/**
+ * Purpose: Venue Staff edit a venue (details, hours, setup/turnaround minutes, active flag and
+ *   layouts) and, when a setup or turnaround time changes, flag the bookings it now puts in a
+ *   clash.
+ * AC / rule: SCRUM-58 AC1 (check runs after the new times are saved), SCRUM-23 (setup and
+ *   turnaround times), SCRUM-59 (times must be valid; checked by the route's schema).
+ * Inputs: the Venue Staff user, the venue id, and a partial payload (any of name, location,
+ *   capacity, facilities, accessibility, operatingHours, setupMinutes, teardownMinutes, isActive,
+ *   layouts).
+ * Output: the updated venue. When a time changed it also carries `flaggedBookingIds`, the
+ *   bookings that now clash (an empty list when none do).
+ * Failure: 403 when the user is not Venue Staff, 404 when the venue or a layout is missing, 400
+ *   for an invalid capacity, 409 for a duplicate venue identity or layout. A database error from
+ *   the clash check propagates after the times have been saved.
+ */
 async function updateVenue(user, id, payload) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can manage the catalogue', 'FORBIDDEN');
@@ -698,6 +713,16 @@ async function updateVenue(user, id, payload) {
   return flaggedBookingIds === undefined ? updatedVenue : { ...updatedVenue, flaggedBookingIds };
 }
 
+/**
+ * Purpose: List venue bookings, in start order, for the Venue Staff booking list, marking pending
+ *   requests that clash with a confirmed booking or active hold.
+ * AC / rule: SCRUM-19 (conflict warning on pending requests), SCRUM-58 AC5 (`needs_review` shows
+ *   which bookings are flagged for review).
+ * Inputs: optional filters `venueId` and `status`.
+ * Output: one entry per booking with its venue and event names, `has_conflict` and
+ *   `conflict_details` (pending requests only) and `needs_review`.
+ * Failure: a database error propagates. Access is checked by the route, not here.
+ */
 async function listBookings(filters = {}) {
   let query = supabase
     .from('venue_bookings')

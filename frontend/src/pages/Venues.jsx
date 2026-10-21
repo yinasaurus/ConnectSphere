@@ -235,6 +235,16 @@ function BookingRow({ booking }) {
   );
 }
 
+/*
+ * Purpose: The venues page. Everyone can search for available venues and browse the catalogue;
+ *   Venue Staff can also add and update venues and handle booking requests.
+ * AC / rule: SCRUM-58 AC5 (Venue Staff see the bookings flagged for review, and are told when
+ *   a save flags some), SCRUM-19 (booking requests), SCRUM-23 (venue search).
+ * Inputs: none; the role comes from the signed-in user, data from /api/venues and
+ *   /api/venues/bookings.
+ * Output: the page. After a venue save the toast says how many bookings were flagged, if any.
+ * Failure: a failed load or save shows its message on the page; nothing is changed in the browser.
+ */
 export default function Venues() {
   const { hasRole } = useAuth();
   const [venues, setVenues] = useState([]);
