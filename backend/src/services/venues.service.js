@@ -664,6 +664,8 @@ async function listBookings(filters = {}) {
       event_name: row.events?.name,
       event_start_at: row.events?.start_at,
       event_end_at: row.events?.end_at,
+      // SCRUM-58 AC6: the Venues list needs this so an approved booking can be approved again.
+      needs_review: Boolean(row.needs_review),
       has_conflict: hasConflict,
       conflict_details: conflictDetails,
     };
