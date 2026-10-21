@@ -4,10 +4,9 @@ const { z } = require('zod');
  * Purpose: validate body for creating an equipment request (SCRUM-47).
  * AC: SCRUM-47 AC1–AC4
  *
- * Cross-field rules enforced here so the controller never receives an ambiguous body:
- *   1. At least one of equipmentType or equipmentId must be present.
- *   2. startAt and endAt must both be supplied, or both omitted — a lone value is rejected.
- *   3. When both dates are supplied, startAt must be before endAt.
+ * Cross-field rules enforced here (business logic stays in the service):
+ *   1. startAt and endAt must both be supplied, or both omitted — a lone value is rejected.
+ *   2. When both dates are supplied, startAt must be before endAt.
  */
 const createEquipmentRequestSchema = z
   .object({
@@ -42,18 +41,7 @@ const createEquipmentRequestSchema = z
       .optional(),
   })
   .superRefine((data, ctx) => {
-    // Rule 1: type or catalogue item is required
-    const hasType = data.equipmentType && data.equipmentType.trim().length > 0;
-    const hasItem = data.equipmentId != null && data.equipmentId !== '';
-    if (!hasType && !hasItem) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['equipmentType'],
-        message: 'Please specify an equipment type or choose an item from the catalogue.',
-      });
-    }
-
-    // Rule 2 & 3: startAt and endAt must be supplied together and in order
+    // startAt and endAt must be supplied together and in order
     const hasStart = !!data.startAt;
     const hasEnd = !!data.endAt;
     if (hasStart !== hasEnd) {
@@ -70,7 +58,7 @@ const createEquipmentRequestSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['startAt'],
-          message: 'startAt must be before endAt',
+          message: 'from must be before to',
         });
       }
     }
