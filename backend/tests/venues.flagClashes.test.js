@@ -415,6 +415,31 @@ describe('SCRUM-58 assumption: only confirmed bookings and active holds are cons
   });
 
   /*
+   * AC:       SCRUM-58 assumption (past bookings are not flagged) + decision: "past" means the
+   *           booking's end time is at or before now
+   * Scenario: On the same day, one booking has already ended while two others are still to come.
+   * Setup:    Now is 13:00 on DAY. A 10:00-12:00 has ended; B 12:30-14:00 is in progress;
+   *           C 13:30-15:00 is later. Under 30/30, A would clash with B, and B with C.
+   * Expected: Only B and C are flagged. A is left alone even though it overlaps B, so the only
+   *           reason it is skipped is that it has ended.
+   * Type:     boundary
+   */
+  it('US58-A05: a booking that has already ended is not flagged, even if it overlaps one still to come', async () => {
+    tables.venue_bookings.push(
+      booking(1, '10:00', '12:00'),
+      booking(2, '12:30', '14:00'),
+      booking(3, '13:30', '15:00')
+    );
+
+    const ids = await venuesService.flagBookingsClashingUnderVenueTimes(
+      { id: 1 }, venueTimes(30, 30), new Date(`${DAY}T13:00:00.000Z`)
+    );
+
+    expect([...ids].sort()).toEqual([2, 3]);
+    expect(flaggedIds()).toEqual([2, 3]);
+  });
+
+  /*
    * AC:       SCRUM-58 assumption (active holds count) + decision: holds are padded
    * Scenario: A confirmed booking and an active hold sit next to each other.
    * Setup:    A 10:00-12:00 APPROVED; B 12:30-14:00 TENTATIVE, hold expires after now. With
