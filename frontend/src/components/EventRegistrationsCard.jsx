@@ -32,7 +32,7 @@ export default function EventRegistrationsCard({ data }) {
     <div className="card stack">
       <h3>Registrations</h3>
       <p>
-        <strong>Active:</strong> {activeCount} {capacity != null ? `of ${capacity}` : '(registration not yet enabled)'}
+        <strong>Registered:</strong> {activeCount} {capacity != null ? `of ${capacity}` : '(registration not yet enabled)'}
       </p>
       {registrations.length === 0 && <p className="muted">No one has registered for this event yet.</p>}
       {registrations.map((row) => (
