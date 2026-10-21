@@ -80,6 +80,7 @@ async function listRequests(eventId) {
  * Output: created PENDING request row with event and equipment metadata.
  * Failure:
  *   - 403 if user is not an Event Coordinator.
+ *   - 403 if the coordinator is not assigned to this event.
  *   - 400 if eventId is missing.
  *   - 404 if event is not found.
  *   - 400 if event is CANCELLED or REJECTED.
@@ -101,6 +102,11 @@ async function createRequest(user, payload = {}) {
   const event = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
   if (!event) {
     throw httpError(404, 'Event not found', 'NOT_FOUND');
+  }
+
+  // AC: only the coordinator assigned to this event may raise a request for it (SCRUM-47).
+  if (event.coordinator_id !== user.id) {
+    throw httpError(403, 'Only the coordinator assigned to this event can request equipment for it', 'FORBIDDEN');
   }
 
   if (INACTIVE_EVENT_STATUSES.has(event.status)) {

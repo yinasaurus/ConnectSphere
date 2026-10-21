@@ -311,4 +311,72 @@ describe('SCRUM-47 EquipmentRequest page', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Database connection failed');
   });
+
+  /*
+   * Scenario: No type selected and no catalogue item chosen.
+   * Expected: Shows the "specify a type or choose a catalogue item" validation message (JSX:125-127).
+   * This covers the previously-untested branch.
+   */
+  it('shows error when neither equipment type nor catalogue item is provided', async () => {
+    // Override catalogue to empty so no item is pre-selected and default type is cleared
+    mockApi({ catalogue: [] });
+    const user = userEvent.setup();
+    renderComponent();
+
+    await screen.findByText('Request Equipment');
+
+    // Override the type select to have no meaningful selection by switching to OTHER then clearing
+    const typeSelect = screen.getByLabelText(/Equipment type \*/i);
+    await user.selectOptions(typeSelect, 'OTHER');
+
+    // Leave the custom type input blank so effectiveType evaluates to ''
+    const customInput = screen.getByLabelText(/Custom equipment type name/i);
+    expect(customInput).toBeInTheDocument();
+    // do not type anything — effectiveType will be ''
+
+    const submitBtn = screen.getByRole('button', { name: /Submit Equipment Request/i });
+    await user.click(submitBtn);
+
+    expect(
+      await screen.findByText(/Please specify an equipment type or choose an item from the catalogue/i)
+    ).toBeInTheDocument();
+    expect(api).not.toHaveBeenCalledWith('/api/equipment/requests', expect.anything());
+  });
+
+  /*
+   * Scenario: Catalogue item has a non-standard type — when selected, the type selector
+   *           should switch to "Other" and the custom type field should be filled with the item's type
+   *           (JSX:98-100).
+   * This covers the previously-untested branch.
+   */
+  it('switches type to Other and populates custom field when catalogue item has non-standard type', async () => {
+    const NON_STANDARD_CATALOGUE = [
+      { id: 10, name: 'Teleprompter Pro', type: 'TELEPROMPTER', quantity: 2, status: 'AVAILABLE' },
+    ];
+    mockApi({ catalogue: NON_STANDARD_CATALOGUE });
+    const user = userEvent.setup();
+    renderComponent();
+
+    await screen.findByText('Request Equipment');
+
+    // Switch the type selector to OTHER first so effectiveType becomes '' and all catalogue
+    // items are rendered (the select is filtered by effectiveType at all times).
+    const typeSelect = screen.getByLabelText(/Equipment type \*/i);
+    await user.selectOptions(typeSelect, 'OTHER');
+
+    // With effectiveType === '', all items are shown — wait for the catalogue option to appear.
+    await screen.findByRole('option', { name: /Teleprompter Pro/i });
+
+    const itemSelect = screen.getByLabelText(/Catalogue item/i);
+    await user.selectOptions(itemSelect, '10');
+
+    // handleCatalogueChange should now set selectedType back to 'OTHER' (already there)
+    // and fill customType with 'TELEPROMPTER'.
+    expect(typeSelect).toHaveValue('OTHER');
+
+    const customInput = screen.getByLabelText(/Custom equipment type name/i);
+    expect(customInput).toHaveValue('TELEPROMPTER');
+  });
 });
+
+

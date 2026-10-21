@@ -3,6 +3,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { ROLES } = require('../constants/roles');
 const { validateBody } = require('../middleware/validate');
 const { eventDecisionSchema, assignCoordinatorSchema } = require('../validators/events.validators');
+const { createEquipmentRequestSchema } = require('../validators/equipment.validators');
 const controller = require('../controllers/events.controller');
 const registrations = require('../controllers/registrations.controller');
 const access = require('../controllers/access.controller');
@@ -58,6 +59,7 @@ router.get('/:id/equipment-requests', controller.equipmentRequests);
 router.post(
   '/:id/equipment-requests',
   requireRole(ROLES.EVENT_COORDINATOR),
+  validateBody(createEquipmentRequestSchema),
   controller.createEquipmentRequest
 );
 router.patch('/:id', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.update);

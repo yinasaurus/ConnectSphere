@@ -846,7 +846,7 @@ export default function EventDetail() {
                 )}
               </div>
             )) : <p className="muted">No equipment requested yet.</p>}
-            {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && ['APPROVED', 'PLANNING', 'UNDER_REVIEW', 'PREPARATION'].includes(event.status) && (
+            {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && !['CANCELLED', 'REJECTED'].includes(event.status) && (
               <div style={{ marginTop: 10 }}>
                 <Link className="btn equipment-request-link" to={`/app/events/${id}/equipment-request`}>
                   Request equipment
