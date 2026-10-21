@@ -323,6 +323,27 @@ describe('SCRUM-46 Venue Staff notices', () => {
 
     expect(notices('BOOKING_AFFECTED')).toEqual([]);
   });
+
+  /*
+   * AC:       SCRUM-46 AC1
+   * Scenario: Two Venue Staff accounts are active when a request is submitted.
+   * Setup:    Users 40 and 42 are active Venue Staff. User 41 is inactive.
+   * Expected: Both active members are told. The inactive one is not.
+   * Type:     normal
+   */
+  it('US46-V08: every active Venue Staff member is told about a new request', async () => {
+    tables.users.push({ id: 42, is_active: true });
+    tables.user_roles.push({ user_id: 42, role: ROLES.VENUE_STAFF });
+
+    await venuesService.requestBooking(coordinator, {
+      eventId: 3,
+      venueId: 8,
+      startAt: '2026-12-03T09:00:00.000Z',
+      endAt: '2026-12-03T11:00:00.000Z',
+    });
+
+    expect(notices('BOOKING_REQUESTED')).toEqual([40, 42]);
+  });
 });
 
 describe('SCRUM-46 Attendee notices', () => {
@@ -474,6 +495,57 @@ describe('SCRUM-46 Attendee notices', () => {
       'Clash Test has a new venue.',
       3
     );
+  });
+
+  /*
+   * AC:       SCRUM-46 AC3
+   * Scenario: Someone registered for a different event is not affected by this one.
+   * Setup:    Attendee 30 is registered for event 3. Attendee 34 is registered for event 9.
+   * Expected: Only attendee 30 is told when event 3's date changes, and again when it is cancelled.
+   * Type:     boundary
+   */
+  it('US46-A08: an Attendee of another event is not notified', async () => {
+    tables.users.push({ id: 34, is_active: true });
+    tables.registrations.push(
+      { id: 10, event_id: 3, attendee_id: 30, status: 'REGISTERED' },
+      { id: 11, event_id: 9, attendee_id: 34, status: 'REGISTERED' }
+    );
+
+    await eventsService.updateEvent(coordinator, 3, {
+      startAt: '2026-12-04T09:00:00.000Z',
+      endAt: '2026-12-04T11:00:00.000Z',
+    });
+    expect(notices('EVENT_CHANGED')).toEqual([30]);
+
+    await eventsService.changeStatus(coordinator, 3, 'CANCELLED');
+    expect(notices('EVENT_CANCELLED')).toEqual([30]);
+  });
+
+  /*
+   * AC:       SCRUM-46 AC2, AC3
+   * Scenario: The Coordinator rejects a change request.
+   * Setup:    A registered Attendee, and a pending request that would have changed the venue.
+   * Expected: The Attendee is not told, because the event was not changed.
+   * Type:     boundary
+   */
+  it('US46-A09: rejecting a change request does not notify Attendees', async () => {
+    tables.registrations.push({ id: 10, event_id: 3, attendee_id: 30, status: 'REGISTERED' });
+    tables.event_change_requests = [{
+      id: 50,
+      event_id: 3,
+      requested_by: 1,
+      status: 'PENDING',
+      start_at: null,
+      end_at: null,
+      expected_attendance: null,
+      venue_requirements: 'A larger hall',
+      equipment_notes: null,
+    }];
+
+    await eventsService.decideChangeRequest(coordinator, 3, 50, { approve: false, reason: 'Not possible' });
+
+    expect(notices('EVENT_CHANGED')).toEqual([]);
+    expect(tables.events[0].venue_requirements).toBe('Any hall');
   });
 });
 
