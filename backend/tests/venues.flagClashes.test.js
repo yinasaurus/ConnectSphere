@@ -661,6 +661,46 @@ describe('SCRUM-58 saving the venue through the real route (AC1, AC5, AC6)', () 
   });
 
   /*
+   * AC:       SCRUM-58 AC1 ("new or changed" times)
+   * Scenario: Venue Staff rename the venue in the Update venue form, which sends the unchanged
+   *           setup and turnaround values along with the new name.
+   * Setup:    The venue is already 30/30 and two bookings overlap under those times; the PATCH
+   *           body carries setupMinutes 30, teardownMinutes 30 and a new name, as the form does.
+   * Expected: 200 and no flag: the times did not change, so this save did not cause the overlap.
+   * Type:     boundary
+   */
+  it('US58-R08: re-sending unchanged times with another edit does not run the check', async () => {
+    tables.venues[0].setup_minutes = 30;
+    tables.venues[0].teardown_minutes = 30;
+    seedClash();
+
+    const saved = await patchVenue({ name: 'Helix Hall East', setupMinutes: 30, teardownMinutes: 30 });
+
+    expect(saved.status).toBe(200);
+    expect(saved.body.venue).not.toHaveProperty('flaggedBookingIds');
+    expect(flaggedIds()).toEqual([]);
+  });
+
+  /*
+   * AC:       SCRUM-58 AC1 (either time changing is enough)
+   * Scenario: Venue Staff change only the turnaround time; the setup time is sent unchanged.
+   * Setup:    The venue is 0/0; the PATCH sends setupMinutes 0 and teardownMinutes 45. Bookings
+   *           1 and 2 are 30 minutes apart, so they clash once turnaround is 45 (at 30 they
+   *           would only touch).
+   * Expected: 200 and both bookings flagged.
+   * Type:     boundary
+   */
+  it('US58-R09: changing only one of the two times still runs the check', async () => {
+    seedClash();
+
+    const saved = await patchVenue({ setupMinutes: 0, teardownMinutes: 45 });
+
+    expect(saved.status).toBe(200);
+    expect([...saved.body.venue.flaggedBookingIds].sort()).toEqual([1, 2]);
+    expect(flaggedIds()).toEqual([1, 2]);
+  });
+
+  /*
    * AC:       SCRUM-58 AC3
    * Scenario: Venue Staff save times that leave every booking clear.
    * Setup:    Bookings 1 and 2 are 30 minutes apart; the new times are 5/5.

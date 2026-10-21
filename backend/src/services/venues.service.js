@@ -540,8 +540,9 @@ async function createVenue(user, payload) {
  *   teardown_minutes), and `now` (a parameter so tests can fix the time).
  * Output: ids of every booking that clashes, including ones already flagged, so the caller
  *   can tell the user how many need attention.
- * Failure: a database error propagates; the venue times are already saved by then, and saving
- *   the venue again with a setup or turnaround value re-runs this check.
+ * Failure: a database error propagates; the venue times are already saved by then. Saving the
+ *   same times again does not re-run the check (updateVenue only runs it when a time changes),
+ *   so change a time again to re-run it.
  */
 async function flagBookingsClashingUnderVenueTimes(user, venue, now = new Date()) {
   const rows = await fetchMany(
@@ -635,17 +636,25 @@ async function updateVenue(user, id, payload) {
   });
   // Venue staff can deactivate a venue without removing it from the database.
   if (payload.isActive !== undefined) patch.is_active = Boolean(payload.isActive);
+  // SCRUM-58 AC1: decide before saving whether a time is changing, while `existing` still holds
+  // the saved values. Only a submitted value that differs from the saved one counts: the Update
+  // venue form sends both values on every save, and an edit to the name or capacity must not
+  // flag older overlaps it did not cause.
+  const savedSetup = existing.setup_minutes;
+  const savedTeardown = existing.teardown_minutes;
+  const timeChanged = (submitted, saved) => submitted !== undefined && Number(submitted) !== Number(saved);
+  const timesChanged = timeChanged(payload.setupMinutes, savedSetup)
+    || timeChanged(payload.teardownMinutes, savedTeardown);
   await updateById('venues', id, patch);
 
   // SCRUM-58 AC1: new or changed setup/turnaround times can make existing bookings clash, so
-  // check them straight after the times are saved. Runs on every save that includes either
-  // value, which also lets Venue Staff re-run it if an earlier check failed part-way.
+  // check them straight after the times are saved.
   let flaggedBookingIds;
-  if (payload.setupMinutes !== undefined || payload.teardownMinutes !== undefined) {
+  if (timesChanged) {
     flaggedBookingIds = await flagBookingsClashingUnderVenueTimes(user, {
       id: existing.id,
-      setup_minutes: patch.setup_minutes ?? existing.setup_minutes,
-      teardown_minutes: patch.teardown_minutes ?? existing.teardown_minutes,
+      setup_minutes: patch.setup_minutes ?? savedSetup,
+      teardown_minutes: patch.teardown_minutes ?? savedTeardown,
     });
   }
 
