@@ -47,8 +47,8 @@ async function notifyVenueStaff({ eventId, type, title, body, excludeUserId }) {
 
 /**
  * Purpose: the Attendees who currently hold a place on one event.
- * AC: SCRUM-46 AC2 and AC3 (registered only; withdrawn and waitlisted are not told about
- *   a later event change or cancellation).
+ * AC: SCRUM-46 AC2 and AC3 (registered only; withdrawn, waitlisted and inactive accounts
+ *   are not told about a later event change or cancellation).
  * Inputs: event id. Output: attendee ids. Failure: a database error propagates.
  */
 async function listRegisteredAttendeeIds(eventId) {
@@ -59,7 +59,13 @@ async function listRegisteredAttendeeIds(eventId) {
       .eq('event_id', eventId)
       .eq('status', REGISTRATION_STATUS.REGISTERED)
   )) || [];
-  return [...new Set(rows.map((row) => row.attendee_id).filter((id) => id != null))];
+  const ids = [...new Set(rows.map((row) => row.attendee_id).filter((id) => id != null))];
+  if (!ids.length) return [];
+
+  const users = (await fetchMany(
+    supabase.from('users').select('id, is_active').in('id', ids)
+  )) || [];
+  return users.filter((row) => row.is_active).map((row) => row.id);
 }
 
 /**

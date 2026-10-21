@@ -547,6 +547,25 @@ describe('SCRUM-46 Attendee notices', () => {
     expect(notices('EVENT_CHANGED')).toEqual([]);
     expect(tables.events[0].venue_requirements).toBe('Any hall');
   });
+
+  /*
+   * AC:       SCRUM-46 AC3
+   * Scenario: A registered Attendee's account is inactive.
+   * Setup:    Attendee 30 is active and registered. Attendee 35 is registered but inactive.
+   * Expected: Only attendee 30 is told about the cancellation.
+   * Type:     boundary
+   */
+  it('US46-A10: an inactive Attendee is not notified', async () => {
+    tables.users.push({ id: 35, is_active: false });
+    tables.registrations.push(
+      { id: 10, event_id: 3, attendee_id: 30, status: 'REGISTERED' },
+      { id: 13, event_id: 3, attendee_id: 35, status: 'REGISTERED' }
+    );
+
+    await eventsService.changeStatus(coordinator, 3, 'CANCELLED');
+
+    expect(notices('EVENT_CANCELLED')).toEqual([30]);
+  });
 });
 
 describe('SCRUM-46 new and already viewed notices', () => {
