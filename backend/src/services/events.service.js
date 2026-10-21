@@ -15,7 +15,12 @@ const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
 const { assertTransition, assertSubStateTransition } = require('../domain/statusMachine');
 const { writeAudit, notifyUser } = require('./audit.service');
-const { flagArrangementsForReview } = require('./criticalChange.service');
+const { flagArrangementsForReview, changedCriticalFields } = require('./criticalChange.service');
+const {
+  notifyVenueStaff,
+  notifyRegisteredAttendees,
+  attendeeChangeNotice,
+} = require('./notifications.service');
 
 const EVENT_SELECT = `
   *,
@@ -511,6 +516,21 @@ async function updateEvent(user, id, payload) {
     }
   }
 
+  // SCRUM-46 AC2: registered Attendees are told when the date, time or venue changes.
+  // Attendance and equipment are not part of that notice. Withdrawn people are not registered.
+  const attendeeNotice = attendeeChangeNotice(
+    existing.name,
+    changedCriticalFields(existing, { ...existing, ...patch })
+  );
+  if (attendeeNotice) {
+    await notifyRegisteredAttendees({
+      eventId: id,
+      type: 'EVENT_CHANGED',
+      title: attendeeNotice.title,
+      body: attendeeNotice.body,
+    });
+  }
+
   return getEvent(user, id);
 }
 
@@ -839,6 +859,30 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
   if (nextStatus === EVENT_STATUS.AWAITING_SAFETY_CHECK) {
     const accessService = require('./access.service');
     await accessService.notifySafetyOfficersEventReady(existing);
+  }
+
+  // SCRUM-46 AC2: registered Attendees are told the event was cancelled. AC1: Venue Staff
+  // are told only when an approved booking is still on it. The person who cancelled is excluded.
+  if (nextStatus === EVENT_STATUS.CANCELLED) {
+    const name = existing.name || 'An event';
+    await notifyRegisteredAttendees({
+      eventId: id,
+      type: 'EVENT_CANCELLED',
+      title: 'Event cancelled',
+      body: `${name} was cancelled.`,
+    });
+    const approved = (await fetchMany(
+      supabase.from('venue_bookings').select('id').eq('event_id', id).eq('status', BOOKING_STATUS.APPROVED)
+    )) || [];
+    if (approved.length) {
+      await notifyVenueStaff({
+        eventId: id,
+        type: 'BOOKING_AFFECTED',
+        title: 'Approved booking affected',
+        body: `${name} was cancelled. Its approved venue booking is affected.`,
+        excludeUserId: user.id,
+      });
+    }
   }
 
   return getEvent(user, id);
@@ -1769,6 +1813,22 @@ async function decideChangeRequest(user, eventId, requestId, { approve, reason }
       : { eventId: event.id, reason: trimmedReason || null }
   );
   await notifyChangeRequestDecision(event, decided, trimmedReason);
+
+  // SCRUM-46 AC2: an approved change of date, time or venue reaches registered Attendees.
+  // Rejecting changes nothing they were told about, and attendance alone is not included.
+  if (decided) {
+    const included = changedCriticalFields(event, { ...event, ...eventPatch });
+    const attendeeNotice = attendeeChangeNotice(event.name, included);
+    if (attendeeNotice) {
+      await notifyRegisteredAttendees({
+        eventId: event.id,
+        type: 'EVENT_CHANGED',
+        title: attendeeNotice.title,
+        body: attendeeNotice.body,
+      });
+    }
+  }
+
   return mapChangeRequest(updated || { ...request, ...crPatch });
 }
 

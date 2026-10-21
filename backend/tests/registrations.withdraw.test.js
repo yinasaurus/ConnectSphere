@@ -129,16 +129,31 @@ describe('SCRUM-53 withdraw registration (service rules)', () => {
   });
 
   /*
+   * AC:       SCRUM-53 (a waitlisted withdrawal frees no place)
    * Scenario: a WAITLISTED attendee withdraws (never held a confirmed place).
-   * Expected: no waitlist-opening notification — nothing was freed.
+   * Expected: no waitlist-opening notification — nothing was freed. SCRUM-46 still tells
+   *           the attendee themselves that their own registration was withdrawn.
    * Type: boundary
    */
-  it('US53-B05: withdrawing a WAITLISTED (not REGISTERED) place does not notify anyone', async () => {
+  it('US53-B05: withdrawing a WAITLISTED place does not open a place for anyone else', async () => {
     db.fetchMany.mockResolvedValueOnce([registrationRow({ status: 'WAITLISTED' })]);
 
     await service.withdraw(attendee, 3);
 
-    expect(audit.notifyUser).not.toHaveBeenCalled();
+    expect(audit.notifyUser).not.toHaveBeenCalledWith(
+      expect.anything(),
+      'WAITLIST_OPENING',
+      expect.anything(),
+      expect.anything(),
+      expect.anything()
+    );
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      30,
+      'REGISTRATION_WITHDRAWN',
+      'Registration withdrawn',
+      expect.any(String),
+      3
+    );
   });
 });
 
