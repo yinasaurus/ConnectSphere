@@ -27,6 +27,10 @@ const db = require('../src/config/db');
 const audit = require('../src/services/audit.service');
 const events = require('../src/services/events.service');
 const { ROLES } = require('../src/constants/roles');
+const request = require('supertest');
+const jwt = require('jsonwebtoken');
+const { createApp } = require('../src/app');
+const { env } = require('../src/config/env');
 
 const lead = { id: 11, roles: [ROLES.EVENT_COORDINATOR_LEAD] };
 const organiser = { id: 1, roles: [ROLES.EVENT_ORGANISER], organisationId: 10 };
@@ -167,6 +171,47 @@ describe('SCRUM-29 AC1 + AC3: the event record shows the assigned Coordinator', 
   });
 });
 
+describe('SCRUM-29 AC1 over HTTP and AC5 guard', () => {
+  /*
+   * AC:       SCRUM-29 AC1
+   * Scenario: The Organiser's browser asks the real route for their event.
+   * Setup:    Cookie for Organiser 1 (organisation 10); event assigned to Chloe (2).
+   * Expected: 200 and event.coordinatorName "Chloe Lim" in the JSON the page receives.
+   * Type:     normal
+   */
+  it('US29-R01: GET /api/events/:id returns the Coordinator name to the Organiser', async () => {
+    const app = createApp();
+    const token = jwt.sign({ sub: 1 }, env.jwtSecret);
+    db.fetchOne
+      .mockResolvedValueOnce({ id: 1, is_active: true, organisation_id: 10 })
+      .mockResolvedValue(event);
+    db.fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_ORGANISER }]);
+
+    const res = await request(app)
+      .get('/api/events/3')
+      .set('Cookie', `${env.sessionCookieName}=${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.event.coordinatorName).toBe('Chloe Lim');
+  });
+
+  /*
+   * AC:       SCRUM-29 AC4 (a notice is only sent for a real, permitted request)
+   * Scenario: Dan (4), who does not hold the event, tries to ask Eve (5) to take over.
+   * Setup:    Event assigned to Chloe (2).
+   * Expected: 403 FORBIDDEN; no reassignment row is written and nobody is notified.
+   * Type:     error
+   */
+  it('US29-E01: a non-owner cannot request a reassignment and nobody is notified', async () => {
+    await expect(events.requestCoordinatorChange(otherCoordinator, 3, 5)).rejects.toMatchObject({
+      status: 403,
+      code: 'FORBIDDEN',
+    });
+    expect(db.insertOne).not.toHaveBeenCalled();
+    expect(audit.notifyUser).not.toHaveBeenCalled();
+  });
+});
+
 describe('SCRUM-29 AC4: notified each time, not only the first time', () => {
   /*
    * AC:       SCRUM-29 AC4
@@ -246,6 +291,37 @@ describe('SCRUM-29 AC4: notified each time, not only the first time', () => {
     expect(byUser(1)).toHaveLength(1);
     expect(byUser(2)).toHaveLength(1);
     expect(byUser(2)[0][1]).toBe('COORDINATOR_UNASSIGNED');
+  });
+});
+
+describe('SCRUM-29 AC5: the previous Coordinator is whoever held the event', () => {
+  /*
+   * AC:       SCRUM-29 AC5
+   * Scenario: An older request from Chloe (2) to Eve (5) is still pending, but the event
+   *           has since moved to Dan (4). Eve accepts.
+   * Setup:    Event coordinator_id 4; pending request from 2 to 5.
+   * Expected: Dan (the real previous Coordinator) gets COORDINATOR_UNASSIGNED; Chloe, who
+   *           no longer held the event, is not told she lost it.
+   * Type:     conflict
+   */
+  it('US29-N04: a stale pending request tells the real previous Coordinator, not the sender', async () => {
+    event.coordinator_id = 4;
+    const stale = {
+      id: 9,
+      event_id: 3,
+      from_coordinator_id: 2,
+      to_coordinator_id: 5,
+      status: 'PENDING',
+    };
+    db.fetchOne
+      .mockResolvedValueOnce(stale)
+      .mockResolvedValueOnce(event)
+      .mockResolvedValue(event);
+
+    await events.acceptCoordinatorChange({ id: 5, roles: [ROLES.EVENT_COORDINATOR] }, 3);
+
+    const unassigned = audit.notifyUser.mock.calls.filter(([, type]) => type === 'COORDINATOR_UNASSIGNED');
+    expect(unassigned.map(([userId]) => userId)).toEqual([4]);
   });
 });
 

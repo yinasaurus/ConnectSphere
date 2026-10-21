@@ -1264,6 +1264,11 @@ async function acceptCoordinatorChange(user, eventId) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
 
+  // SCRUM-29 AC5: the "previous" Coordinator is whoever holds the event now, not whoever sent the
+  // request. An older request can still be pending after the event has moved on, and then the
+  // sender is no longer the one losing the event. Read it before the update below overwrites it.
+  const previousCoordinatorId = existing.coordinator_id;
+
   await updateById('events', eventId, {
     coordinator_id: user.id,
     updated_at: new Date().toISOString(),
@@ -1276,7 +1281,7 @@ async function acceptCoordinatorChange(user, eventId) {
   // Incoming Coordinator already received COORDINATOR_REASSIGN on request — do not notify them again.
   await notifyCoordinatorReassigned(
     { ...existing, id: eventId },
-    request.from_coordinator_id,
+    previousCoordinatorId,
     user.id,
     { notifyIncoming: false }
   );
