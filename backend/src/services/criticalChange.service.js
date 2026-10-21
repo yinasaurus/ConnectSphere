@@ -209,12 +209,13 @@ async function flagArrangementsForReview(user, previous, next) {
       && flaggedBookingIds.some((id) => String(id) === String(row.id))
   );
   if (approvedFlagged.length) {
-    const { notifyVenueStaff } = require('./notifications.service');
+    const { notifyVenueStaff, approvedBookingChangeNotice } = require('./notifications.service');
+    const notice = approvedBookingChangeNotice(previous.name, fields);
     await notifyVenueStaff({
       eventId,
       type: 'BOOKING_AFFECTED',
-      title: 'Approved booking needs review',
-      body: `${previous.name || 'An event'} changed (${fields.join(', ')}). An approved venue booking now needs review.`,
+      title: notice.title,
+      body: notice.body,
       excludeUserId: user?.id,
     });
   }

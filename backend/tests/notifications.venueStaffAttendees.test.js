@@ -254,6 +254,13 @@ describe('SCRUM-46 Venue Staff notices', () => {
     );
 
     expect(notices('BOOKING_AFFECTED')).toEqual([40]);
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      40,
+      'BOOKING_AFFECTED',
+      'Approved booking needs review',
+      'Clash Test changed (date and time). An approved venue booking now needs review.',
+      3
+    );
     expect(tables.venue_bookings[0].status).toBe('APPROVED');
   });
 

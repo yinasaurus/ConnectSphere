@@ -82,6 +82,33 @@ async function notifyRegisteredAttendees({ eventId, type, title, body }) {
  * Inputs: event name, and the API field names that changed (from changedCriticalFields).
  * Output: { title, body } or null when none of those fields changed. Never throws.
  */
+const STAFF_CHANGE_LABELS = {
+  startAt: 'date and time',
+  endAt: 'date and time',
+  expectedAttendance: 'attendance',
+  venueRequirements: 'venue',
+  requestedVenueId: 'venue',
+  equipmentNotes: 'equipment',
+};
+
+/**
+ * Purpose: the notice Venue Staff get when a critical change flags an approved booking.
+ * AC: SCRUM-46 AC1. The changed fields are named in plain words.
+ * Inputs: event name, and the API field names that changed (from changedCriticalFields).
+ * Output: { title, body }. Never throws.
+ */
+function approvedBookingChangeNotice(eventName, fields) {
+  const labels = [...new Set(
+    (fields || []).map((field) => STAFF_CHANGE_LABELS[field]).filter(Boolean)
+  )];
+  const name = eventName || 'An event';
+  const what = labels.length ? labels.join(', ') : 'details';
+  return {
+    title: 'Approved booking needs review',
+    body: `${name} changed (${what}). An approved venue booking now needs review.`,
+  };
+}
+
 function attendeeChangeNotice(eventName, fields) {
   const labels = [...new Set(
     (fields || []).map((field) => ATTENDEE_CHANGE_LABELS[field]).filter(Boolean)
@@ -136,4 +163,5 @@ module.exports = {
   listRegisteredAttendeeIds,
   notifyRegisteredAttendees,
   attendeeChangeNotice,
+  approvedBookingChangeNotice,
 };
