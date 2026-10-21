@@ -73,7 +73,8 @@ function validateDateRange(startAt, endAt) {
  * Purpose: turns an events row (snake_case, with joined organisation/organiser/coordinator
  * names) into the camelCase event the API returns.
  * AC: SCRUM-39 AC2 (attendance, start/end date and time, venue needs and equipment notes
- * come from here).
+ * come from here). SCRUM-29 AC1, AC3 — coordinatorId and coordinatorName come from the
+ * current coordinator_id and its join, so a reassignment shows up on the next read.
  * Input: a database row or null. Output: the event object, or null for no row. Empty
  * columns stay null.
  */
@@ -264,6 +265,8 @@ async function listEvents(user, filters = {}) {
  *     and no Coordinator.
  *     SCRUM-54 AC6 — Coordinators may view events they are not assigned to (view only).
  *     SCRUM-65 AC5 — the Lead can open any queued request's full details.
+ *     SCRUM-29 AC1, AC3 — the Organiser (and other planning roles) see the assigned
+ *     Coordinator; Attendees do not (visibleEvent drops it).
  * Inputs: the user and the event id. Output: the event as visibleEvent shapes it.
  * Failure: 404 "Event not found" both when it doesn't exist and when the user may not see
  * it, so outsiders can't tell the two apart.
@@ -1163,6 +1166,8 @@ async function confirmEvent(user, id) {
 /**
  * Purpose: current Coordinator asks another Coordinator to take over the event.
  * AC: SCRUM-45 AC2 — the incoming Coordinator is notified of the reassignment request.
+ *     SCRUM-29 AC4 — this notice is sent on every request, with no de-duplication, so a
+ *     Coordinator asked again is told again.
  * Business rule: Week 4 Q&A — reassignment is agreed offline; original Coordinator requests,
  *   new Coordinator accepts.
  * Inputs: current assigned Coordinator, event id, newCoordinatorId.

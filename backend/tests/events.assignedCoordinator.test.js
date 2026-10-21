@@ -128,6 +128,9 @@ describe('SCRUM-29 AC1 + AC3: the event record shows the assigned Coordinator', 
    * Expected: The event the Organiser loads next shows coordinatorId 4 / "Dan Ong",
    *           and no longer shows Chloe.
    * Type:     normal
+   * Limit:    the database is mocked, so the test itself sets the joined name when
+   *           coordinator_id changes. It proves accept writes the new id and the next read
+   *           maps it; it cannot prove the real database join.
    */
   it('US29-D04: after a reassignment the Organiser sees the new Coordinator', async () => {
     const pending = {
@@ -215,7 +218,9 @@ describe('SCRUM-29 AC1 over HTTP and AC5 guard', () => {
 describe('SCRUM-29 AC4: notified each time, not only the first time', () => {
   /*
    * AC:       SCRUM-29 AC4
-   * Scenario: Chloe is assigned, later removed, then assigned to the same event again.
+   * Scenario: The Lead assigns Chloe to an unassigned event, and the same assignment happens
+   *           again later. (No unassign feature exists; the test resets the row by hand to
+   *           stand in for the event being unassigned.)
    * Setup:    Submitted unassigned event; assign Chloe; reset to unassigned; assign again.
    * Expected: Chloe gets COORDINATOR_ASSIGNED twice — nothing de-duplicates by event/user.
    * Type:     normal
@@ -243,9 +248,10 @@ describe('SCRUM-29 AC4: notified each time, not only the first time', () => {
 
   /*
    * AC:       SCRUM-29 AC4
-   * Scenario: Dan is asked to take over the event twice (for example after Chloe cancels
-   *           and asks again, or the event returns to Chloe and she asks him once more).
-   * Setup:    Event assigned to Chloe (2); two reassignment requests to Dan (4).
+   * Scenario: Chloe asks Dan to take over the same event twice.
+   * Setup:    Event assigned to Chloe (2); two reassignment requests to Dan (4). The service
+   *           does not de-duplicate (decision: the request notice counts for AC4). Whether a
+   *           second pending request should replace the first is an open product question.
    * Expected: Dan gets COORDINATOR_REASSIGN twice.
    * Type:     boundary
    */
