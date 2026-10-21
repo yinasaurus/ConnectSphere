@@ -689,8 +689,8 @@ export default function Venues() {
           <div style={{ marginBottom: 24 }} id="flagged-bookings">
             <h4 style={{ marginBottom: 6 }}>Flagged for review</h4>
             <p className="muted" style={{ marginBottom: 10 }}>
-              These bookings overlap another booking under a venue&apos;s setup and turnaround times.
-              Nothing has been cancelled or changed.
+              These bookings are flagged for review, for example after a change to a venue&apos;s
+              setup or turnaround times. Nothing has been cancelled or changed.
             </p>
             <table className="table">
               <thead>
