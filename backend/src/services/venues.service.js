@@ -559,6 +559,9 @@ async function flagBookingsClashingUnderVenueTimes(user, venue, now = new Date()
     .filter((row) => new Date(row.end_at) > now)
     .filter((row) => {
       if (row.status === BOOKING_STATUS.APPROVED) return true;
+      // Only confirmed bookings and holds count (customer assumption). Checked here as well as
+      // in the query, so a pending, cancelled or rejected row is never mistaken for a hold.
+      if (row.status !== BOOKING_STATUS.TENTATIVE) return false;
       // A hold counts only until it expires; one with no expiry recorded is still active.
       const expiry = row.expires_at || row.hold_expires_at;
       return !expiry || new Date(expiry) > now;

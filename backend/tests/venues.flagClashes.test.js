@@ -389,6 +389,32 @@ describe('SCRUM-58 assumption: only confirmed bookings and active holds are cons
   });
 
   /*
+   * AC:       SCRUM-58 assumption (only confirmed bookings and active holds count)
+   * Scenario: The database query wrongly returns pending, cancelled and rejected rows.
+   * Setup:    fetchMany is forced to return a confirmed booking plus a PENDING, a CANCELLED
+   *           and a REJECTED one, each overlapping it once padded by 30/30, none with an expiry.
+   * Expected: Nothing is flagged: the code itself refuses to treat those rows as holds, so
+   *           it does not rely on the query to leave them out.
+   * Type:     error
+   */
+  it('US58-A04: pending, cancelled and rejected rows are never treated as holds', async () => {
+    tables.venue_bookings.push(
+      booking(1, '10:00', '12:00'),
+      booking(2, '12:30', '14:00', { status: 'PENDING' }),
+      booking(3, '12:30', '14:00', { status: 'CANCELLED' }),
+      booking(4, '12:30', '14:00', { status: 'REJECTED' })
+    );
+    db.fetchMany.mockResolvedValueOnce(tables.venue_bookings);
+
+    const ids = await venuesService.flagBookingsClashingUnderVenueTimes(
+      { id: 1 }, venueTimes(30, 30), NOW
+    );
+
+    expect(ids).toEqual([]);
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
+  /*
    * AC:       SCRUM-58 assumption (active holds count) + decision: holds are padded
    * Scenario: A confirmed booking and an active hold sit next to each other.
    * Setup:    A 10:00-12:00 APPROVED; B 12:30-14:00 TENTATIVE, hold expires after now. With
