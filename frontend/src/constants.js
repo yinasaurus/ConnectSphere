@@ -42,6 +42,24 @@ export const STATUS_LABELS = {
   REJECTED: 'Rejected',
 };
 
+export const EQUIPMENT_REQUEST_STATUS = {
+  PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  PREPARING: 'PREPARING',
+  RESERVED: 'RESERVED',
+  READY: 'READY',
+  UNAVAILABLE: 'UNAVAILABLE',
+};
+
+export const EQUIPMENT_REQUEST_STATUS_LABELS = {
+  PENDING: 'Pending',
+  IN_PROGRESS: 'In Progress',
+  PREPARING: 'Preparing',
+  RESERVED: 'Reserved',
+  READY: 'Ready',
+  UNAVAILABLE: 'Unavailable',
+};
+
 export const SUB_STATES = {
   IN_REVIEW: 'IN_REVIEW',
   ACTION_REQUIRED: 'ACTION_REQUIRED',

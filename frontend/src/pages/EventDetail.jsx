@@ -822,10 +822,22 @@ export default function EventDetail() {
             <h3>Equipment requests</h3>
             {equipmentError ? <p className="alert">Equipment requests could not be loaded: {equipmentError}</p>
               : equipmentRequests.length ? equipmentRequests.map((item) => (
-              <p key={item.id}>
-                {item.equipment_name || 'Item no longer in catalogue'} × {item.quantity}: {item.status}
-                {item.needs_review && <span className="needs-review-flag">Requires review</span>}
-              </p>
+              <div key={item.id} className="equipment-request-row" style={{ marginBottom: 10 }}>
+                <p style={{ margin: '2px 0' }}>
+                  {item.equipment_name || item.equipment_type || 'Item no longer in catalogue'} × {item.quantity}: {item.status}
+                  {item.needs_review && <span className="needs-review-flag">Requires review</span>}
+                </p>
+                {(item.technical_requirements || item.notes) && (
+                  <p className="muted" style={{ margin: '2px 0', fontSize: '0.85rem' }}>
+                    Specifications: {item.technical_requirements || item.notes}
+                  </p>
+                )}
+                {item.decision_reason && (
+                  <p className="muted" style={{ margin: '2px 0', fontSize: '0.85rem' }}>
+                    Arrangement note: {item.decision_reason}
+                  </p>
+                )}
+              </div>
             )) : <p className="muted">No equipment requested yet.</p>}
           </div>}
           {canViewPlanning && <div className="card">
