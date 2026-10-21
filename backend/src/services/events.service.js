@@ -348,20 +348,28 @@ async function listEquipmentRequests(user, eventId) {
   const event = await getEvent(user, eventId);
   const rows = await fetchMany(
     supabase.from('equipment_requests')
-      .select('id, event_id, equipment_id, quantity, status, needs_review, equipment ( name )')
+      .select('id, event_id, equipment_id, quantity, status, needs_review, equipment_type, technical_requirements, notes, decision_reason, equipment ( name )')
       .eq('event_id', event.id)
       .order('id', { ascending: false })
   );
-  // Decision reasons and who asked/decided are left out; readers need the requirement itself.
-  return rows.map((row) => ({
-    id: row.id,
-    event_id: row.event_id,
-    equipment_id: row.equipment_id,
-    equipment_name: row.equipment?.name || null,
-    quantity: row.quantity,
-    status: row.status,
-    needs_review: Boolean(row.needs_review),
-  }));
+  return rows.map((row) => {
+    const item = {
+      id: row.id,
+      event_id: row.event_id,
+      equipment_id: row.equipment_id,
+      equipment_name: row.equipment?.name || null,
+      quantity: row.quantity,
+      status: row.status,
+      needs_review: Boolean(row.needs_review),
+    };
+    if (row.equipment_type) item.equipment_type = row.equipment_type;
+    if (row.technical_requirements) item.technical_requirements = row.technical_requirements;
+    if (row.notes) item.notes = row.notes;
+    if (row.decision_reason && row.decision_reason !== 'internal') {
+      item.decision_reason = row.decision_reason;
+    }
+    return item;
+  });
 }
 
 /**
