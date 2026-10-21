@@ -732,6 +732,15 @@ async function decideBooking(user, id, decision) {
   const booking = await fetchOne(supabase.from('venue_bookings').select('*').eq('id', id));
   if (!booking) throw httpError(404, 'Booking not found', 'NOT_FOUND');
 
+  // SCRUM-58 AC6: an approved booking marked for review can be approved again. That only
+  // clears the mark. Status, venue, date and time stay as they are, and no new notice is sent.
+  if (booking.status === BOOKING_STATUS.APPROVED && booking.needs_review && decision.approve) {
+    return updateById('venue_bookings', id, {
+      needs_review: false,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
   // SCRUM-18 AC4: only PENDING bookings can be decided.
   if (booking.status !== BOOKING_STATUS.PENDING) {
     throw httpError(
@@ -767,6 +776,7 @@ async function decideBooking(user, id, decision) {
     decision_reason: decision.reason || null,
     alternative_suggestion: decision.alternativeSuggestion || null,
     decided_at: new Date().toISOString(),
+    needs_review: false,
   });
 
   // SCRUM-78 AC5: only the event's assigned Coordinator is told, not whoever sent the

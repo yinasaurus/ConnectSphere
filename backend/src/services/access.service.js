@@ -1,4 +1,4 @@
-const { supabase, fetchOne, fetchMany, insertOne, updateByIdWhere } = require('../config/db');
+const { supabase, fetchOne, fetchMany, insertOne, updateById, updateByIdWhere } = require('../config/db');
 const {
   ROLES,
 } = require('../constants/roles');
@@ -260,6 +260,9 @@ async function listSafetyQueue(user) {
     // Belt-and-suspenders: status alone is not enough if arrangements slipped.
     const gate = await arrangementsReadyForSafetyCheck(row.id);
     if (!gate.ok) continue;
+    // SCRUM-58 AC5: a marked booking or equipment request keeps the event off this list
+    // until it is reviewed, even if the Coordinator has sent the event back.
+    if (await eventHasArrangementNeedingReview(row.id)) continue;
     ready.push({
       id: row.id,
       name: row.name,
@@ -269,6 +272,38 @@ async function listSafetyQueue(user) {
     });
   }
   return ready;
+}
+
+/**
+ * Purpose: whether this event still has a venue booking or equipment request marked for review.
+ * AC: SCRUM-58 AC5 and AC6. The mark is the shared needs_review flag (SCRUM-42), whatever set it.
+ * Inputs: event id. Output: true when any row is marked. Failure: a database error propagates.
+ */
+async function eventHasArrangementNeedingReview(eventId) {
+  const bookings = (await fetchMany(
+    supabase.from('venue_bookings').select('id, needs_review').eq('event_id', eventId)
+  )) || [];
+  const equipment = (await fetchMany(
+    supabase.from('equipment_requests').select('id, needs_review').eq('event_id', eventId)
+  )) || [];
+  return [...bookings, ...equipment].some((row) => row.needs_review);
+}
+
+/**
+ * Purpose: mark only the arrangements the Safety Officer selected when requesting changes.
+ * AC: SCRUM-58 AC2 (those selected are marked), AC3 (this writes nothing for the others),
+ *   AC4 (needs_review only; status and the rest of the row are not written).
+ * Inputs: cleaned [{ type, id }] from parseAffectedArrangements.
+ * Output: nothing. Failure: a database error propagates.
+ */
+async function markAffectedArrangementsForReview(affected) {
+  const now = new Date().toISOString();
+  for (const item of affected) {
+    const table = item.type === SAFETY_ARRANGEMENT_TYPE.VENUE_BOOKING
+      ? 'venue_bookings'
+      : 'equipment_requests';
+    await updateById(table, item.id, { needs_review: true, updated_at: now });
+  }
 }
 
 /**
@@ -603,6 +638,11 @@ async function recordSafetyCheck(user, eventId, payload = {}) {
       'A safety-check outcome can only be recorded while the event is awaiting a safety check',
       'INVALID_STATUS'
     );
+  }
+
+  // SCRUM-58 AC2–AC4: after the return to Planning is saved, mark only the selected rows.
+  if (outcome === SAFETY_CHECK_OUTCOME.REQUEST_CHANGES) {
+    await markAffectedArrangementsForReview(affected);
   }
 
   const created = await insertOne('safety_checks', {
