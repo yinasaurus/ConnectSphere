@@ -348,7 +348,7 @@ async function listEquipmentRequests(user, eventId) {
   const event = await getEvent(user, eventId);
   const rows = await fetchMany(
     supabase.from('equipment_requests')
-      .select('id, event_id, equipment_id, quantity, status, needs_review, equipment ( name )')
+      .select('id, event_id, equipment_id, quantity, status, needs_review, equipment_type, technical_requirements, start_at, end_at, notes, equipment ( name, type )')
       .eq('event_id', event.id)
       .order('id', { ascending: false })
   );
@@ -361,6 +361,11 @@ async function listEquipmentRequests(user, eventId) {
     quantity: row.quantity,
     status: row.status,
     needs_review: Boolean(row.needs_review),
+    ...(row.equipment_type || row.equipment?.type ? { equipment_type: row.equipment_type || row.equipment?.type } : {}),
+    ...(row.technical_requirements || row.notes ? { technical_requirements: row.technical_requirements || row.notes } : {}),
+    ...(row.notes ? { notes: row.notes } : {}),
+    ...(row.start_at ? { start_at: row.start_at } : {}),
+    ...(row.end_at ? { end_at: row.end_at } : {}),
   }));
 }
 

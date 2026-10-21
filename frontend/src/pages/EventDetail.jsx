@@ -260,11 +260,13 @@ export default function EventDetail() {
         <StatusBadge status={event.status} subState={event.subState} />
       </div>
       {error && <div className="alert">{error}</div>}
-      {/* Keep the submitted-request confirmation visible after returning from booking. */}
-      {(message || location.state?.venueBookingSubmitted) && (
+      {/* Keep the submitted-request confirmation visible after returning from booking or equipment request. */}
+      {(message || location.state?.venueBookingSubmitted || location.state?.equipmentRequestSubmitted) && (
         <div className="alert success" role="status">
           {location.state?.venueBookingSubmitted
             ? 'Venue booking request submitted. Venue Staff will review it as Pending.'
+            : location.state?.equipmentRequestSubmitted
+            ? 'Equipment request submitted. Technical Support Staff can now review and prepare the equipment.'
             : message}
         </div>
       )}
@@ -822,11 +824,35 @@ export default function EventDetail() {
             <h3>Equipment requests</h3>
             {equipmentError ? <p className="alert">Equipment requests could not be loaded: {equipmentError}</p>
               : equipmentRequests.length ? equipmentRequests.map((item) => (
-              <p key={item.id}>
-                {item.equipment_name || 'Item no longer in catalogue'} × {item.quantity}: {item.status}
-                {item.needs_review && <span className="needs-review-flag">Requires review</span>}
-              </p>
+              <div key={item.id} className="equipment-request-row" style={{ marginBottom: 10, paddingBottom: 6 }}>
+                <p style={{ margin: '2px 0' }}>
+                  {item.equipment_name || item.equipment_type || 'Item no longer in catalogue'} × {item.quantity}: {item.status}
+                  {item.needs_review && <span className="needs-review-flag" style={{ marginLeft: 6 }}>Requires review</span>}
+                </p>
+                {item.equipment_type && item.equipment_name && (
+                  <p className="muted" style={{ margin: '2px 0', fontSize: '0.85rem' }}>
+                    Type: {item.equipment_type}
+                  </p>
+                )}
+                {(item.technical_requirements || item.notes) && (
+                  <p style={{ margin: '2px 0', fontSize: '0.88rem' }}>
+                    Technical requirements: {item.technical_requirements || item.notes}
+                  </p>
+                )}
+                {(item.start_at && item.end_at) && (
+                  <p className="muted" style={{ margin: '2px 0', fontSize: '0.82rem' }}>
+                    Timing: {new Date(item.start_at).toLocaleString()} – {new Date(item.end_at).toLocaleString()}
+                  </p>
+                )}
+              </div>
             )) : <p className="muted">No equipment requested yet.</p>}
+            {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && ['APPROVED', 'PLANNING', 'UNDER_REVIEW', 'PREPARATION'].includes(event.status) && (
+              <div style={{ marginTop: 10 }}>
+                <Link className="btn equipment-request-link" to={`/app/events/${id}/equipment-request`}>
+                  Request equipment
+                </Link>
+              </div>
+            )}
           </div>}
           {canViewPlanning && <div className="card">
             <h3>Status history</h3>

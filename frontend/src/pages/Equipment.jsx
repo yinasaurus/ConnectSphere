@@ -150,8 +150,21 @@ export default function Equipment() {
           return (
             <div className="row-between" key={request.id} style={{ padding: '8px 0' }}>
               <div>
-                Event #{request.event_id} · {request.equipment_name || 'Unspecified'} × {request.quantity}
+                Event #{request.event_id}{request.event_name ? ` (${request.event_name})` : ''} · {request.equipment_name || request.equipment_type || 'Unspecified'} × {request.quantity}
+                {request.equipment_type && request.equipment_name && (
+                  <span className="pill" style={{ marginLeft: 6, fontSize: '0.78rem' }}>{request.equipment_type}</span>
+                )}
                 <div className="muted">{request.status}</div>
+                {(request.technical_requirements || request.notes) && (
+                  <p style={{ margin: '3px 0', fontSize: '0.88rem' }}>
+                    <strong>Technical requirements:</strong> {request.technical_requirements || request.notes}
+                  </p>
+                )}
+                {(request.start_at && request.end_at) && (
+                  <p className="muted" style={{ margin: '2px 0', fontSize: '0.84rem' }}>
+                    <strong>Timing:</strong> {formatCheckWindow(request.start_at, request.end_at)}
+                  </p>
+                )}
                 {isTech && request.status === 'PENDING' && check?.ok && (
                   <>
                     <p className={check.sufficient ? 'muted' : 'alert'}>{availabilityLabel(check)}</p>

@@ -47,41 +47,141 @@ async function upsertEquipment(user, payload, id) {
 
 /**
  * Purpose: list equipment requests, optionally for one event.
- * AC: SCRUM-21 AC7 — Tech arranges from this list.
- * Inputs: optional eventId. Output: requests with catalogue name/status.
+ * AC: SCRUM-21 AC7 — Tech arranges from this list; SCRUM-47 — records type, technical specs, timing.
+ * Inputs: optional eventId. Output: requests with catalogue name/status, type, specs, timing, and event name.
  */
 async function listRequests(eventId) {
   let query = supabase
     .from('equipment_requests')
-    .select('*, equipment ( name, status )')
+    .select('*, equipment ( name, status, type ), events ( id, name, start_at, end_at )')
     .order('id', { ascending: false });
   if (eventId) query = query.eq('event_id', eventId);
   const rows = await fetchMany(query);
   return rows.map((row) => ({
     ...row,
-    equipment_name: row.equipment?.name,
-    equipment_status: row.equipment?.status,
+    equipment_name: row.equipment?.name || null,
+    equipment_status: row.equipment?.status || null,
+    equipment_type: row.equipment_type || row.equipment?.type || null,
+    technical_requirements: row.technical_requirements || row.notes || null,
+    event_name: row.events?.name || null,
+    start_at: row.start_at || row.events?.start_at || null,
+    end_at: row.end_at || row.events?.end_at || null,
   }));
 }
 
 /**
  * Purpose: Coordinator records equipment required for an event.
- * Business rule: briefing Equipment Request Management.
- * Inputs: user, payload. Output: PENDING request.
- * Failure: 403 if the caller is not a Coordinator.
+ * AC: SCRUM-47:
+ *   - AC1: Event Coordinator can create an equipment request for an event.
+ *   - AC2: Request records equipment type and quantity required.
+ *   - AC3: Request records technical requirements or specifications.
+ *   - AC4: Request is associated with the relevant event, date, and time.
+ * Inputs: user, payload { eventId, equipmentId, equipmentType, quantity, technicalRequirements, specifications, notes, startAt, endAt }
+ * Output: created PENDING request row with event and equipment metadata.
+ * Failure:
+ *   - 403 if user is not an Event Coordinator.
+ *   - 400 if eventId is missing.
+ *   - 404 if event is not found.
+ *   - 400 if event is CANCELLED or REJECTED.
+ *   - 400 if quantity is not an integer >= 1.
+ *   - 404 if equipmentId is provided but item does not exist.
+ *   - 400 if neither equipmentType nor equipmentId is provided.
+ *   - 400 if startAt / endAt window is invalid.
  */
-async function createRequest(user, payload) {
+async function createRequest(user, payload = {}) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only coordinators can request equipment', 'FORBIDDEN');
   }
-  return insertOne('equipment_requests', {
-    event_id: payload.eventId,
-    equipment_id: payload.equipmentId || null,
-    quantity: payload.quantity || 1,
-    notes: payload.notes || null,
+
+  const eventId = payload.eventId != null && payload.eventId !== '' ? Number(payload.eventId) : null;
+  if (!eventId || Number.isNaN(eventId)) {
+    throw httpError(400, 'eventId is required', 'VALIDATION_ERROR');
+  }
+
+  const event = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
+  if (!event) {
+    throw httpError(404, 'Event not found', 'NOT_FOUND');
+  }
+
+  if (INACTIVE_EVENT_STATUSES.has(event.status)) {
+    throw httpError(400, 'Cannot request equipment for a cancelled or rejected event', 'VALIDATION_ERROR');
+  }
+
+  const quantity = parseQuantity(payload.quantity != null ? payload.quantity : 1);
+
+  let equipmentId = payload.equipmentId != null && payload.equipmentId !== '' ? Number(payload.equipmentId) : null;
+  let equipmentType = (payload.equipmentType || '').trim() || null;
+  let equipmentItem = null;
+
+  if (equipmentId) {
+    equipmentItem = await fetchOne(supabase.from('equipment').select('*').eq('id', equipmentId));
+    if (!equipmentItem) {
+      throw httpError(404, 'Equipment not found', 'NOT_FOUND');
+    }
+    if (!equipmentType) {
+      equipmentType = equipmentItem.type || 'GENERAL';
+    }
+  }
+
+  if (!equipmentType && !equipmentId) {
+    throw httpError(400, 'Equipment type or catalogue item is required', 'VALIDATION_ERROR');
+  }
+
+  const technicalRequirements = (
+    payload.technicalRequirements ||
+    payload.specifications ||
+    payload.notes ||
+    ''
+  ).trim() || null;
+
+  let startAt = payload.startAt || event.start_at || null;
+  let endAt = payload.endAt || event.end_at || null;
+
+  if (payload.startAt && payload.endAt) {
+    const { rangeStart, rangeEnd } = parseWindow(payload.startAt, payload.endAt);
+    startAt = rangeStart.toISOString();
+    endAt = rangeEnd.toISOString();
+  } else if (startAt && endAt) {
+    const start = new Date(startAt);
+    const end = new Date(endAt);
+    if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && start < end) {
+      startAt = start.toISOString();
+      endAt = end.toISOString();
+    }
+  }
+
+  const insertData = {
+    event_id: event.id,
+    equipment_id: equipmentId,
+    equipment_type: equipmentType,
+    quantity,
+    technical_requirements: technicalRequirements,
+    notes: technicalRequirements,
+    start_at: startAt,
+    end_at: endAt,
     status: 'PENDING',
     requested_by: user.id,
+  };
+
+  const created = await insertOne('equipment_requests', insertData);
+  await writeAudit(user.id, 'EQUIPMENT_REQUESTED', 'equipment_request', created.id, {
+    eventId: event.id,
+    equipmentId,
+    equipmentType,
+    quantity,
+    technicalRequirements,
+    startAt,
+    endAt,
   });
+
+  return {
+    ...created,
+    event_name: event.name || null,
+    equipment_name: equipmentItem?.name || null,
+    equipment_type: equipmentType,
+    start_at: startAt,
+    end_at: endAt,
+  };
 }
 
 /**
