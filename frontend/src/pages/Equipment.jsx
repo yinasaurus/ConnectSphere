@@ -151,7 +151,10 @@ export default function Equipment() {
             <div className="row-between" key={request.id} style={{ padding: '8px 0' }}>
               <div>
                 Event #{request.event_id} · {request.equipment_name || 'Unspecified'} × {request.quantity}
-                <div className="muted">{request.status}</div>
+                <div className="muted">
+                  {request.status}
+                  {request.needs_review && <span className="needs-review-flag">Requires review</span>}
+                </div>
                 {isTech && request.status === 'PENDING' && check?.ok && (
                   <>
                     <p className={check.sufficient ? 'muted' : 'alert'}>{availabilityLabel(check)}</p>
@@ -162,6 +165,11 @@ export default function Equipment() {
                   <p className="alert">{check.message}</p>
                 )}
               </div>
+              {isTech && request.status === 'RESERVED' && request.needs_review && (
+                <div className="actions">
+                  <button className="btn" type="button" onClick={() => reserveRequest(request.id)}>Reserve</button>
+                </div>
+              )}
               {isTech && request.status === 'PENDING' && (
                 <div className="actions">
                   <button
