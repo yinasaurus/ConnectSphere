@@ -1,7 +1,7 @@
 /**
  * SCRUM-30: the organiser's dashboard keeps a submitted request visible and flagged Unassigned.
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './Dashboard';
 import { api } from '../api';
@@ -91,5 +91,46 @@ describe('SCRUM-30 Unassigned flag on the dashboard', () => {
     expect(await screen.findByRole('link', { name: 'Town Hall' })).toBeInTheDocument();
     expect(screen.getByText('Chloe Lim')).toBeInTheDocument();
     expect(screen.queryByText('Unassigned')).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-30 AC2
+   * Scenario: The signed-in person is both a Lead and a Coordinator.
+   * Setup: Town Hall is SUBMITTED with no Coordinator. hasRole is true for both roles.
+   * Expected: Upcoming still shows the event, flagged Unassigned. The Coordinator
+   *           "assigned to me" filter does not hide it.
+   * Type: boundary
+   */
+  it('US30-F08: a Lead who is also a Coordinator still sees the unassigned event', async () => {
+    renderDashboard(
+      { id: 11, fullName: 'Ivy Chen' },
+      (...roles) => roles.some((role) => role === 'EVENT_COORDINATOR' || role === 'EVENT_COORDINATOR_LEAD'),
+      [townHall]
+    );
+
+    expect(await screen.findByRole('link', { name: 'Town Hall' })).toBeInTheDocument();
+    expect(screen.getByText('Unassigned')).toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-30 AC2
+   * Scenario: A Coordinator who is not a Lead opens the dashboard.
+   * Setup: Town Hall is SUBMITTED and coordinatorId is null, so it is not assigned to user 2.
+   * Expected: It is not in Upcoming. The Coordinator list stays limited to their own events.
+   * Type: boundary
+   */
+  it('US30-F09: a Coordinator who is not a Lead does not see an unassigned event', async () => {
+    renderDashboard(
+      { id: 2, fullName: 'Chloe Lim' },
+      (...roles) => roles.includes('EVENT_COORDINATOR'),
+      [townHall]
+    );
+
+    await waitFor(() => {
+      const count = screen.getByText('Visible events').closest('.card').querySelector('h2');
+      expect(count.textContent).toBe('1');
+    });
+    expect(screen.queryByRole('link', { name: 'Town Hall' })).not.toBeInTheDocument();
+    expect(screen.getByText('Nothing to show for this role yet.')).toBeInTheDocument();
   });
 });
