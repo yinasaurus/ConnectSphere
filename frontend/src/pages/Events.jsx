@@ -72,6 +72,19 @@ export default function Events() {
             <h3>{event.name}</h3>
             <p className="muted">{event.organisationName || 'ConnectSphere'} · {event.category}</p>
             <p>{event.startAt ? new Date(event.startAt).toLocaleString() : 'Dates to be confirmed'}</p>
+            {/*
+              Purpose: flag a newly submitted request as Unassigned on the organiser's event list.
+              AC: SCRUM-30 AC1 (every submitted event with no Coordinator shows Unassigned)
+                  and AC3 (the flag is gone once a Coordinator id is stored).
+              Business rule: W7 #5 — Unassigned is the default for every new request, not only
+              when nobody is free. Drafts are not flagged (SCRUM-28). The queue and assignment
+              themselves stay in SCRUM-65 and SCRUM-71.
+              Inputs: event.status and event.coordinatorId from GET /api/events.
+              Output: the Coordinator line, or nothing. Failure: none.
+            */}
+            {event.status === 'SUBMITTED' && event.coordinatorId == null && (
+              <p><strong>Coordinator:</strong> {'Unassigned'}</p>
+            )}
           </Link>
         ))}
         {!events.length && <div className="card muted">No events match these filters.</div>}
