@@ -71,6 +71,29 @@ describe('SCRUM-30 Unassigned flag on the events list', () => {
   });
 
   /*
+   * AC: SCRUM-30 AC3
+   * Scenario: A Coordinator id is already stored, but the status is still Submitted.
+   * Setup: Status SUBMITTED and coordinatorId 2.
+   * Expected: The event stays listed. Unassigned is not shown. Hiding the flag does not
+   *           depend on the status leaving Submitted.
+   * Type: boundary
+   */
+  it('US30-F10: a Submitted event that already has a Coordinator is not flagged Unassigned', async () => {
+    renderEvents([{
+      id: 3,
+      name: 'Town Hall',
+      status: 'SUBMITTED',
+      coordinatorId: 2,
+      organisationName: 'Acme',
+      category: 'MEETING',
+      startAt: '2026-10-01T10:00:00Z',
+    }]);
+
+    expect(await screen.findByRole('heading', { name: 'Town Hall' })).toBeInTheDocument();
+    expect(screen.queryByText('Unassigned')).not.toBeInTheDocument();
+  });
+
+  /*
    * AC: SCRUM-30 AC1
    * Scenario: The organiser has a draft that was never submitted.
    * Setup: Status DRAFT and coordinatorId null.
