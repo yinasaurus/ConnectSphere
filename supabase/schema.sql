@@ -206,6 +206,10 @@ create table if not exists equipment_requests (
 -- already exist.
 alter table venue_bookings add column if not exists needs_review boolean not null default false;
 alter table equipment_requests add column if not exists needs_review boolean not null default false;
+alter table equipment_requests add column if not exists equipment_type varchar(80);
+alter table equipment_requests add column if not exists technical_requirements text;
+alter table equipment_requests add column if not exists start_at timestamptz;
+alter table equipment_requests add column if not exists end_at timestamptz;
 
 -- SCRUM-47: record equipment type, technical requirements/specifications, and timing
 -- ⚠️  MIGRATION REQUIRED — anyone running this branch against an existing database must

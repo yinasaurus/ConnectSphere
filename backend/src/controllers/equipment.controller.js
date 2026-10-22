@@ -57,6 +57,15 @@ const decideRequest = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Purpose: PATCH /api/equipment/requests/:id — Technical Support updates status / arrangements.
+ * AC: SCRUM-48 AC1–AC4.
+ */
+const updateRequest = asyncHandler(async (req, res) => {
+  const request = await equipmentService.updateRequest(req.user, req.params.id, req.body);
+  res.json({ request });
+});
+
+/**
  * Purpose: GET /api/equipment/availability — ad-hoc check for an item, qty and window.
  * AC: SCRUM-21 AC1–AC6
  * Inputs: query.equipmentId, query.quantity, query.from, query.to
@@ -88,6 +97,7 @@ module.exports = {
   update,
   requests,
   createRequest,
+  updateRequest,
   decideRequest,
   availability,
   requestAvailability,

@@ -41,4 +41,11 @@ router.get(
  */
 router.post('/requests/:id/decision', requireRole(ROLES.TECHNICAL_SUPPORT), controller.decideRequest);
 
+/**
+ * Purpose: Tech reviews and updates request status as arrangements are made.
+ * AC: SCRUM-48 AC1–AC4.
+ */
+router.patch('/requests/:id', requireRole(ROLES.TECHNICAL_SUPPORT), controller.updateRequest);
+router.post('/requests/:id/status', requireRole(ROLES.TECHNICAL_SUPPORT), controller.updateRequest);
+
 module.exports = router;

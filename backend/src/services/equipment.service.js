@@ -59,11 +59,13 @@ async function listRequests(eventId) {
   const rows = await fetchMany(query);
   return rows.map((row) => ({
     ...row,
-    equipment_name: row.equipment?.name || null,
-    equipment_status: row.equipment?.status || null,
+    equipment_name: row.equipment?.name || row.equipment_name || null,
+    equipment_status: row.equipment?.status || row.equipment_status || null,
     equipment_type: row.equipment_type || row.equipment?.type || null,
     technical_requirements: row.technical_requirements || row.notes || null,
-    event_name: row.events?.name || null,
+    event_name: row.events?.name || row.event_name || null,
+    event_start_at: row.events?.start_at || row.start_at || null,
+    event_end_at: row.events?.end_at || row.end_at || null,
     start_at: row.start_at || row.events?.start_at || null,
     end_at: row.end_at || row.events?.end_at || null,
   }));
@@ -215,6 +217,80 @@ async function createRequest(user, payload = {}) {
     start_at: startAt,
     end_at: endAt,
   };
+}
+
+/**
+ * Purpose: Technical Support reviews and updates an equipment request status as arrangements are made.
+ * AC: SCRUM-48 AC1, AC2, AC3, AC4.
+ * Inputs: user, request id, payload { status, notes, reason }.
+ * Failure: 403 if not Technical Support; 404 if request not found; 400 if invalid status.
+ */
+async function updateRequest(user, id, payload = {}) {
+  if (!hasRole(user, ROLES.TECHNICAL_SUPPORT)) {
+    throw httpError(403, 'Only technical support staff can manage equipment requests', 'FORBIDDEN');
+  }
+
+  const request = await fetchOne(supabase.from('equipment_requests').select('*').eq('id', id));
+  if (!request) throw httpError(404, 'Equipment request not found', 'NOT_FOUND');
+
+  const rawStatus = payload.status ? String(payload.status).trim().toUpperCase() : '';
+  const validStatuses = ['PENDING', 'IN_PROGRESS', 'PREPARING', 'RESERVED', 'READY', 'UNAVAILABLE'];
+  if (!rawStatus || !validStatuses.includes(rawStatus)) {
+    throw httpError(
+      400,
+      `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
+      'VALIDATION_ERROR'
+    );
+  }
+
+  const arrangementNote = payload.reason || payload.notes || request.decision_reason || null;
+  const now = new Date().toISOString();
+
+  // If status transitions to RESERVED, create reservation record if equipment_id is linked
+  if (rawStatus === 'RESERVED' && request.equipment_id) {
+    const existingReservations = await fetchMany(
+      supabase
+        .from('equipment_reservations')
+        .select('id')
+        .eq('event_id', request.event_id)
+        .eq('equipment_id', request.equipment_id)
+    );
+    if (!existingReservations.length) {
+      await insertOne('equipment_reservations', {
+        event_id: request.event_id,
+        equipment_id: request.equipment_id,
+        quantity: request.quantity || 1,
+        status: 'RESERVED',
+      });
+    }
+  }
+
+  const updated = await updateById('equipment_requests', id, {
+    status: rawStatus,
+    decided_by: user.id,
+    decision_reason: arrangementNote,
+    decided_at: now,
+    updated_at: now,
+  });
+
+  await writeAudit(user.id, 'EQUIPMENT_REQUEST_UPDATED', 'equipment_requests', id, {
+    previousStatus: request.status,
+    newStatus: rawStatus,
+    notes: arrangementNote,
+  });
+
+  const event = await fetchOne(supabase.from('events').select('id, name, coordinator_id').eq('id', request.event_id));
+  if (event?.coordinator_id) {
+    await notifyUser(
+      event.coordinator_id,
+      'EQUIPMENT_UPDATE',
+      `Equipment request updated: ${rawStatus}`,
+      arrangementNote || `Equipment arrangement for ${event.name || 'your event'} is now ${rawStatus}.`,
+      event.id
+    );
+  }
+
+  return updated;
 }
 
 /**
@@ -496,6 +572,7 @@ module.exports = {
   upsertEquipment,
   listRequests,
   createRequest,
+  updateRequest,
   decideRequest,
   checkEquipmentAvailability,
   checkRequestAvailability,
