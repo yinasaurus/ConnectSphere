@@ -118,6 +118,7 @@ export default function Dashboard() {
                 <td><Link to={`/app/events/${event.id}`}>{event.name}</Link></td>
                 <td><StatusBadge status={event.status} subState={event.subState} /></td>
                 <td>{event.startAt ? new Date(event.startAt).toLocaleString() : 'TBC'}</td>
+                {/* SCRUM-29 AC1: assigned Coordinator's name, or "Unassigned" until the Lead assigns. */}
                 <td>{event.coordinatorName || 'Unassigned'}</td>
               </tr>
             ))}

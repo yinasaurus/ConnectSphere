@@ -81,7 +81,8 @@ function validateDateRange(startAt, endAt) {
  * Purpose: turns an events row (snake_case, with joined organisation/organiser/coordinator
  * names) into the camelCase event the API returns.
  * AC: SCRUM-39 AC2 (attendance, start/end date and time, venue needs and equipment notes
- * come from here).
+ * come from here). SCRUM-29 AC1, AC3 — coordinatorId and coordinatorName come from the
+ * current coordinator_id and its join, so a reassignment shows up on the next read.
  * Input: a database row or null. Output: the event object, or null for no row. Empty
  * columns stay null.
  */
@@ -272,6 +273,8 @@ async function listEvents(user, filters = {}) {
  *     and no Coordinator.
  *     SCRUM-54 AC6 — Coordinators may view events they are not assigned to (view only).
  *     SCRUM-65 AC5 — the Lead can open any queued request's full details.
+ *     SCRUM-29 AC1, AC3 — the Organiser (and other planning roles) see the assigned
+ *     Coordinator; Attendees do not (visibleEvent drops it).
  * Inputs: the user and the event id. Output: the event as visibleEvent shapes it.
  * Failure: 404 "Event not found" both when it doesn't exist and when the user may not see
  * it, so outsiders can't tell the two apart.
@@ -1212,6 +1215,8 @@ async function confirmEvent(user, id) {
 /**
  * Purpose: current Coordinator asks another Coordinator to take over the event.
  * AC: SCRUM-45 AC2 — the incoming Coordinator is notified of the reassignment request.
+ *     SCRUM-29 AC4 — this notice is sent on every request, with no de-duplication, so a
+ *     Coordinator asked again is told again.
  * Business rule: Week 4 Q&A — reassignment is agreed offline; original Coordinator requests,
  *   new Coordinator accepts.
  * Inputs: current assigned Coordinator, event id, newCoordinatorId.
@@ -1243,10 +1248,58 @@ async function requestCoordinatorChange(user, eventId, newCoordinatorId) {
 }
 
 /**
+ * Purpose: one place that tells the relevant users a reassignment has taken effect, so the
+ *   Coordinator Lead's reassign action (SCRUM-31) can reuse it instead of copying the notices.
+ * AC: SCRUM-29 AC3 (Organiser is told the Coordinator changed, and sees the new one on the
+ *     event record), AC4 (the incoming Coordinator is told every time, not only on the first
+ *     assignment), AC5 (the previous Coordinator is told they are no longer assigned).
+ *     SCRUM-45 AC2, AC3, AC5 own the end-to-end notice tests; this is that same behaviour.
+ * Business rule: W7 #5 — relevant users are notified of reassignments. Assumption (story
+ *   note, to confirm with the customer): the previous Coordinator counts as a relevant user.
+ * Inputs: the event row as it was before the change, outgoing and incoming Coordinator ids,
+ *   options.notifyIncoming. Request/accept flow: false, because the incoming Coordinator was
+ *   already told when the request was sent. A reassign with no prior request (the Lead's
+ *   action): true, so the incoming Coordinator is told now.
+ * Output: nothing. Failure: a missing Organiser or outgoing Coordinator is skipped; the
+ *   outgoing Coordinator is never told twice if they are also the incoming one.
+ */
+async function notifyCoordinatorReassigned(event, outgoingCoordinatorId, incomingCoordinatorId, options = {}) {
+  const eventName = event.name || 'An event';
+  if (event.organiser_id) {
+    await notifyUser(
+      event.organiser_id,
+      'COORDINATOR_CHANGED',
+      'Coordinator changed',
+      `The Coordinator for your event "${eventName}" has changed.`,
+      event.id
+    );
+  }
+  if (outgoingCoordinatorId && outgoingCoordinatorId !== incomingCoordinatorId) {
+    await notifyUser(
+      outgoingCoordinatorId,
+      'COORDINATOR_UNASSIGNED',
+      'You are no longer assigned',
+      `You are no longer the Coordinator for "${eventName}".`,
+      event.id
+    );
+  }
+  if (options.notifyIncoming && incomingCoordinatorId) {
+    await notifyUser(
+      incomingCoordinatorId,
+      'COORDINATOR_ASSIGNED',
+      'Event assigned to you',
+      `You have been assigned as Coordinator for "${eventName}".`,
+      event.id
+    );
+  }
+}
+
+/**
  * Purpose: incoming Coordinator accepts a pending reassignment; Organiser and outgoing
  *   Coordinator are told the assignment changed.
  * AC: SCRUM-45 AC2 (reassign to/from — outgoing notified here; incoming was notified on
  *     request), AC3 (only those parties), AC5 (Organiser notified when assigned Coordinator changes).
+ *     SCRUM-29 AC3 (event record now shows the new Coordinator), AC5 (previous Coordinator told).
  * Business rule: W7 #5 — relevant users notified of reassignments.
  * Inputs: accepting Coordinator (must be to_coordinator_id), event id.
  * Output: updated event. Failure: 404 if no pending reassignment or event missing.
@@ -1265,6 +1318,11 @@ async function acceptCoordinatorChange(user, eventId) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
 
+  // SCRUM-29 AC5: the "previous" Coordinator is whoever holds the event now, not whoever sent the
+  // request. An older request can still be pending after the event has moved on, and then the
+  // sender is no longer the one losing the event. Read it before the update below overwrites it.
+  const previousCoordinatorId = existing.coordinator_id;
+
   await updateById('events', eventId, {
     coordinator_id: user.id,
     updated_at: new Date().toISOString(),
@@ -1275,25 +1333,12 @@ async function acceptCoordinatorChange(user, eventId) {
   });
 
   // Incoming Coordinator already received COORDINATOR_REASSIGN on request — do not notify them again.
-  const eventName = existing.name || 'An event';
-  if (existing.organiser_id) {
-    await notifyUser(
-      existing.organiser_id,
-      'COORDINATOR_CHANGED',
-      'Coordinator changed',
-      `The Coordinator for your event "${eventName}" has changed.`,
-      eventId
-    );
-  }
-  if (request.from_coordinator_id && request.from_coordinator_id !== user.id) {
-    await notifyUser(
-      request.from_coordinator_id,
-      'COORDINATOR_UNASSIGNED',
-      'You are no longer assigned',
-      `You are no longer the Coordinator for "${eventName}".`,
-      eventId
-    );
-  }
+  await notifyCoordinatorReassigned(
+    { ...existing, id: eventId },
+    previousCoordinatorId,
+    user.id,
+    { notifyIncoming: false }
+  );
 
   return getEvent(user, eventId);
 }
@@ -1901,6 +1946,7 @@ module.exports = {
   respondClarification,
   requestCoordinatorChange,
   acceptCoordinatorChange,
+  notifyCoordinatorReassigned,
   assignPrimaryCoordinator,
   listAssignableCoordinators,
   listHistory,

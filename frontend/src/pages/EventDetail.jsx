@@ -786,7 +786,10 @@ export default function EventDetail() {
           {canViewPlanning && <div className="card">
             <h3>People</h3>
             <p><strong>Organiser:</strong> {event.organiserName}</p>
-            {/* SCRUM-28 AC1: submitted requests stay unassigned until the Lead assigns (SCRUM-71). */}
+            {/* SCRUM-28 AC1: submitted requests stay unassigned until the Lead assigns (SCRUM-71).
+                SCRUM-29 AC1 + AC3: shows the assigned Coordinator's name; the event is re-read
+                on load, so after a reassignment the Organiser sees the new Coordinator.
+                Input: event.coordinatorName. Output: name, or "Unassigned" when none. */}
             <p><strong>Coordinator:</strong> {event.coordinatorName || 'Unassigned'}</p>
           </div>}
 
