@@ -261,6 +261,24 @@ describe('SCRUM-47 Create Equipment Request', () => {
   });
 
   /*
+   * AC2: quantity must not exceed the catalogue item's total stock.
+   * Scenario: SAMPLE_MIC has quantity 8; coordinator requests 10.
+   * Expected: 400 with a message referencing the item name and stock.
+   */
+  it('AC2: rejects quantity that exceeds the catalogue stock of the selected item', async () => {
+    fetchOne
+      .mockResolvedValueOnce(SAMPLE_EVENT)
+      .mockResolvedValueOnce(SAMPLE_MIC); // stock = 8
+
+    const res = await request(app)
+      .post('/api/equipment/requests')
+      .send({ eventId: 8, equipmentId: 1, quantity: 10 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/exceeds the catalogue stock for Wireless handheld mic/i);
+  });
+
+  /*
    * AC: AC3 (Technical requirements or specifications)
    * Scenario: Coordinator specifies technical requirements and specifications.
    * Expected: Recorded accurately in technical_requirements and notes.
@@ -329,12 +347,17 @@ describe('SCRUM-47 Create Equipment Request', () => {
     expect(res.body.request.end_at).toBe(EVENT_WINDOW.end_at);
   });
 
-  it('AC4: supports custom equipment start and end timing within or for the event', async () => {
+  /*
+   * AC4: custom timing window must sit inside the event window.
+   * Scenario: Coordinator supplies a window fully inside the event (09:00–17:00 UTC).
+   * Expected: 201 with the requested times stored.
+   */
+  it('AC4: supports custom equipment start and end timing within the event window', async () => {
     fetchOne.mockResolvedValueOnce(SAMPLE_EVENT);
 
     const customWindow = {
-      startAt: '2026-11-12T08:00:00.000Z', // early sound check
-      endAt: '2026-11-12T18:00:00.000Z',
+      startAt: '2026-11-12T10:00:00.000Z', // inside event: 10:00 – 12:00 UTC
+      endAt: '2026-11-12T12:00:00.000Z',
     };
 
     const res = await request(app)
@@ -349,6 +372,50 @@ describe('SCRUM-47 Create Equipment Request', () => {
     expect(res.status).toBe(201);
     expect(res.body.request.start_at).toBe(customWindow.startAt);
     expect(res.body.request.end_at).toBe(customWindow.endAt);
+  });
+
+  /*
+   * AC4: timing window must not start before the event starts.
+   * Scenario: startAt is 08:00 UTC, before event start (09:00 UTC).
+   * Expected: 400 VALIDATION_ERROR.
+   */
+  it('AC4: rejects startAt before the event start', async () => {
+    fetchOne.mockResolvedValueOnce(SAMPLE_EVENT);
+
+    const res = await request(app)
+      .post('/api/equipment/requests')
+      .send({
+        eventId: 8,
+        equipmentType: 'AUDIO',
+        quantity: 1,
+        startAt: '2026-11-12T08:00:00.000Z', // before event start 09:00 UTC
+        endAt: '2026-11-12T12:00:00.000Z',
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Required from cannot be before the event starts/i);
+  });
+
+  /*
+   * AC4: timing window must not end after the event ends.
+   * Scenario: endAt is 18:00 UTC, after event end (17:00 UTC).
+   * Expected: 400 VALIDATION_ERROR.
+   */
+  it('AC4: rejects endAt after the event end', async () => {
+    fetchOne.mockResolvedValueOnce(SAMPLE_EVENT);
+
+    const res = await request(app)
+      .post('/api/equipment/requests')
+      .send({
+        eventId: 8,
+        equipmentType: 'AUDIO',
+        quantity: 1,
+        startAt: '2026-11-12T10:00:00.000Z',
+        endAt: '2026-11-12T18:00:00.000Z', // after event end 17:00 UTC
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Required until cannot be after the event ends/i);
   });
 
   it('AC4: rejects invalid custom window where start is not before end', async () => {

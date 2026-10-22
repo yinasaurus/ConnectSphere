@@ -112,6 +112,11 @@ export default function EquipmentRequest() {
     );
   }, [catalogue, effectiveType]);
 
+  // The selected catalogue item (if any) — used for quantity cap
+  const selectedItem = selectedEquipmentId
+    ? catalogue.find((c) => String(c.id) === String(selectedEquipmentId))
+    : null;
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
@@ -119,6 +124,14 @@ export default function EquipmentRequest() {
     const qty = Number(quantity);
     if (!Number.isInteger(qty) || qty < 1) {
       setError('Quantity required must be a whole number of at least 1.');
+      return;
+    }
+
+    // Quantity must not exceed the catalogue item's total stock
+    if (selectedItem && qty > selectedItem.quantity) {
+      setError(
+        `Quantity requested (${qty}) exceeds the catalogue stock for ${selectedItem.name} (${selectedItem.quantity} available).`
+      );
       return;
     }
 
@@ -132,6 +145,24 @@ export default function EquipmentRequest() {
       const en = new Date(endAt);
       if (s >= en) {
         setError('Required equipment start time must be before end time.');
+        return;
+      }
+    }
+
+    // Requested window must sit inside the event
+    if (event.startAt && startAt) {
+      const eventStart = new Date(event.startAt);
+      const reqStart = new Date(startAt);
+      if (reqStart < eventStart) {
+        setError('Required from cannot be before the event starts.');
+        return;
+      }
+    }
+    if (event.endAt && endAt) {
+      const eventEnd = new Date(event.endAt);
+      const reqEnd = new Date(endAt);
+      if (reqEnd > eventEnd) {
+        setError('Required until cannot be after the event ends.');
         return;
       }
     }
@@ -274,6 +305,8 @@ export default function EquipmentRequest() {
                   id="equipment-start"
                   type="datetime-local"
                   value={startAt}
+                  min={event.startAt ? toDateTimeLocal(event.startAt) : undefined}
+                  max={event.endAt ? toDateTimeLocal(event.endAt) : undefined}
                   onChange={(e) => setStartAt(e.target.value)}
                 />
               </div>
@@ -285,6 +318,8 @@ export default function EquipmentRequest() {
                   id="equipment-end"
                   type="datetime-local"
                   value={endAt}
+                  min={event.startAt ? toDateTimeLocal(event.startAt) : undefined}
+                  max={event.endAt ? toDateTimeLocal(event.endAt) : undefined}
                   onChange={(e) => setEndAt(e.target.value)}
                 />
               </div>

@@ -88,6 +88,8 @@ async function listRequests(eventId) {
  *   - 404 if equipmentId is provided but item does not exist.
  *   - 400 if neither equipmentType nor equipmentId is provided.
  *   - 400 if startAt / endAt window is invalid.
+ *   - 400 if startAt is before the event starts or endAt is after the event ends.
+ *   - 400 if quantity exceeds the catalogue stock of the selected catalogue item.
  */
 async function createRequest(user, payload = {}) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
@@ -127,6 +129,14 @@ async function createRequest(user, payload = {}) {
     if (!equipmentType) {
       equipmentType = equipmentItem.type || 'GENERAL';
     }
+    // Quantity must not exceed the catalogue total for the selected item
+    if (quantity > Number(equipmentItem.quantity)) {
+      throw httpError(
+        400,
+        `Quantity requested (${quantity}) exceeds the catalogue stock for ${equipmentItem.name} (${equipmentItem.quantity} available)`,
+        'VALIDATION_ERROR'
+      );
+    }
   }
 
   if (!equipmentType && !equipmentId) {
@@ -145,6 +155,23 @@ async function createRequest(user, payload = {}) {
 
   if (payload.startAt && payload.endAt) {
     const { rangeStart, rangeEnd } = parseWindow(payload.startAt, payload.endAt);
+
+    // The requested window must sit inside the event's own window
+    if (event.start_at && rangeStart < new Date(event.start_at)) {
+      throw httpError(
+        400,
+        'Required from cannot be before the event starts',
+        'VALIDATION_ERROR'
+      );
+    }
+    if (event.end_at && rangeEnd > new Date(event.end_at)) {
+      throw httpError(
+        400,
+        'Required until cannot be after the event ends',
+        'VALIDATION_ERROR'
+      );
+    }
+
     startAt = rangeStart.toISOString();
     endAt = rangeEnd.toISOString();
   } else if (startAt && endAt) {

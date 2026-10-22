@@ -287,6 +287,105 @@ describe('SCRUM-47 EquipmentRequest page', () => {
   });
 
   /*
+   * AC: AC4 (Timing Validation – window must sit inside the event)
+   * Scenario: Coordinator sets Required from before the event starts.
+   * Expected: Validation error, no API call.
+   */
+  it('AC4: rejects Required from before the event start', async () => {
+    mockApi();
+    const user = userEvent.setup();
+    renderComponent();
+
+    await screen.findByText('Request Equipment');
+
+    const startInput = screen.getByLabelText(/Required from/i);
+    // EVENT.startAt is 2026-11-12T09:00:00.000Z.
+    // Use a date a full day earlier so the value is unambiguously before
+    // the event start regardless of the test-runner timezone.
+    fireEvent.change(startInput, { target: { value: '2026-11-11T09:00' } });
+
+    const submitBtn = screen.getByRole('button', { name: /Submit Equipment Request/i });
+    await user.click(submitBtn);
+
+    expect(
+      await screen.findByText(/Required from cannot be before the event starts/i)
+    ).toBeInTheDocument();
+    expect(api).not.toHaveBeenCalledWith('/api/equipment/requests', expect.anything());
+  });
+
+  /*
+   * AC: AC4 (Timing Validation – window must sit inside the event)
+   * Scenario: Coordinator sets Required until after the event ends.
+   * Expected: Validation error, no API call.
+   */
+  it('AC4: rejects Required until after the event end', async () => {
+    mockApi();
+    const user = userEvent.setup();
+    renderComponent();
+
+    await screen.findByText('Request Equipment');
+
+    const endInput = screen.getByLabelText(/Required until/i);
+    // EVENT.endAt is 2026-11-12T17:00:00.000Z.
+    // toDateTimeLocal renders it in local time; we need a value that,
+    // regardless of the test-runner timezone, resolves to a Date *after*
+    // 2026-11-12T17:00:00.000Z.
+    // Using a full ISO string avoids ambiguity: Date constructor treats
+    // strings *without* a timezone designator as LOCAL time, so supply
+    // an explicit UTC offset of +00:00 to guarantee the comparison.
+    fireEvent.change(endInput, { target: { value: '2026-11-12T23:59' } });
+    // In any timezone where the machine runs JSDOM, '2026-11-12T23:59'
+    // parsed as local time will be >= 2026-11-12T23:59Z ≥ event.endAt.
+    // For robustness use a date a full day later instead:
+    fireEvent.change(endInput, { target: { value: '2026-11-13T17:00' } });
+
+    const submitBtn = screen.getByRole('button', { name: /Submit Equipment Request/i });
+    await user.click(submitBtn);
+
+    expect(
+      await screen.findByText(/Required until cannot be after the event ends/i)
+    ).toBeInTheDocument();
+    expect(api).not.toHaveBeenCalledWith('/api/equipment/requests', expect.anything());
+  });
+
+  /*
+   * AC: AC2 (Quantity Validation – must not exceed catalogue stock)
+   * Scenario: Coordinator picks a catalogue item (Stock: 2) and requests 3.
+   * Expected: Validation error naming the item and its stock, no API call.
+   */
+  it('AC2: rejects quantity above the catalogue stock of the selected item', async () => {
+    const LIMITED_CATALOGUE = [
+      { id: 5, name: 'Lectern', type: 'STAGING', quantity: 2, status: 'AVAILABLE' },
+    ];
+    mockApi({ catalogue: LIMITED_CATALOGUE });
+    const user = userEvent.setup();
+    renderComponent();
+
+    await screen.findByText('Request Equipment');
+
+    // Switch to the STAGING type so the Lectern item appears in the filtered dropdown
+    const typeSelect = screen.getByLabelText(/Equipment type \*/i);
+    await user.selectOptions(typeSelect, 'STAGING');
+
+    // Select the item (stock 2)
+    const itemSelect = screen.getByLabelText(/Catalogue item/i);
+    await user.selectOptions(itemSelect, '5');
+
+    // Request 3
+    const qtyInput = screen.getByLabelText(/Quantity required/i);
+    await user.clear(qtyInput);
+    await user.type(qtyInput, '3');
+
+    const submitBtn = screen.getByRole('button', { name: /Submit Equipment Request/i });
+    await user.click(submitBtn);
+
+    expect(
+      await screen.findByText(/exceeds the catalogue stock for Lectern/i)
+    ).toBeInTheDocument();
+    expect(api).not.toHaveBeenCalledWith('/api/equipment/requests', expect.anything());
+  });
+
+  /*
    * Scenario: API error displays user-facing error message.
    */
   it('displays API error when request creation fails', async () => {
