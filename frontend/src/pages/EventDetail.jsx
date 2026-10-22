@@ -62,11 +62,15 @@ function formatBookingStatus(status) {
  *     SCRUM-78 AC1-AC3 (the Venue Staff card sends the reason and alternative staff typed, or none).
  *     SCRUM-34 AC1 + AC2 (organiser change-request form: date/time, attendance, venue/equipment).
  *     SCRUM-35 AC1 + AC2 (assigned coordinator approve/reject; approve applies the fields).
+ *     SCRUM-40 1C / 2A: assigned Coordinator gets "Edit event details" before Confirmed;
+ *     Confirmed shows a change-request note instead of the edit link.
  *     SCRUM-42 AC2: "Requires review" on flagged venue bookings and equipment requests;
  *     the status badge itself is unchanged.
  * Failure: load errors are shown in place of the event; action errors are shown above it.
  */
 const CHANGE_BLOCKED_STATUSES = ['DRAFT', 'CANCELLED', 'REJECTED', 'COMPLETED'];
+// SCRUM-40 1C/2A: assigned Coordinator direct-edits only before Confirmed.
+const COORD_EDIT_LOCKED_STATUSES = ['CONFIRMED', 'COMPLETED', 'CANCELLED', 'REJECTED'];
 
 /** Purpose: blank organiser change-request form. AC: SCRUM-34 AC1. */
 function emptyChangeForm() {
@@ -536,6 +540,20 @@ export default function EventDetail() {
             <div className="card stack review-panel">
               <h3>Coordinator {event.status === 'UNDER_REVIEW' ? 'review actions' : 'actions'}</h3>
               {coordinatorError && <div className="alert" role="alert">{coordinatorError}</div>}
+              {/*
+                Purpose: assigned Coordinator opens the shared edit form before Confirmed.
+                AC: SCRUM-40 1C, 2A — Confirmed/terminal statuses stay on change requests only.
+              */}
+              {!COORD_EDIT_LOCKED_STATUSES.includes(event.status) && (
+                <div className="actions">
+                  <Link className="btn secondary" to={`/app/events/${id}/edit`}>Edit event details</Link>
+                </div>
+              )}
+              {event.status === 'CONFIRMED' && (
+                <p className="muted">
+                  Confirmed events cannot be edited directly. Approve an organiser change request for date, time, attendance, venue or equipment requirements.
+                </p>
+              )}
               {event.status === 'SUBMITTED' && (
                 <div className="actions">
                   <button className="btn" onClick={() => run(() => api(`/api/events/${id}/review`, { method: 'POST' }))}>
