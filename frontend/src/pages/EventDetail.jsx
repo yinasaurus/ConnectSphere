@@ -843,6 +843,11 @@ export default function EventDetail() {
                   {item.equipment_name || item.equipment_type || 'Item no longer in catalogue'} × {item.quantity}: {item.status}
                   {item.needs_review && <span className="needs-review-flag">Requires review</span>}
                 </p>
+                {item.equipment_type && (
+                  <p className="muted" style={{ margin: '2px 0', fontSize: '0.85rem' }}>
+                    Type: {item.equipment_type}
+                  </p>
+                )}
                 {(item.technical_requirements || item.notes) && (
                   <p className="muted" style={{ margin: '2px 0', fontSize: '0.85rem' }}>
                     Specifications: {item.technical_requirements || item.notes}
