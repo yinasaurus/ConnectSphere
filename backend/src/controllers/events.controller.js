@@ -1,4 +1,5 @@
 const eventsService = require('../services/events.service');
+const equipmentService = require('../services/equipment.service');
 const { asyncHandler } = require('../utils/asyncHandler');
 
 /**
@@ -58,6 +59,18 @@ const venueBookings = asyncHandler(async (req, res) => {
 const equipmentRequests = asyncHandler(async (req, res) => {
   const requests = await eventsService.listEquipmentRequests(req.user, req.params.id);
   res.json({ requests });
+});
+
+/**
+ * Purpose: POST /api/events/:id/equipment-requests — Coordinator records equipment needed for this event.
+ * AC: SCRUM-47
+ */
+const createEquipmentRequest = asyncHandler(async (req, res) => {
+  const request = await equipmentService.createRequest(req.user, {
+    ...req.body,
+    eventId: req.params.id,
+  });
+  res.status(201).json({ request });
 });
 
 const create = asyncHandler(async (req, res) => {
@@ -261,4 +274,5 @@ module.exports = {
   listChangeRequests,
   createChangeRequest,
   decideChangeRequest,
+  createEquipmentRequest,
 };

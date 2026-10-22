@@ -230,10 +230,9 @@ export default function Equipment() {
                     <strong>Category:</strong> {request.equipment_type}
                   </p>
                 )}
-                {(request.event_start_at || request.start_at) && (
+                {(request.start_at || request.event_start_at) && (
                   <p className="muted" style={{ margin: '2px 0', fontSize: '0.84rem' }}>
-                    <strong>Required window:</strong> {new Date(request.event_start_at || request.start_at).toLocaleString()}
-                    {(request.event_end_at || request.end_at) ? ` – ${new Date(request.event_end_at || request.end_at).toLocaleString()}` : ''}
+                    <strong>Timing:</strong> {formatCheckWindow(request.start_at || request.event_start_at, request.end_at || request.event_end_at)}
                   </p>
                 )}
                 {request.decision_reason && (

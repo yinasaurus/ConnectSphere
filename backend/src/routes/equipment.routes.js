@@ -1,6 +1,8 @@
 const express = require('express');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { ROLES } = require('../constants/roles');
+const { validateBody } = require('../middleware/validate');
+const { createEquipmentRequestSchema } = require('../validators/equipment.validators');
 const controller = require('../controllers/equipment.controller');
 
 const router = express.Router();
@@ -17,7 +19,13 @@ router.get('/availability', requireRole(ROLES.TECHNICAL_SUPPORT), controller.ava
 router.patch('/:id', requireRole(ROLES.TECHNICAL_SUPPORT), controller.update);
 
 router.get('/requests', controller.requests);
-router.post('/requests', requireRole(ROLES.EVENT_COORDINATOR), controller.createRequest);
+// SCRUM-47: validate body before reaching the service (type/catalogueItem required; date ordering).
+router.post(
+  '/requests',
+  requireRole(ROLES.EVENT_COORDINATOR),
+  validateBody(createEquipmentRequestSchema),
+  controller.createRequest
+);
 /**
  * Purpose: Tech-only availability check for one stored request.
  * AC: SCRUM-21 AC7

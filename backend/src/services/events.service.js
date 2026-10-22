@@ -348,7 +348,7 @@ async function listEquipmentRequests(user, eventId) {
   const event = await getEvent(user, eventId);
   const rows = await fetchMany(
     supabase.from('equipment_requests')
-      .select('id, event_id, equipment_id, quantity, status, needs_review, equipment_type, technical_requirements, notes, decision_reason, equipment ( name )')
+      .select('id, event_id, equipment_id, quantity, status, needs_review, equipment_type, technical_requirements, notes, decision_reason, start_at, end_at, equipment ( name, type )')
       .eq('event_id', event.id)
       .order('id', { ascending: false })
   );
@@ -362,9 +362,11 @@ async function listEquipmentRequests(user, eventId) {
       status: row.status,
       needs_review: Boolean(row.needs_review),
     };
-    if (row.equipment_type) item.equipment_type = row.equipment_type;
-    if (row.technical_requirements) item.technical_requirements = row.technical_requirements;
+    if (row.equipment_type || row.equipment?.type) item.equipment_type = row.equipment_type || row.equipment?.type;
+    if (row.technical_requirements || row.notes) item.technical_requirements = row.technical_requirements || row.notes;
     if (row.notes) item.notes = row.notes;
+    if (row.start_at) item.start_at = row.start_at;
+    if (row.end_at) item.end_at = row.end_at;
     if (row.decision_reason && row.decision_reason !== 'internal') {
       item.decision_reason = row.decision_reason;
     }
