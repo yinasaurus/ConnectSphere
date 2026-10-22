@@ -272,6 +272,105 @@ describe('SCRUM-8 Equipment reserve on the request list', () => {
   });
 });
 
+describe('SCRUM-48 Technical Support manages equipment requests', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    asRole('TECHNICAL_SUPPORT');
+  });
+
+  /*
+   * AC: SCRUM-48 AC1, AC2
+   * Scenario: Tech opens Equipment and views equipment requirements, specs, and event name.
+   * Expected: Event name, equipment name, technical requirements/specifications are rendered.
+   */
+  it('AC1/AC2: displays event details and technical specifications', async () => {
+    const detailedRequest = {
+      ...REQUEST,
+      event_name: 'Tech Symposium',
+      equipment_type: 'AUDIO',
+      technical_requirements: 'UHF Wireless Mic with spare batteries',
+    };
+    mockLists({ requests: [detailedRequest] });
+    render(<Equipment />);
+    expect(await screen.findByText(/Tech Symposium \(Event #8\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/UHF Wireless Mic with spare batteries/i)).toBeInTheDocument();
+    expect(screen.getByText(/AUDIO/i)).toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-48 AC3
+   * Scenario: Tech updates status to PREPARING with arrangement notes.
+   * Expected: PATCH /api/equipment/requests/:id is sent and status is updated.
+   */
+  it('AC3: updates request status and arrangement notes', async () => {
+    let currentStatus = 'PENDING';
+    api.mockImplementation(async (path, options = {}) => {
+      if (path === '/api/equipment') return { equipment: [] };
+      if (path === '/api/equipment/requests') {
+        return {
+          requests: [{
+            ...REQUEST,
+            status: currentStatus,
+            technical_requirements: 'Dual mic kit',
+          }],
+        };
+      }
+      if (path === '/api/equipment/requests/20/availability') return SUFFICIENT;
+      if (path === '/api/equipment/requests/20' && options.method === 'PATCH') {
+        currentStatus = options.body.status;
+        return {
+          request: {
+            ...REQUEST,
+            status: options.body.status,
+            decision_reason: options.body.notes,
+          },
+        };
+      }
+      throw new Error(`Unexpected ${path}`);
+    });
+
+    render(<Equipment />);
+    expect(await screen.findByText('PENDING')).toBeInTheDocument();
+
+    const statusSelect = screen.getByLabelText(/Arrangement status/i);
+    await userEvent.setup().selectOptions(statusSelect, 'PREPARING');
+
+    const noteInput = screen.getByLabelText(/Arrangement note/i);
+    await userEvent.setup().type(noteInput, 'Testing frequencies');
+
+    const updateBtn = screen.getByRole('button', { name: /update status/i });
+    await userEvent.setup().click(updateBtn);
+
+    expect(api).toHaveBeenCalledWith('/api/equipment/requests/20', {
+      method: 'PATCH',
+      body: { status: 'PREPARING', notes: 'Testing frequencies' },
+    });
+  });
+
+  /*
+   * AC: SCRUM-48 AC1
+   * Scenario: Tech filters requests by status.
+   * Expected: Only matching requests are visible.
+   */
+  it('AC1: filters requests by status and searches by event', async () => {
+    mockLists({
+      requests: [
+        { ...REQUEST, id: 20, event_id: 8, event_name: 'Alpha Forum', status: 'PENDING' },
+        { ...REQUEST, id: 21, event_id: 9, event_name: 'Beta Showcase', status: 'READY' },
+      ],
+    });
+    render(<Equipment />);
+    expect(await screen.findByText(/Alpha Forum/i)).toBeInTheDocument();
+    expect(screen.getByText(/Beta Showcase/i)).toBeInTheDocument();
+
+    const filterSelect = screen.getByLabelText(/Filter by status/i);
+    await userEvent.setup().selectOptions(filterSelect, 'READY');
+
+    expect(screen.queryByText(/Alpha Forum/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Beta Showcase/i)).toBeInTheDocument();
+  });
+});
+
 describe('SCRUM-58 review a marked reserved equipment request', () => {
   /*
    * AC:       SCRUM-58 AC6

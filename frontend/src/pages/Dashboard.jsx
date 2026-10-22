@@ -101,7 +101,7 @@ export default function Dashboard() {
       <div className="card" style={{ marginTop: 18 }}>
         <div className="row-between">
           <h3>Upcoming</h3>
-          <Link to="/app/events">View all</Link>
+          <Link to={hasRole(ROLES.EVENT_COORDINATOR) ? '/app/events?assigned=me' : '/app/events'}>View all</Link>
         </div>
         <table className="table">
           <thead>
@@ -118,6 +118,7 @@ export default function Dashboard() {
                 <td><Link to={`/app/events/${event.id}`}>{event.name}</Link></td>
                 <td><StatusBadge status={event.status} subState={event.subState} /></td>
                 <td>{event.startAt ? new Date(event.startAt).toLocaleString() : 'TBC'}</td>
+                {/* SCRUM-29 AC1: assigned Coordinator's name, or "Unassigned" until the Lead assigns. */}
                 <td>{event.coordinatorName || 'Unassigned'}</td>
               </tr>
             ))}

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import StatusBadge from '../components/StatusBadge';
 import { STATUS_LABELS, ROLES } from '../constants';
 import { useAuth } from '../auth';
 
 export default function Events() {
-  const { hasRole } = useAuth();
+  const { user, hasRole } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [events, setEvents] = useState([]);
   const [status, setStatus] = useState('');
   const [subState, setSubState] = useState('');
@@ -19,6 +20,22 @@ export default function Events() {
     if (q) params.set('q', q);
     api(`/api/events?${params.toString()}`).then((data) => setEvents(data.events || []));
   }, [status, subState, q]);
+
+  // Purpose: let a Coordinator see every event assigned to them, past the 8-row home list.
+  // The Events page itself stays the full list. View all on the dashboard opens this filter.
+  // Inputs: ?assigned=me and the signed-in user. Output: that Coordinator's rows, or every row.
+  // Failure: none. A non-Coordinator with the query still sees the full list.
+  const assignedToMe = searchParams.get('assigned') === 'me' && hasRole(ROLES.EVENT_COORDINATOR);
+  const visibleEvents = assignedToMe
+    ? events.filter((event) => event.coordinatorId === user?.id)
+    : events;
+
+  function toggleAssignedToMe(checked) {
+    const next = new URLSearchParams(searchParams);
+    if (checked) next.set('assigned', 'me');
+    else next.delete('assigned');
+    setSearchParams(next);
+  }
 
   return (
     <>
@@ -53,10 +70,20 @@ export default function Events() {
               <option key={key} value={key}>{STATUS_LABELS[key]}</option>
             ))}
           </select>
+          {hasRole(ROLES.EVENT_COORDINATOR) && (
+            <label>
+              <input
+                type="checkbox"
+                checked={assignedToMe}
+                onChange={(e) => toggleAssignedToMe(e.target.checked)}
+              />
+              {' '}Assigned to me
+            </label>
+          )}
         </div>
       </div>
       <div className="cards">
-        {events.map((event) => (
+        {visibleEvents.map((event) => (
           <Link
             key={event.id}
             to={`/app/events/${event.id}`}
@@ -74,7 +101,7 @@ export default function Events() {
             <p>{event.startAt ? new Date(event.startAt).toLocaleString() : 'Dates to be confirmed'}</p>
           </Link>
         ))}
-        {!events.length && <div className="card muted">No events match these filters.</div>}
+        {!visibleEvents.length && <div className="card muted">No events match these filters.</div>}
       </div>
     </>
   );

@@ -816,5 +816,61 @@ describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () =>
     // Conflict modal does NOT open
     expect(screen.queryByRole('heading', { name: 'Venue Booking Conflict' })).not.toBeInTheDocument();
   });
+
+  /*
+   * AC:       SCRUM-48 AC4
+   * Scenario: Event Coordinator views updated equipment request status and arrangement notes
+   * Setup:    Event in PLANNING; GET equipment-requests returns updated status PREPARING, specs, and arrangement note
+   * Expected: Coordinator sees updated status pill/text, technical specs, and arrangement note in equipment card
+   */
+  it('SCRUM-48 AC4: Event Coordinator can view updated equipment request status, specifications, and arrangement note', async () => {
+    useAuth.mockReturnValue({
+      user: { id: 10 },
+      hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
+    });
+
+    api.mockImplementation(async (path) => {
+      if (path === '/api/events/3') {
+        return {
+          event: {
+            id: 3,
+            name: 'Planning Phase Event',
+            status: 'PLANNING',
+            coordinatorId: 10,
+            organiserId: 1,
+          },
+        };
+      }
+      if (path === '/api/events/3/history') return { history: [] };
+      if (path === '/api/comments/3') return { comments: [] };
+      if (path === '/api/venues') return { venues: [] };
+      if (path === '/api/events/3/venue-bookings') return { bookings: [approvedBooking] };
+      if (path === '/api/events/3/equipment-requests') {
+        return {
+          requests: [
+            {
+              id: 25,
+              equipment_name: 'Wireless Mic',
+              quantity: 2,
+              status: 'PREPARING',
+              technical_requirements: 'Dual wireless mics, UHF frequency',
+              decision_reason: 'Testing mic packs and checking batteries',
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/app/events/3']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes><Route path="/app/events/:id" element={<EventDetail />} /></Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Wireless Mic × 2: PREPARING')).toBeInTheDocument();
+    expect(screen.getByText(/Specifications: Dual wireless mics, UHF frequency/i)).toBeInTheDocument();
+    expect(screen.getByText(/Arrangement note: Testing mic packs and checking batteries/i)).toBeInTheDocument();
+  });
 });
 });

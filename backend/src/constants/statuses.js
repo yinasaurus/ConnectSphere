@@ -34,6 +34,8 @@ const EVENT_DECISION = {
 
 const MIN_REJECTION_REASON_LENGTH = 10;
 
+// Historically named the “significant” Confirmed lock set. SCRUM-40 2A now locks
+// every direct edit on Confirmed; critical Confirmed changes use CHANGE_REQUEST_FIELDS.
 const SIGNIFICANT_FIELDS = [
   'startAt',
   'endAt',
@@ -56,6 +58,15 @@ const EQUIPMENT_STATUS = {
   RESERVED: 'RESERVED',
   MAINTENANCE: 'MAINTENANCE',
   DAMAGED: 'DAMAGED',
+};
+
+const EQUIPMENT_REQUEST_STATUS = {
+  PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  PREPARING: 'PREPARING',
+  RESERVED: 'RESERVED',
+  READY: 'READY',
+  UNAVAILABLE: 'UNAVAILABLE',
 };
 
 const REGISTRATION_STATUS = {
@@ -110,6 +121,7 @@ module.exports = {
   SIGNIFICANT_FIELDS,
   BOOKING_STATUS,
   EQUIPMENT_STATUS,
+  EQUIPMENT_REQUEST_STATUS,
   REGISTRATION_STATUS,
   CHANGE_REQUEST_STATUS,
   CHANGE_REQUEST_FIELDS,

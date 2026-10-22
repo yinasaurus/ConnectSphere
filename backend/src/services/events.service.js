@@ -5,11 +5,19 @@ const {
   EVENT_SUB_STATE,
   EVENT_DECISION,
   MIN_REJECTION_REASON_LENGTH,
-  SIGNIFICANT_FIELDS,
   BOOKING_STATUS,
   CHANGE_REQUEST_STATUS,
   CHANGE_REQUEST_FIELDS,
 } = require('../constants/statuses');
+
+// SCRUM-40 1C/2A: assigned Coordinator may direct-edit only before Confirmed.
+// Confirmed (and terminal) statuses require a change request for critical fields.
+const DIRECT_EDIT_LOCKED_STATUSES = new Set([
+  EVENT_STATUS.CONFIRMED,
+  EVENT_STATUS.COMPLETED,
+  EVENT_STATUS.CANCELLED,
+  EVENT_STATUS.REJECTED,
+]);
 const { REJECTION_REASON_MESSAGE } = require('../validators/events.validators');
 const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
@@ -73,7 +81,8 @@ function validateDateRange(startAt, endAt) {
  * Purpose: turns an events row (snake_case, with joined organisation/organiser/coordinator
  * names) into the camelCase event the API returns.
  * AC: SCRUM-39 AC2 (attendance, start/end date and time, venue needs and equipment notes
- * come from here).
+ * come from here). SCRUM-29 AC1, AC3 — coordinatorId and coordinatorName come from the
+ * current coordinator_id and its join, so a reassignment shows up on the next read.
  * Input: a database row or null. Output: the event object, or null for no row. Empty
  * columns stay null.
  */
@@ -264,6 +273,8 @@ async function listEvents(user, filters = {}) {
  *     and no Coordinator.
  *     SCRUM-54 AC6 — Coordinators may view events they are not assigned to (view only).
  *     SCRUM-65 AC5 — the Lead can open any queued request's full details.
+ *     SCRUM-29 AC1, AC3 — the Organiser (and other planning roles) see the assigned
+ *     Coordinator; Attendees do not (visibleEvent drops it).
  * Inputs: the user and the event id. Output: the event as visibleEvent shapes it.
  * Failure: 404 "Event not found" both when it doesn't exist and when the user may not see
  * it, so outsiders can't tell the two apart.
@@ -348,20 +359,30 @@ async function listEquipmentRequests(user, eventId) {
   const event = await getEvent(user, eventId);
   const rows = await fetchMany(
     supabase.from('equipment_requests')
-      .select('id, event_id, equipment_id, quantity, status, needs_review, equipment ( name )')
+      .select('id, event_id, equipment_id, quantity, status, needs_review, equipment_type, technical_requirements, notes, decision_reason, start_at, end_at, equipment ( name, type )')
       .eq('event_id', event.id)
       .order('id', { ascending: false })
   );
-  // Decision reasons and who asked/decided are left out; readers need the requirement itself.
-  return rows.map((row) => ({
-    id: row.id,
-    event_id: row.event_id,
-    equipment_id: row.equipment_id,
-    equipment_name: row.equipment?.name || null,
-    quantity: row.quantity,
-    status: row.status,
-    needs_review: Boolean(row.needs_review),
-  }));
+  return rows.map((row) => {
+    const item = {
+      id: row.id,
+      event_id: row.event_id,
+      equipment_id: row.equipment_id,
+      equipment_name: row.equipment?.name || null,
+      quantity: row.quantity,
+      status: row.status,
+      needs_review: Boolean(row.needs_review),
+    };
+    if (row.equipment_type || row.equipment?.type) item.equipment_type = row.equipment_type || row.equipment?.type;
+    if (row.technical_requirements || row.notes) item.technical_requirements = row.technical_requirements || row.notes;
+    if (row.notes) item.notes = row.notes;
+    if (row.start_at) item.start_at = row.start_at;
+    if (row.end_at) item.end_at = row.end_at;
+    if (row.decision_reason && row.decision_reason !== 'internal') {
+      item.decision_reason = row.decision_reason;
+    }
+    return item;
+  });
 }
 
 /**
@@ -407,15 +428,21 @@ async function createEvent(user, payload) {
 }
 
 /**
- * Purpose: patch an event the organiser still owns as a draft, or the assigned coordinator may edit.
+ * Purpose: patch event details the organiser still owns as a draft/clarification amend,
+ *     or the assigned coordinator may edit before Confirmed.
  * AC: SCRUM-28 AC4 — saving more draft fields does not submit or place the request in the queue.
+ *     SCRUM-38 — organiser cannot direct-edit after submit (except ACTION_REQUIRED amend).
+ *     SCRUM-40 1C — assigned Coordinator may edit in any status before Confirmed.
+ *     SCRUM-40 2A — Confirmed (and terminal) statuses reject every direct field patch.
+ *     SCRUM-40 3A — Organiser direct-edits only Draft and clarification ACTION_REQUIRED.
+ *     SCRUM-40 4A — ordinary fields via this path; critical Confirmed changes use change requests.
  *     SCRUM-54 AC5, AC6, AC7 — a Coordinator who is not assigned is refused and the row is unchanged.
  *     SCRUM-41 / SCRUM-42 — after a successful write, critical field changes flag affected
  *     venue/equipment rows for review (status unchanged).
  * Inputs: user, event id, payload of fields to change
  * Outputs: mapped event after the patch
  * Failure: 404 if missing; 403 FORBIDDEN with no event body when the coordinator is not assigned;
- *     409 if the organiser is locked after submit
+ *     409 EDIT_LOCKED when the status or role blocks a direct edit
  */
 async function updateEvent(user, id, payload) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
@@ -425,6 +452,7 @@ async function updateEvent(user, id, payload) {
   const isAssignedCoordinator = existing.coordinator_id === user.id
     && hasRole(user, ROLES.EVENT_COORDINATOR);
 
+  // SCRUM-40 3A: Draft, or Under Review + ACTION_REQUIRED clarification amend only.
   const canOrganiserEdit = existing.status === EVENT_STATUS.DRAFT
     || (existing.status === EVENT_STATUS.UNDER_REVIEW && existing.sub_state === EVENT_SUB_STATE.ACTION_REQUIRED);
 
@@ -434,17 +462,6 @@ async function updateEvent(user, id, payload) {
       'After submission, organisers request changes through the assigned coordinator',
       'EDIT_LOCKED'
     );
-  }
-
-  if (existing.status === EVENT_STATUS.CONFIRMED && isAssignedCoordinator) {
-    const significant = SIGNIFICANT_FIELDS.filter((field) => payload[field] !== undefined);
-    if (significant.length) {
-      throw httpError(
-        409,
-        'Confirmed events cannot be edited directly. Create a change request instead.',
-        'EDIT_LOCKED'
-      );
-    }
   }
 
   if (!isOrganiser && !isAssignedCoordinator && !hasRole(user, ROLES.EVENT_COORDINATOR)) {
@@ -457,6 +474,7 @@ async function updateEvent(user, id, payload) {
 
   // SCRUM-63: opening registration, its window, and capacity once open must go through
   // enableRegistration / changeRegistrationSettings so AC1-AC6 are always checked.
+  // Checked before the Confirmed lock so the more specific registration error wins.
   const registrationLocked = ['registrationOpen', 'registrationOpensAt', 'registrationClosesAt']
     .filter((field) => payload[field] !== undefined);
   if (existing.registration_open && payload.registrationCapacity !== undefined) {
@@ -467,6 +485,17 @@ async function updateEvent(user, id, payload) {
       409,
       'Registration settings are changed through the registration actions, not a general edit',
       'REGISTRATION_SETTINGS_LOCKED'
+    );
+  }
+
+  // SCRUM-40 1C + 2A: assigned Coordinator direct-edits only before Confirmed.
+  if (isAssignedCoordinator && DIRECT_EDIT_LOCKED_STATUSES.has(existing.status)) {
+    throw httpError(
+      409,
+      existing.status === EVENT_STATUS.CONFIRMED
+        ? 'Confirmed events cannot be edited directly. Create a change request instead.'
+        : 'This event can no longer be edited directly.',
+      'EDIT_LOCKED'
     );
   }
 
@@ -728,13 +757,37 @@ function statusNotification(name, fromStatus, nextStatus, note) {
 }
 
 /**
+ * Purpose: tell that event's Organiser the event has been confirmed (dedicated notice).
+ * AC: SCRUM-70 AC1 (created when status becomes Confirmed), AC2 (names the event and says
+ *     it is confirmed), AC3 (only callers that pass CONFIRMED use this helper), AC4 (one call
+ *     per successful confirm), AC5 (organiser_id only — coordinator is not notified here).
+ * Business rule: Customer Briefing — notifications include confirmation; Week 4 Q&A —
+ *     notifications cover event confirmation.
+ * Inputs: event row with id, name, organiser_id. Output: nothing.
+ * Failure: missing organiser_id → helper returns without calling notifyUser.
+ */
+async function notifyOrganiserEventConfirmed(eventRow) {
+  if (!eventRow?.organiser_id) return;
+  const name = eventRow.name || 'An event';
+  await notifyUser(
+    eventRow.organiser_id,
+    'EVENT_CONFIRMED',
+    'Event confirmed',
+    `Your event "${name}" has been confirmed. Registration can now be opened.`,
+    eventRow.id
+  );
+}
+
+/**
  * Purpose: approve, reject, confirm, or otherwise move an event's status.
  * Only the assigned Event Coordinator may do this; anyone else is refused and
  * the event is unchanged. When the move is to Awaiting Safety Check, every active
- * Safety Officer is notified after a successful write (SCRUM-81).
+ * Safety Officer is notified after a successful write (SCRUM-81). When the move is
+ * to Confirmed, the event's Organiser gets a dedicated EVENT_CONFIRMED notice (SCRUM-70).
  * AC: SCRUM-54 AC5, AC7; SCRUM-81 AC1, AC2, AC6, AC7 — readiness notice only after
  *     the arrangement gate passes and the status update succeeds; sending again
  *     after request-changes notifies SOs again; incomplete arrangements → no notice.
+ *     SCRUM-70 AC1–AC5 — EVENT_CONFIRMED only on becoming Confirmed, Organiser only.
  * Business rule: W7 #5 — Coordinators manage only their assigned events.
  * Inputs: user, event id, next status, optional reason.
  * Output: the updated visible event.
@@ -832,6 +885,12 @@ async function changeStatus(user, id, nextStatus, reason, { expectedStatus, expe
   if (existing.coordinator_id && existing.coordinator_id !== user.id) {
     const { title, body } = statusNotification(existing.name, existing.status, nextStatus, note);
     await notifyUser(existing.coordinator_id, 'EVENT_STATUS_CHANGED', title, body, id);
+  }
+
+  // SCRUM-70 AC1–AC5: dedicated confirmation notice for the Organiser only (UI Confirm uses this path).
+  // Kept separate from EVENT_STATUS_CHANGED so AC4 counts one EVENT_CONFIRMED per confirm.
+  if (nextStatus === EVENT_STATUS.CONFIRMED) {
+    await notifyOrganiserEventConfirmed(existing);
   }
 
   // SCRUM-81 AC1, AC6, AC7: after a successful Send to safety check, every active SO is told.
@@ -1018,13 +1077,16 @@ async function listAssignableCoordinators(user) {
 }
 
 /**
- * Purpose: let a Lead set the one primary Coordinator on a Submitted event that has none.
- * AC: SCRUM-71 AC1, AC2, AC3, AC4, AC5, AC6
- * Business rule: W7 #5 (Lead assigns new requests), W2/W4 (exactly one primary Coordinator).
+ * Purpose: let a Lead set the one primary Coordinator on a Submitted event that has none,
+ *   then tell that Coordinator and the event's Organiser (assignment notice).
+ * AC: SCRUM-71 AC1–AC6 (assignment itself); SCRUM-45 AC2, AC3, AC5 — Coordinator notified
+ *     when the Lead assigns them; Organiser notified that a Coordinator was assigned;
+ *     only those two relevant users. SCRUM-29 refers to this same notice (tested once here).
+ * Business rule: W7 #5 (Lead assigns; relevant users notified of assignments).
  * Inputs: Lead user, event id, coordinatorId to assign.
  * Output: the updated event. Failure: 403 if not Lead; 404 if the event is missing;
  *   409 if the event is not Submitted, already has a Coordinator, or the chosen user is
- *   inactive / not a Coordinator. On failure the event is not written.
+ *   inactive / not a Coordinator. On failure the event is not written and no notice is sent.
  */
 async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)) {
@@ -1066,7 +1128,25 @@ async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
     'Coordinator assigned'
   );
   await writeAudit(user.id, 'COORDINATOR_ASSIGNED', 'event', eventId, { coordinatorId });
-  // Organiser / Coordinator notices are SCRUM-29 and SCRUM-45 — do not notify here.
+
+  // SCRUM-45 AC2, AC3, AC5 / SCRUM-29: only the newly assigned Coordinator and this event's Organiser.
+  const eventName = existing.name || 'An event';
+  await notifyUser(
+    coordinatorId,
+    'COORDINATOR_ASSIGNED',
+    'Event assigned to you',
+    `You have been assigned as Coordinator for "${eventName}".`,
+    eventId
+  );
+  if (existing.organiser_id) {
+    await notifyUser(
+      existing.organiser_id,
+      'COORDINATOR_ASSIGNED',
+      'Coordinator assigned',
+      `A Coordinator has been assigned to your event "${eventName}".`,
+      eventId
+    );
+  }
 
   return getEvent(user, eventId);
 }
@@ -1078,6 +1158,7 @@ async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
  *     The Safety Officer check (SCRUM-56) is a mandatory prerequisite; the event reaches
  *     Preparation only after the Safety Officer approves, so confirming implicitly
  *     means the safety check already passed.
+ *     SCRUM-70 AC1–AC5 — Organiser receives one EVENT_CONFIRMED notice naming the event.
  * Business rule: W4 — Confirmed means essential arrangements completed; registration opens only for Confirmed events.
  * Inputs: user (coordinator), event id. Output: the updated event with status CONFIRMED.
  * Failure: 403 if not the assigned coordinator; 404 if event not found; 409 if not ready to confirm.
@@ -1125,20 +1206,22 @@ async function confirmEvent(user, id) {
     to: EVENT_STATUS.CONFIRMED,
   });
 
-  // Notify the organiser
-  if (existing.organiser_id) {
-    await notifyUser(
-      existing.organiser_id,
-      'EVENT_CONFIRMED',
-      'Event confirmed',
-      `Your event "${existing.name}" has been confirmed. Registration can now be opened.`,
-      id
-    );
-  }
+  // SCRUM-70 / SCRUM-73: dedicated confirmation notice (POST /confirm path).
+  await notifyOrganiserEventConfirmed(existing);
 
   return getEvent(user, id);
 }
 
+/**
+ * Purpose: current Coordinator asks another Coordinator to take over the event.
+ * AC: SCRUM-45 AC2 — the incoming Coordinator is notified of the reassignment request.
+ *     SCRUM-29 AC4 — this notice is sent on every request, with no de-duplication, so a
+ *     Coordinator asked again is told again.
+ * Business rule: Week 4 Q&A — reassignment is agreed offline; original Coordinator requests,
+ *   new Coordinator accepts.
+ * Inputs: current assigned Coordinator, event id, newCoordinatorId.
+ * Output: { ok: true }. Failure: 404 no event; 403 if caller is not the current Coordinator.
+ */
 async function requestCoordinatorChange(user, eventId, newCoordinatorId) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
@@ -1164,6 +1247,63 @@ async function requestCoordinatorChange(user, eventId, newCoordinatorId) {
   return { ok: true };
 }
 
+/**
+ * Purpose: one place that tells the relevant users a reassignment has taken effect, so the
+ *   Coordinator Lead's reassign action (SCRUM-31) can reuse it instead of copying the notices.
+ * AC: SCRUM-29 AC3 (Organiser is told the Coordinator changed, and sees the new one on the
+ *     event record), AC4 (the incoming Coordinator is told every time, not only on the first
+ *     assignment), AC5 (the previous Coordinator is told they are no longer assigned).
+ *     SCRUM-45 AC2, AC3, AC5 own the end-to-end notice tests; this is that same behaviour.
+ * Business rule: W7 #5 — relevant users are notified of reassignments. Assumption (story
+ *   note, to confirm with the customer): the previous Coordinator counts as a relevant user.
+ * Inputs: the event row as it was before the change, outgoing and incoming Coordinator ids,
+ *   options.notifyIncoming. Request/accept flow: false, because the incoming Coordinator was
+ *   already told when the request was sent. A reassign with no prior request (the Lead's
+ *   action): true, so the incoming Coordinator is told now.
+ * Output: nothing. Failure: a missing Organiser or outgoing Coordinator is skipped; the
+ *   outgoing Coordinator is never told twice if they are also the incoming one.
+ */
+async function notifyCoordinatorReassigned(event, outgoingCoordinatorId, incomingCoordinatorId, options = {}) {
+  const eventName = event.name || 'An event';
+  if (event.organiser_id) {
+    await notifyUser(
+      event.organiser_id,
+      'COORDINATOR_CHANGED',
+      'Coordinator changed',
+      `The Coordinator for your event "${eventName}" has changed.`,
+      event.id
+    );
+  }
+  if (outgoingCoordinatorId && outgoingCoordinatorId !== incomingCoordinatorId) {
+    await notifyUser(
+      outgoingCoordinatorId,
+      'COORDINATOR_UNASSIGNED',
+      'You are no longer assigned',
+      `You are no longer the Coordinator for "${eventName}".`,
+      event.id
+    );
+  }
+  if (options.notifyIncoming && incomingCoordinatorId) {
+    await notifyUser(
+      incomingCoordinatorId,
+      'COORDINATOR_ASSIGNED',
+      'Event assigned to you',
+      `You have been assigned as Coordinator for "${eventName}".`,
+      event.id
+    );
+  }
+}
+
+/**
+ * Purpose: incoming Coordinator accepts a pending reassignment; Organiser and outgoing
+ *   Coordinator are told the assignment changed.
+ * AC: SCRUM-45 AC2 (reassign to/from — outgoing notified here; incoming was notified on
+ *     request), AC3 (only those parties), AC5 (Organiser notified when assigned Coordinator changes).
+ *     SCRUM-29 AC3 (event record now shows the new Coordinator), AC5 (previous Coordinator told).
+ * Business rule: W7 #5 — relevant users notified of reassignments.
+ * Inputs: accepting Coordinator (must be to_coordinator_id), event id.
+ * Output: updated event. Failure: 404 if no pending reassignment or event missing.
+ */
 async function acceptCoordinatorChange(user, eventId) {
   const request = await fetchOne(
     supabase
@@ -1175,6 +1315,14 @@ async function acceptCoordinatorChange(user, eventId) {
   );
   if (!request) throw httpError(404, 'No pending reassignment found', 'NOT_FOUND');
 
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+
+  // SCRUM-29 AC5: the "previous" Coordinator is whoever holds the event now, not whoever sent the
+  // request. An older request can still be pending after the event has moved on, and then the
+  // sender is no longer the one losing the event. Read it before the update below overwrites it.
+  const previousCoordinatorId = existing.coordinator_id;
+
   await updateById('events', eventId, {
     coordinator_id: user.id,
     updated_at: new Date().toISOString(),
@@ -1183,6 +1331,15 @@ async function acceptCoordinatorChange(user, eventId) {
     status: 'ACCEPTED',
     resolved_at: new Date().toISOString(),
   });
+
+  // Incoming Coordinator already received COORDINATOR_REASSIGN on request — do not notify them again.
+  await notifyCoordinatorReassigned(
+    { ...existing, id: eventId },
+    previousCoordinatorId,
+    user.id,
+    { notifyIncoming: false }
+  );
+
   return getEvent(user, eventId);
 }
 
@@ -1738,7 +1895,7 @@ async function decideChangeRequest(user, eventId, requestId, { approve, reason }
   if (decided) {
     assertRequestedValuesApprovable(request, now);
     eventPatch = proposedEventPatch(request, event);
-    // Bypass updateEvent so Confirmed SIGNIFICANT_FIELDS stay locked to direct edits
+    // Bypass updateEvent so Confirmed stays locked to every direct edit (SCRUM-40 2A)
     // but an approved change request can still apply date/time/attendance/requirements.
     await updateById('events', event.id, eventPatch);
     // Flag before APPROVED so a DB error here leaves the request PENDING (retryable).
@@ -1789,6 +1946,7 @@ module.exports = {
   respondClarification,
   requestCoordinatorChange,
   acceptCoordinatorChange,
+  notifyCoordinatorReassigned,
   assignPrimaryCoordinator,
   listAssignableCoordinators,
   listHistory,
