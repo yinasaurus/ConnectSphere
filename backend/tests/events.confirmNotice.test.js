@@ -168,14 +168,21 @@ describe('SCRUM-70 confirmation notice via changeStatus (UI Confirm)', () => {
 
   /*
    * AC:       SCRUM-70 AC4
-   * Scenario: Saving non-status fields on a Confirmed event must not emit EVENT_CONFIRMED.
-   * Setup:    Event CONFIRMED; assigned Coordinator updates description only.
-   * Expected: No EVENT_CONFIRMED notice (critical-edit notices may still fire for other types).
+   * Scenario: A second save of a Confirmed event must not emit EVENT_CONFIRMED.
+   * Setup:    Event CONFIRMED; assigned Coordinator sends a description-only update.
+   *           SCRUM-40 refuses that direct edit (EDIT_LOCKED), so the save never runs.
+   * Expected: 409 EDIT_LOCKED, nothing written, and no EVENT_CONFIRMED notice.
    * Type:     boundary
    */
   it('US70-B04: re-saving a Confirmed event does not create a confirmation notice', async () => {
     event.status = 'CONFIRMED';
-    await events.updateEvent(coordinator, 3, { description: 'Updated notes only' });
+    await expect(events.updateEvent(coordinator, 3, { description: 'Updated notes only' }))
+      .rejects.toMatchObject({
+        status: 409,
+        code: 'EDIT_LOCKED',
+        message: 'Confirmed events cannot be edited directly. Create a change request instead.',
+      });
+    expect(db.updateById).not.toHaveBeenCalled();
     expect(confirmationNotices()).toHaveLength(0);
   });
 
