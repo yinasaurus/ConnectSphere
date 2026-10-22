@@ -101,7 +101,7 @@ export default function Dashboard() {
       <div className="card" style={{ marginTop: 18 }}>
         <div className="row-between">
           <h3>Upcoming</h3>
-          <Link to="/app/events">View all</Link>
+          <Link to={hasRole(ROLES.EVENT_COORDINATOR) ? '/app/events?assigned=me' : '/app/events'}>View all</Link>
         </div>
         <table className="table">
           <thead>
