@@ -1,5 +1,12 @@
 const { supabase, fetchMany, fetchOne, fetchCount, throwIf } = require('../config/db');
 
+/**
+ * Purpose: list the signed-in user's in-app notifications, newest first.
+ * AC: SCRUM-45 AC4 — each row includes read_at so the client can treat null as new and
+ *     a timestamp as viewed.
+ * Inputs: userId. Output: up to 100 notification rows for that user.
+ * Failure: database errors propagate.
+ */
 async function listMine(userId) {
   return fetchMany(
     supabase
@@ -11,6 +18,13 @@ async function listMine(userId) {
   );
 }
 
+/**
+ * Purpose: mark one of the caller's notifications as viewed.
+ * AC: SCRUM-45 AC4 — sets read_at so status moves from new to viewed; other users' rows
+ *     cannot be updated (user_id filter).
+ * Inputs: userId, notification id. Output: the updated row (or null if not found for that user).
+ * Failure: database errors via throwIf.
+ */
 async function markRead(userId, id) {
   const { error } = await supabase
     .from('notifications')
@@ -23,6 +37,12 @@ async function markRead(userId, id) {
   );
 }
 
+/**
+ * Purpose: count how many of the user's notices are still new (unread).
+ * AC: SCRUM-45 AC4 — unread means read_at is null.
+ * Inputs: userId. Output: integer count.
+ * Failure: database errors propagate.
+ */
 async function unreadCount(userId) {
   return fetchCount(
     supabase
