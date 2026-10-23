@@ -249,6 +249,10 @@ export default function EventDetail() {
   const canBookVenue = ['APPROVED', 'PLANNING'].includes(event.status);
   // SCRUM-18 AC9: there may be several bookings; pending ones are each decided independently.
   const pendingBookings = bookings.filter((b) => b.status === 'PENDING');
+  // SCRUM-58 AC6: an approved booking marked for review can be approved again from here.
+  const bookingsToDecide = bookings.filter(
+    (b) => b.status === 'PENDING' || (b.status === 'APPROVED' && b.needs_review)
+  );
   // SCRUM-5 AC6: mirrors the venue half of the backend's isReadyForSafetyCheck (rejected and
   // cancelled bookings don't count). Equipment isn't loaded on this page, so the backend still
   // has the final say and its refusal is shown in the coordinator card.
@@ -670,16 +674,19 @@ export default function EventDetail() {
           {/* SCRUM-18 AC2/AC3/AC9: Venue Staff see every pending booking for this event
               with event, venue, date, and time, and can approve/reject each one independently.
               SCRUM-78 AC2/AC3: what staff type goes into the Coordinator's notice. */}
-          {hasRole(ROLES.VENUE_STAFF) && pendingBookings.length > 0 && (
+          {hasRole(ROLES.VENUE_STAFF) && bookingsToDecide.length > 0 && (
             <div className="card stack">
               <h3>Venue booking decisions</h3>
-              {pendingBookings.map((booking) => (
+              {bookingsToDecide.map((booking) => (
                 <div key={booking.id} style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 14, marginTop: 14 }}>
                   <p style={{ fontWeight: 600, marginBottom: 4 }}>
                     {event.name && <span style={{ marginRight: 6 }}>{event.name} —</span>}
                     {booking.venue_name || `Venue #${booking.venue_id}`}
                     <BookingStatusBadge status={booking.status} />
                   </p>
+                  {booking.needs_review && booking.status === 'APPROVED' && (
+                    <p className="muted">Approving again clears Requires review. The booking stays approved.</p>
+                  )}
                   <p className="muted" style={{ margin: '3px 0', fontSize: '0.88rem' }}>
                     <strong>Booking window:</strong>{' '}
                     {booking.start_at && booking.end_at
@@ -692,18 +699,22 @@ export default function EventDetail() {
                       {`${new Date(event.startAt).toLocaleString()} – ${new Date(event.endAt).toLocaleString()}`}
                     </p>
                   )}
-                  <label htmlFor={`venue-decision-reason-${booking.id}`}>Reason for rejecting (optional)</label>
-                  <textarea
-                    id={`venue-decision-reason-${booking.id}`}
-                    value={venueReasons[booking.id] || ''}
-                    onChange={(e) => setVenueReasons((prev) => ({ ...prev, [booking.id]: e.target.value }))}
-                  />
-                  <label htmlFor={`venue-decision-alternative-${booking.id}`}>Suggested alternative (optional)</label>
-                  <input
-                    id={`venue-decision-alternative-${booking.id}`}
-                    value={venueAlternatives[booking.id] || ''}
-                    onChange={(e) => setVenueAlternatives((prev) => ({ ...prev, [booking.id]: e.target.value }))}
-                  />
+                  {booking.status === 'PENDING' && (
+                    <>
+                      <label htmlFor={`venue-decision-reason-${booking.id}`}>Reason for rejecting (optional)</label>
+                      <textarea
+                        id={`venue-decision-reason-${booking.id}`}
+                        value={venueReasons[booking.id] || ''}
+                        onChange={(e) => setVenueReasons((prev) => ({ ...prev, [booking.id]: e.target.value }))}
+                      />
+                      <label htmlFor={`venue-decision-alternative-${booking.id}`}>Suggested alternative (optional)</label>
+                      <input
+                        id={`venue-decision-alternative-${booking.id}`}
+                        value={venueAlternatives[booking.id] || ''}
+                        onChange={(e) => setVenueAlternatives((prev) => ({ ...prev, [booking.id]: e.target.value }))}
+                      />
+                    </>
+                  )}
                   <div className="actions">
                     <button
                       className="btn"
@@ -714,19 +725,21 @@ export default function EventDetail() {
                     >
                       Approve venue
                     </button>
-                    <button
-                      className="btn danger"
-                      onClick={() => run(() => api(`/api/venues/bookings/${booking.id}/decision`, {
-                        method: 'POST',
-                        body: {
-                          approve: false,
-                          reason: (venueReasons[booking.id] || '').trim() || undefined,
-                          alternativeSuggestion: (venueAlternatives[booking.id] || '').trim() || undefined,
-                        },
-                      }))}
-                    >
-                      Reject venue
-                    </button>
+                    {booking.status === 'PENDING' && (
+                      <button
+                        className="btn danger"
+                        onClick={() => run(() => api(`/api/venues/bookings/${booking.id}/decision`, {
+                          method: 'POST',
+                          body: {
+                            approve: false,
+                            reason: (venueReasons[booking.id] || '').trim() || undefined,
+                            alternativeSuggestion: (venueAlternatives[booking.id] || '').trim() || undefined,
+                          },
+                        }))}
+                      >
+                        Reject venue
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

@@ -76,6 +76,7 @@ function mockDatabaseApi({ validateUpdate = false } = {}) {
         booking.status = options.body.approve ? 'APPROVED' : 'REJECTED';
         booking.decision_reason = options.body.reason || null;
         booking.alternative_suggestion = options.body.alternativeSuggestion || null;
+        if (options.body.approve) booking.needs_review = false;
       }
       return { booking: clone(booking) };
     }
@@ -1113,5 +1114,45 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
     });
     // Booking 101 remains untouched in pending queue
     expect(screen.getByTestId('pending-booking-101')).toBeInTheDocument();
+  });
+
+  /*
+   * AC:       SCRUM-58 AC6
+   * Scenario: Venue Staff open the booking list and an approved booking is marked for review.
+   * Setup:    Signed in as Venue Staff. Booking 201 is APPROVED and needs_review. Booking 101 is still pending.
+   * Expected: The marked row shows Requires review and Approve. It does not show Reject.
+   *           Approving sends approve true for 201 only. The pending booking is unchanged.
+   * Type:     normal
+   */
+  it('US58-F03 (AC6): an approved booking that needs review can be approved from the Venues list', async () => {
+    database.bookings.push({
+      id: 201,
+      event_id: 9,
+      event_name: 'Safety Forum',
+      venue_id: 1,
+      venue_name: 'Innovation Hall',
+      status: 'APPROVED',
+      needs_review: true,
+      start_at: '2026-11-20T10:00:00.000Z',
+      end_at: '2026-11-20T12:00:00.000Z',
+    });
+    const user = userEvent.setup();
+    renderVenues();
+
+    const row = await screen.findByTestId('booking-row-201');
+    expect(within(row).getByText('Requires review')).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
+
+    await user.click(within(row).getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() => {
+      const decisionCalls = api.mock.calls.filter(([path]) => path.includes('/decision'));
+      expect(decisionCalls).toHaveLength(1);
+      expect(decisionCalls[0][0]).toBe('/api/venues/bookings/201/decision');
+      expect(decisionCalls[0][1].body.approve).toBe(true);
+    });
+    expect(screen.getByTestId('pending-booking-101')).toBeInTheDocument();
+    expect(within(screen.getByTestId('booking-row-201')).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
   });
 });
