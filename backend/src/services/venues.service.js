@@ -12,6 +12,7 @@ const { BOOKING_STATUS } = require('../constants/statuses');
 const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
 const { writeAudit, notifyUser } = require('./audit.service');
+const { notifyVenueStaff } = require('./notifications.service');
 
 function mapVenue(row) {
   return {
@@ -673,7 +674,9 @@ async function listBookings(filters = {}) {
 /**
  * Purpose: an Event Coordinator asks for a venue for an event. The request is saved as
  * PENDING for Venue Staff to decide, and an audit entry is written.
- * AC: SCRUM-78 AC6, no notice is sent here because nothing has been decided yet.
+ * AC: SCRUM-78 AC6, the Coordinator is not told yet because nothing has been decided.
+ *   SCRUM-46 AC1, every active Venue Staff member is told a request is waiting, except the
+ *   person who sent it.
  * Inputs: user (must have EVENT_COORDINATOR) and payload { eventId, venueId, startAt, endAt,
  * setupMinutes, teardownMinutes, notes }.
  * Output: the created booking row. Throws 403 if the user is not a Coordinator and 409 if
@@ -710,6 +713,22 @@ async function requestBooking(user, payload) {
   });
 
   await writeAudit(user.id, 'BOOKING_REQUESTED', 'venue_booking', created.id, payload);
+
+  // SCRUM-46 AC1: Venue Staff need to know a request is waiting. SCRUM-78 AC6 still holds:
+  // this is not a decision notice, and the Coordinator is not a recipient.
+  const event = await fetchOne(
+    supabase.from('events').select('id, name').eq('id', payload.eventId)
+  );
+  const venue = await fetchOne(
+    supabase.from('venues').select('id, name').eq('id', payload.venueId)
+  );
+  await notifyVenueStaff({
+    eventId: payload.eventId,
+    type: 'BOOKING_REQUESTED',
+    title: 'New venue booking request',
+    body: `A venue booking was requested for ${event?.name || 'an event'} at ${venue?.name || 'a venue'}.`,
+    excludeUserId: user.id,
+  });
   return created;
 }
 

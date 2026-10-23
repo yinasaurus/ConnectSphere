@@ -254,18 +254,19 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    * AC:       SCRUM-78 AC6
    * Scenario: A Coordinator sends a booking request, which is now pending.
    * Setup:    No conflicting booking; the request is created with status PENDING.
-   * Expected: The booking is created, but no notice is written, because nothing has been
-   *           decided yet.
+   * Expected: The booking is created. No BOOKING_DECISION notice is written, because nothing
+   *           has been decided yet (the Coordinator is not told). A SCRUM-46 request notice to
+   *           Venue Staff is a different notice and is covered in notifications.venueStaffAttendees.
    * Type:     normal
    */
-  it('US78-N11 (AC6): sending a booking request (pending) creates no notice', async () => {
+  it('US78-N11 (AC6): sending a booking request (pending) creates no decision notice', async () => {
     fetchMany.mockResolvedValueOnce([]);
     const coordinator = { id: 21, roles: [ROLES.EVENT_COORDINATOR] };
     const created = await venuesService.requestBooking(coordinator, {
       eventId: 50, venueId: 8, startAt: '2026-10-20T10:00:00Z', endAt: '2026-10-20T12:00:00Z',
     });
     expect(created.status).toBe('PENDING');
-    expect(notificationRows()).toEqual([]);
+    expect(notificationRows().filter((row) => row.type === 'BOOKING_DECISION')).toEqual([]);
   });
 
   /* A configured zero-minute interval must survive persistence without becoming the default. */

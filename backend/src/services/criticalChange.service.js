@@ -202,6 +202,24 @@ async function flagArrangementsForReview(user, previous, next) {
     });
   }
 
+  // SCRUM-46 AC1: an approved booking that this change flagged is "changed" for Venue Staff.
+  // Pending or equipment-only flags are not. The actor is not told about their own edit.
+  const approvedFlagged = (bookings || []).filter(
+    (row) => row.status === BOOKING_STATUS.APPROVED
+      && flaggedBookingIds.some((id) => String(id) === String(row.id))
+  );
+  if (approvedFlagged.length) {
+    const { notifyVenueStaff, approvedBookingChangeNotice } = require('./notifications.service');
+    const notice = approvedBookingChangeNotice(previous.name, fields);
+    await notifyVenueStaff({
+      eventId,
+      type: 'BOOKING_AFFECTED',
+      title: notice.title,
+      body: notice.body,
+      excludeUserId: user?.id,
+    });
+  }
+
   return { critical: true, fields, flaggedBookingIds, flaggedRequestIds };
 }
 
