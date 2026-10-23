@@ -20,20 +20,24 @@ const completeDraft = {
 };
 
 describe('SCUM-14 submission validation', () => {
+  // SCRUM-14-TC01
   it('passes when every compulsory field is filled in', () => {
     expect(findMissingSubmissionFields(completeDraft)).toEqual([]);
   });
 
+  // SCRUM-14-TC02
   it('flags missing compulsory fields by name', () => {
     const missing = findMissingSubmissionFields({ ...completeDraft, purpose: '', venue_requirements: null });
     expect(missing.map((m) => m.field)).toEqual(expect.arrayContaining(['purpose', 'venueRequirements']));
   });
 
+  // SCRUM-14-TC03
   it('treats zero or missing attendance as incomplete', () => {
     const missing = findMissingSubmissionFields({ ...completeDraft, expected_attendance: 0 });
     expect(missing.map((m) => m.field)).toContain('expectedAttendance');
   });
 
+  // SCRUM-15-TC01
   it('does not enforce these fields when only a draft is being saved (SCUM-15)', () => {
     // Draft creation only requires `name` — see createEvent(), which never calls
     // findMissingSubmissionFields. This test documents that expectation.
@@ -62,6 +66,7 @@ describe('event start/end date range validation', () => {
   });
 
   describe('createEvent', () => {
+    // SCRUM-14-TC04 (originally PR #12, no Jira number on the PR itself - folded under SCRUM-14)
     it('rejects an end date before the start date (e.g. start 6 Oct, end 5 Oct)', async () => {
       await expect(service.createEvent(organiser, {
         name: 'Backwards event', startAt: '2026-10-06T10:00:00Z', endAt: '2026-10-05T10:00:00Z',
@@ -69,6 +74,7 @@ describe('event start/end date range validation', () => {
       expect(db.insertOne).not.toHaveBeenCalled();
     });
 
+    // SCRUM-14-TC05
     it('rejects a start date equal to the end date (zero duration)', async () => {
       await expect(service.createEvent(organiser, {
         name: 'Instant event', startAt: '2026-10-06T10:00:00Z', endAt: '2026-10-06T10:00:00Z',
@@ -76,6 +82,7 @@ describe('event start/end date range validation', () => {
       expect(db.insertOne).not.toHaveBeenCalled();
     });
 
+    // SCRUM-14-TC06
     it('allows a start date before the end date', async () => {
       await service.createEvent(organiser, {
         name: 'Valid event', startAt: '2026-10-05T10:00:00Z', endAt: '2026-10-06T10:00:00Z',
@@ -83,11 +90,13 @@ describe('event start/end date range validation', () => {
       expect(db.insertOne).toHaveBeenCalled();
     });
 
+    // SCRUM-15-TC02
     it('allows creating a draft with no dates yet (SCUM-15: only name is required)', async () => {
       await service.createEvent(organiser, { name: 'Untitled draft' });
       expect(db.insertOne).toHaveBeenCalled();
     });
 
+    // SCRUM-15-TC03
     it('allows creating a draft with only one of the two dates set', async () => {
       await service.createEvent(organiser, { name: 'Half-filled draft', startAt: '2026-10-05T10:00:00Z' });
       expect(db.insertOne).toHaveBeenCalled();
@@ -95,6 +104,7 @@ describe('event start/end date range validation', () => {
   });
 
   describe('updateEvent', () => {
+    // SCRUM-14-TC07
     it('rejects moving the start date past the existing end date', async () => {
       db.fetchOne.mockImplementation(async () => ({
         id: 3, organiser_id: 1, organisation_id: 10, status: 'DRAFT',
@@ -105,6 +115,7 @@ describe('event start/end date range validation', () => {
       expect(db.updateById).not.toHaveBeenCalled();
     });
 
+    // SCRUM-14-TC08
     it('rejects moving the end date before the existing start date', async () => {
       db.fetchOne.mockImplementation(async () => ({
         id: 3, organiser_id: 1, organisation_id: 10, status: 'DRAFT',
@@ -115,6 +126,7 @@ describe('event start/end date range validation', () => {
       expect(db.updateById).not.toHaveBeenCalled();
     });
 
+    // SCRUM-14-TC09
     it('rejects an invalid combination when both dates change in one patch', async () => {
       db.fetchOne.mockImplementation(async () => ({
         id: 3, organiser_id: 1, organisation_id: 10, status: 'DRAFT',
@@ -126,6 +138,7 @@ describe('event start/end date range validation', () => {
       expect(db.updateById).not.toHaveBeenCalled();
     });
 
+    // SCRUM-14-TC10
     it('allows a valid date change', async () => {
       db.fetchOne.mockImplementation(async () => ({
         id: 3, organiser_id: 1, organisation_id: 10, status: 'DRAFT',
@@ -135,6 +148,7 @@ describe('event start/end date range validation', () => {
       expect(db.updateById).toHaveBeenCalled();
     });
 
+    // SCRUM-14-TC11
     it('leaves unrelated edits unaffected when dates are untouched', async () => {
       db.fetchOne.mockImplementation(async () => ({
         id: 3, organiser_id: 1, organisation_id: 10, status: 'DRAFT',
@@ -143,5 +157,48 @@ describe('event start/end date range validation', () => {
       await service.updateEvent(organiser, 3, { description: 'New description' });
       expect(db.updateById).toHaveBeenCalled();
     });
+  });
+});
+
+// Regression guard for the actual bug SCUM-14/15 fixed (PR #1): start_at/end_at were
+// once passed to insertOne as raw strings, which caused MySQL/Supabase datetime insert
+// errors. toSqlDateTime() converts them to real Date objects first - this was never
+// directly asserted anywhere until now.
+describe('SCUM-14/15 regression: dates are converted to real Date objects before insert', () => {
+  const organiser = { id: 1, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    db.supabase.from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      in: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+    });
+    db.fetchMany.mockResolvedValue([]);
+    db.fetchOne.mockImplementation(async () => ({ id: 99, organiser_id: 1, organisation_id: 10, status: 'DRAFT', name: 'Event' }));
+    db.insertOne.mockImplementation(async () => ({ id: 99 }));
+  });
+
+  // SCRUM-14-TC12
+  it('passes start_at/end_at to insertOne as real Date instances, not raw strings', async () => {
+    await service.createEvent(organiser, {
+      name: 'Date conversion check',
+      startAt: '2026-10-05T10:00:00Z',
+      endAt: '2026-10-06T10:00:00Z',
+    });
+
+    const [, patch] = db.insertOne.mock.calls[0];
+    expect(patch.start_at).toBeInstanceOf(Date);
+    expect(patch.end_at).toBeInstanceOf(Date);
+  });
+
+  // SCRUM-14-TC13
+  it('passes null through for start_at/end_at when no date is given (SCUM-15 draft), not an invalid value', async () => {
+    await service.createEvent(organiser, { name: 'No dates yet' });
+
+    const [, patch] = db.insertOne.mock.calls[0];
+    expect(patch.start_at).toBeNull();
+    expect(patch.end_at).toBeNull();
   });
 });
