@@ -47,41 +47,250 @@ async function upsertEquipment(user, payload, id) {
 
 /**
  * Purpose: list equipment requests, optionally for one event.
- * AC: SCRUM-21 AC7 — Tech arranges from this list.
- * Inputs: optional eventId. Output: requests with catalogue name/status.
+ * AC: SCRUM-21 AC7 — Tech arranges from this list; SCRUM-47 — records type, technical specs, timing.
+ * Inputs: optional eventId. Output: requests with catalogue name/status, type, specs, timing, and event name.
  */
 async function listRequests(eventId) {
   let query = supabase
     .from('equipment_requests')
-    .select('*, equipment ( name, status )')
+    .select('*, equipment ( name, status, type ), events ( id, name, start_at, end_at )')
     .order('id', { ascending: false });
   if (eventId) query = query.eq('event_id', eventId);
   const rows = await fetchMany(query);
   return rows.map((row) => ({
     ...row,
-    equipment_name: row.equipment?.name,
-    equipment_status: row.equipment?.status,
+    equipment_name: row.equipment?.name || row.equipment_name || null,
+    equipment_status: row.equipment?.status || row.equipment_status || null,
+    equipment_type: row.equipment_type || row.equipment?.type || null,
+    technical_requirements: row.technical_requirements || row.notes || null,
+    event_name: row.events?.name || row.event_name || null,
+    event_start_at: row.events?.start_at || row.start_at || null,
+    event_end_at: row.events?.end_at || row.end_at || null,
+    start_at: row.start_at || row.events?.start_at || null,
+    end_at: row.end_at || row.events?.end_at || null,
   }));
 }
 
 /**
  * Purpose: Coordinator records equipment required for an event.
- * Business rule: briefing Equipment Request Management.
- * Inputs: user, payload. Output: PENDING request.
- * Failure: 403 if the caller is not a Coordinator.
+ * AC: SCRUM-47:
+ *   - AC1: Event Coordinator can create an equipment request for an event.
+ *   - AC2: Request records equipment type and quantity required.
+ *   - AC3: Request records technical requirements or specifications.
+ *   - AC4: Request is associated with the relevant event, date, and time.
+ * Inputs: user, payload { eventId, equipmentId, equipmentType, quantity, technicalRequirements, specifications, notes, startAt, endAt }
+ * Output: created PENDING request row with event and equipment metadata.
+ * Failure:
+ *   - 403 if user is not an Event Coordinator.
+ *   - 403 if the coordinator is not assigned to this event.
+ *   - 400 if eventId is missing.
+ *   - 404 if event is not found.
+ *   - 400 if event is CANCELLED or REJECTED.
+ *   - 400 if quantity is not an integer >= 1.
+ *   - 404 if equipmentId is provided but item does not exist.
+ *   - 400 if neither equipmentType nor equipmentId is provided.
+ *   - 400 if startAt / endAt window is invalid.
+ *   - 400 if startAt is before the event starts or endAt is after the event ends.
+ *   - 400 if quantity exceeds the catalogue stock of the selected catalogue item.
  */
-async function createRequest(user, payload) {
+async function createRequest(user, payload = {}) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only coordinators can request equipment', 'FORBIDDEN');
   }
-  return insertOne('equipment_requests', {
-    event_id: payload.eventId,
-    equipment_id: payload.equipmentId || null,
-    quantity: payload.quantity || 1,
-    notes: payload.notes || null,
+
+  const eventId = payload.eventId != null && payload.eventId !== '' ? Number(payload.eventId) : null;
+  if (!eventId || Number.isNaN(eventId)) {
+    throw httpError(400, 'eventId is required', 'VALIDATION_ERROR');
+  }
+
+  const event = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
+  if (!event) {
+    throw httpError(404, 'Event not found', 'NOT_FOUND');
+  }
+
+  // AC: only the coordinator assigned to this event may raise a request for it (SCRUM-47).
+  if (event.coordinator_id !== user.id) {
+    throw httpError(403, 'Only the coordinator assigned to this event can request equipment for it', 'FORBIDDEN');
+  }
+
+  if (INACTIVE_EVENT_STATUSES.has(event.status)) {
+    throw httpError(400, 'Cannot request equipment for a cancelled or rejected event', 'VALIDATION_ERROR');
+  }
+
+  const quantity = parseQuantity(payload.quantity != null ? payload.quantity : 1);
+
+  let equipmentId = payload.equipmentId != null && payload.equipmentId !== '' ? Number(payload.equipmentId) : null;
+  let equipmentType = (payload.equipmentType || '').trim() || null;
+  let equipmentItem = null;
+
+  if (equipmentId) {
+    equipmentItem = await fetchOne(supabase.from('equipment').select('*').eq('id', equipmentId));
+    if (!equipmentItem) {
+      throw httpError(404, 'Equipment not found', 'NOT_FOUND');
+    }
+    if (!equipmentType) {
+      equipmentType = equipmentItem.type || 'GENERAL';
+    }
+    // Quantity must not exceed the catalogue total for the selected item
+    if (quantity > Number(equipmentItem.quantity)) {
+      throw httpError(
+        400,
+        `Quantity requested (${quantity}) exceeds the catalogue stock for ${equipmentItem.name} (${equipmentItem.quantity} available)`,
+        'VALIDATION_ERROR'
+      );
+    }
+  }
+
+  if (!equipmentType && !equipmentId) {
+    throw httpError(400, 'Equipment type or catalogue item is required', 'VALIDATION_ERROR');
+  }
+
+  const technicalRequirements = (
+    payload.technicalRequirements ||
+    payload.specifications ||
+    payload.notes ||
+    ''
+  ).trim() || null;
+
+  let startAt = payload.startAt || event.start_at || null;
+  let endAt = payload.endAt || event.end_at || null;
+
+  if (payload.startAt && payload.endAt) {
+    const { rangeStart, rangeEnd } = parseWindow(payload.startAt, payload.endAt);
+
+    // The requested window must sit inside the event's own window
+    if (event.start_at && rangeStart < new Date(event.start_at)) {
+      throw httpError(
+        400,
+        'Required from cannot be before the event starts',
+        'VALIDATION_ERROR'
+      );
+    }
+    if (event.end_at && rangeEnd > new Date(event.end_at)) {
+      throw httpError(
+        400,
+        'Required until cannot be after the event ends',
+        'VALIDATION_ERROR'
+      );
+    }
+
+    startAt = rangeStart.toISOString();
+    endAt = rangeEnd.toISOString();
+  } else if (startAt && endAt) {
+    const start = new Date(startAt);
+    const end = new Date(endAt);
+    if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && start < end) {
+      startAt = start.toISOString();
+      endAt = end.toISOString();
+    }
+  }
+
+  const insertData = {
+    event_id: event.id,
+    equipment_id: equipmentId,
+    equipment_type: equipmentType,
+    quantity,
+    technical_requirements: technicalRequirements,
+    notes: technicalRequirements,
+    start_at: startAt,
+    end_at: endAt,
     status: 'PENDING',
     requested_by: user.id,
+  };
+
+  const created = await insertOne('equipment_requests', insertData);
+  await writeAudit(user.id, 'EQUIPMENT_REQUESTED', 'equipment_request', created.id, {
+    eventId: event.id,
+    equipmentId,
+    equipmentType,
+    quantity,
+    technicalRequirements,
+    startAt,
+    endAt,
   });
+
+  return {
+    ...created,
+    event_name: event.name || null,
+    equipment_name: equipmentItem?.name || null,
+    equipment_type: equipmentType,
+    start_at: startAt,
+    end_at: endAt,
+  };
+}
+
+/**
+ * Purpose: Technical Support reviews and updates an equipment request status as arrangements are made.
+ * AC: SCRUM-48 AC1, AC2, AC3, AC4.
+ * Inputs: user, request id, payload { status, notes, reason }.
+ * Failure: 403 if not Technical Support; 404 if request not found; 400 if invalid status.
+ */
+async function updateRequest(user, id, payload = {}) {
+  if (!hasRole(user, ROLES.TECHNICAL_SUPPORT)) {
+    throw httpError(403, 'Only technical support staff can manage equipment requests', 'FORBIDDEN');
+  }
+
+  const request = await fetchOne(supabase.from('equipment_requests').select('*').eq('id', id));
+  if (!request) throw httpError(404, 'Equipment request not found', 'NOT_FOUND');
+
+  const rawStatus = payload.status ? String(payload.status).trim().toUpperCase() : '';
+  const validStatuses = ['PENDING', 'IN_PROGRESS', 'PREPARING', 'RESERVED', 'READY', 'UNAVAILABLE'];
+  if (!rawStatus || !validStatuses.includes(rawStatus)) {
+    throw httpError(
+      400,
+      `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
+      'VALIDATION_ERROR'
+    );
+  }
+
+  const arrangementNote = payload.reason || payload.notes || request.decision_reason || null;
+  const now = new Date().toISOString();
+
+  // If status transitions to RESERVED, create reservation record if equipment_id is linked
+  if (rawStatus === 'RESERVED' && request.equipment_id) {
+    const existingReservations = await fetchMany(
+      supabase
+        .from('equipment_reservations')
+        .select('id')
+        .eq('event_id', request.event_id)
+        .eq('equipment_id', request.equipment_id)
+    );
+    if (!existingReservations.length) {
+      await insertOne('equipment_reservations', {
+        event_id: request.event_id,
+        equipment_id: request.equipment_id,
+        quantity: request.quantity || 1,
+        status: 'RESERVED',
+      });
+    }
+  }
+
+  const updated = await updateById('equipment_requests', id, {
+    status: rawStatus,
+    decided_by: user.id,
+    decision_reason: arrangementNote,
+    decided_at: now,
+    updated_at: now,
+  });
+
+  await writeAudit(user.id, 'EQUIPMENT_REQUEST_UPDATED', 'equipment_requests', id, {
+    previousStatus: request.status,
+    newStatus: rawStatus,
+    notes: arrangementNote,
+  });
+
+  const event = await fetchOne(supabase.from('events').select('id, name, coordinator_id').eq('id', request.event_id));
+  if (event?.coordinator_id) {
+    await notifyUser(
+      event.coordinator_id,
+      'EQUIPMENT_UPDATE',
+      `Equipment request updated: ${rawStatus}`,
+      arrangementNote || `Equipment arrangement for ${event.name || 'your event'} is now ${rawStatus}.`,
+      event.id
+    );
+  }
+
+  return updated;
 }
 
 /**
@@ -363,6 +572,7 @@ module.exports = {
   upsertEquipment,
   listRequests,
   createRequest,
+  updateRequest,
   decideRequest,
   checkEquipmentAvailability,
   checkRequestAvailability,

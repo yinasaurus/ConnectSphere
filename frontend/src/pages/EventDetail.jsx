@@ -62,11 +62,15 @@ function formatBookingStatus(status) {
  *     SCRUM-78 AC1-AC3 (the Venue Staff card sends the reason and alternative staff typed, or none).
  *     SCRUM-34 AC1 + AC2 (organiser change-request form: date/time, attendance, venue/equipment).
  *     SCRUM-35 AC1 + AC2 (assigned coordinator approve/reject; approve applies the fields).
+ *     SCRUM-40 1C / 2A: assigned Coordinator gets "Edit event details" before Confirmed;
+ *     Confirmed shows a change-request note instead of the edit link.
  *     SCRUM-42 AC2: "Requires review" on flagged venue bookings and equipment requests;
  *     the status badge itself is unchanged.
  * Failure: load errors are shown in place of the event; action errors are shown above it.
  */
 const CHANGE_BLOCKED_STATUSES = ['DRAFT', 'CANCELLED', 'REJECTED', 'COMPLETED'];
+// SCRUM-40 1C/2A: assigned Coordinator direct-edits only before Confirmed.
+const COORD_EDIT_LOCKED_STATUSES = ['CONFIRMED', 'COMPLETED', 'CANCELLED', 'REJECTED'];
 
 /** Purpose: blank organiser change-request form. AC: SCRUM-34 AC1. */
 function emptyChangeForm() {
@@ -270,11 +274,13 @@ export default function EventDetail() {
         <StatusBadge status={event.status} subState={event.subState} />
       </div>
       {error && <div className="alert">{error}</div>}
-      {/* Keep the submitted-request confirmation visible after returning from booking. */}
-      {(message || location.state?.venueBookingSubmitted) && (
+      {/* Keep the submitted-request confirmation visible after returning from booking or equipment request. */}
+      {(message || location.state?.venueBookingSubmitted || location.state?.equipmentRequestSubmitted) && (
         <div className="alert success" role="status">
           {location.state?.venueBookingSubmitted
             ? 'Venue booking request submitted. Venue Staff will review it as Pending.'
+            : location.state?.equipmentRequestSubmitted
+            ? 'Equipment request submitted. Technical Support Staff can now review and prepare the equipment.'
             : message}
         </div>
       )}
@@ -534,6 +540,20 @@ export default function EventDetail() {
             <div className="card stack review-panel">
               <h3>Coordinator {event.status === 'UNDER_REVIEW' ? 'review actions' : 'actions'}</h3>
               {coordinatorError && <div className="alert" role="alert">{coordinatorError}</div>}
+              {/*
+                Purpose: assigned Coordinator opens the shared edit form before Confirmed.
+                AC: SCRUM-40 1C, 2A — Confirmed/terminal statuses stay on change requests only.
+              */}
+              {!COORD_EDIT_LOCKED_STATUSES.includes(event.status) && (
+                <div className="actions">
+                  <Link className="btn secondary" to={`/app/events/${id}/edit`}>Edit event details</Link>
+                </div>
+              )}
+              {event.status === 'CONFIRMED' && (
+                <p className="muted">
+                  Confirmed events cannot be edited directly. Approve an organiser change request for date, time, attendance, venue or equipment requirements.
+                </p>
+              )}
               {event.status === 'SUBMITTED' && (
                 <div className="actions">
                   <button className="btn" onClick={() => run(() => api(`/api/events/${id}/review`, { method: 'POST' }))}>
@@ -766,7 +786,10 @@ export default function EventDetail() {
           {canViewPlanning && <div className="card">
             <h3>People</h3>
             <p><strong>Organiser:</strong> {event.organiserName}</p>
-            {/* SCRUM-28 AC1: submitted requests stay unassigned until the Lead assigns (SCRUM-71). */}
+            {/* SCRUM-28 AC1: submitted requests stay unassigned until the Lead assigns (SCRUM-71).
+                SCRUM-29 AC1 + AC3: shows the assigned Coordinator's name; the event is re-read
+                on load, so after a reassignment the Organiser sees the new Coordinator.
+                Input: event.coordinatorName. Output: name, or "Unassigned" when none. */}
             <p><strong>Coordinator:</strong> {event.coordinatorName || 'Unassigned'}</p>
           </div>}
 
@@ -836,11 +859,40 @@ export default function EventDetail() {
             <h3>Equipment requests</h3>
             {equipmentError ? <p className="alert">Equipment requests could not be loaded: {equipmentError}</p>
               : equipmentRequests.length ? equipmentRequests.map((item) => (
-              <p key={item.id}>
-                {item.equipment_name || 'Item no longer in catalogue'} × {item.quantity}: {item.status}
-                {item.needs_review && <span className="needs-review-flag">Requires review</span>}
-              </p>
+              <div key={item.id} className="equipment-request-row" style={{ marginBottom: 10 }}>
+                <p style={{ margin: '2px 0' }}>
+                  {item.equipment_name || item.equipment_type || 'Item no longer in catalogue'} × {item.quantity}: {item.status}
+                  {item.needs_review && <span className="needs-review-flag">Requires review</span>}
+                </p>
+                {item.equipment_type && (
+                  <p className="muted" style={{ margin: '2px 0', fontSize: '0.85rem' }}>
+                    Type: {item.equipment_type}
+                  </p>
+                )}
+                {(item.technical_requirements || item.notes) && (
+                  <p className="muted" style={{ margin: '2px 0', fontSize: '0.85rem' }}>
+                    Specifications: {item.technical_requirements || item.notes}
+                  </p>
+                )}
+                {(item.start_at && item.end_at) && (
+                  <p className="muted" style={{ margin: '2px 0', fontSize: '0.82rem' }}>
+                    Timing: {new Date(item.start_at).toLocaleString()} – {new Date(item.end_at).toLocaleString()}
+                  </p>
+                )}
+                {item.decision_reason && (
+                  <p className="muted" style={{ margin: '2px 0', fontSize: '0.85rem' }}>
+                    Arrangement note: {item.decision_reason}
+                  </p>
+                )}
+              </div>
             )) : <p className="muted">No equipment requested yet.</p>}
+            {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && !['CANCELLED', 'REJECTED'].includes(event.status) && (
+              <div style={{ marginTop: 10 }}>
+                <Link className="btn equipment-request-link" to={`/app/events/${id}/equipment-request`}>
+                  Request equipment
+                </Link>
+              </div>
+            )}
           </div>}
           {canViewPlanning && <div className="card">
             <h3>Status history</h3>

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import StatusBadge from '../components/StatusBadge';
 import { STATUS_LABELS, ROLES } from '../constants';
 import { useAuth } from '../auth';
 
 export default function Events() {
-  const { hasRole } = useAuth();
+  const { user, hasRole } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [events, setEvents] = useState([]);
   const [status, setStatus] = useState('');
   const [subState, setSubState] = useState('');
@@ -19,6 +20,22 @@ export default function Events() {
     if (q) params.set('q', q);
     api(`/api/events?${params.toString()}`).then((data) => setEvents(data.events || []));
   }, [status, subState, q]);
+
+  // Purpose: let a Coordinator see every event assigned to them, past the 8-row home list.
+  // The Events page itself stays the full list. View all on the dashboard opens this filter.
+  // Inputs: ?assigned=me and the signed-in user. Output: that Coordinator's rows, or every row.
+  // Failure: none. A non-Coordinator with the query still sees the full list.
+  const assignedToMe = searchParams.get('assigned') === 'me' && hasRole(ROLES.EVENT_COORDINATOR);
+  const visibleEvents = assignedToMe
+    ? events.filter((event) => event.coordinatorId === user?.id)
+    : events;
+
+  function toggleAssignedToMe(checked) {
+    const next = new URLSearchParams(searchParams);
+    if (checked) next.set('assigned', 'me');
+    else next.delete('assigned');
+    setSearchParams(next);
+  }
 
   return (
     <>
@@ -53,10 +70,20 @@ export default function Events() {
               <option key={key} value={key}>{STATUS_LABELS[key]}</option>
             ))}
           </select>
+          {hasRole(ROLES.EVENT_COORDINATOR) && (
+            <label>
+              <input
+                type="checkbox"
+                checked={assignedToMe}
+                onChange={(e) => toggleAssignedToMe(e.target.checked)}
+              />
+              {' '}Assigned to me
+            </label>
+          )}
         </div>
       </div>
       <div className="cards">
-        {events.map((event) => (
+        {visibleEvents.map((event) => (
           <Link
             key={event.id}
             to={`/app/events/${event.id}`}
@@ -72,9 +99,22 @@ export default function Events() {
             <h3>{event.name}</h3>
             <p className="muted">{event.organisationName || 'ConnectSphere'} · {event.category}</p>
             <p>{event.startAt ? new Date(event.startAt).toLocaleString() : 'Dates to be confirmed'}</p>
+            {/*
+              Purpose: flag a newly submitted request as Unassigned on the organiser's event list.
+              AC: SCRUM-30 AC1 (every submitted event with no Coordinator shows Unassigned)
+                  and AC3 (the flag is gone once a Coordinator id is stored).
+              Business rule: W7 #5 — Unassigned is the default for every new request, not only
+              when nobody is free. Drafts are not flagged (SCRUM-28). The queue and assignment
+              themselves stay in SCRUM-65 and SCRUM-71.
+              Inputs: event.status and event.coordinatorId from GET /api/events.
+              Output: the Coordinator line, or nothing. Failure: none.
+            */}
+            {event.status === 'SUBMITTED' && event.coordinatorId == null && (
+              <p><strong>Coordinator:</strong> {'Unassigned'}</p>
+            )}
           </Link>
         ))}
-        {!events.length && <div className="card muted">No events match these filters.</div>}
+        {!visibleEvents.length && <div className="card muted">No events match these filters.</div>}
       </div>
     </>
   );

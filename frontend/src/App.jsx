@@ -10,6 +10,7 @@ import Drafts from './pages/Drafts';
 import EventDetail from './pages/EventDetail';
 import UnassignedQueue from './pages/UnassignedQueue';
 import VenueBooking from './pages/VenueBooking';
+import EquipmentRequest from './pages/EquipmentRequest';
 import CalendarPage from './pages/CalendarPage';
 import Venues from './pages/Venues';
 import VenueAvailability from './pages/VenueAvailability';
@@ -68,6 +69,8 @@ export default function App() {
             />
             {/* Keep booking requests scoped to an event and available only to coordinators. */}
             <Route path="events/:id/venue-booking" element={<ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR]}><VenueBooking /></ProtectedRoute>} />
+            {/* SCRUM-47: Coordinator records equipment required for an event */}
+            <Route path="events/:id/equipment-request" element={<ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR]}><EquipmentRequest /></ProtectedRoute>} />
             {/* SCRUM-54 AC4 / SCRUM-55 AC4: opening or recording a safety check is Safety Officer only. */}
             <Route path="events/:id/safety-check" element={<ProtectedRoute allowedRoles={[ROLES.SAFETY_OFFICER]}><SafetyCheck /></ProtectedRoute>} />
             <Route path="events/:id" element={<EventDetail />} />
