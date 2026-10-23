@@ -31,6 +31,7 @@ describe('SCUM-13 routes with real JWT authentication and role middleware', () =
     ['post', '/api/events', events.createEvent, [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR], 201],
     ['patch', '/api/events/3', events.updateEvent, [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR], 200],
     ['post', '/api/events/3/submit', events.submitEvent, [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR], 200],
+    // SCRUM-64-TC09 (data row - drives the shared it.each role-matrix loop below, not a standalone test)
     ['post', '/api/events/3/review', events.openForReview, [ROLES.EVENT_COORDINATOR], 200],
     ['post', '/api/events/3/status', events.changeStatus, [ROLES.EVENT_COORDINATOR], 200],
   ];

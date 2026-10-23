@@ -543,6 +543,7 @@ it('SCRUM-28 AC1: a submitted request with no Coordinator shows Unassigned', asy
 
 // AC1 + AC6 · The assigned coordinator sees an "Open for review" button on a
 // Submitted request, and it calls the review endpoint.
+// SCRUM-64-TC10
 it('US64-F01: the assigned coordinator opens a submitted request for review', async () => {
   useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
@@ -554,6 +555,7 @@ it('US64-F01: the assigned coordinator opens a submitted request for review', as
 
 // AC3 · A coordinator who isn't assigned to this request (id 9) never sees the button,
 // even though they can still view the event for planning purposes.
+// SCRUM-64-TC11
 it('US64-F02: an unrelated coordinator does not see the Open for review button', async () => {
   useAuth.mockReturnValue({ user: { id: 9 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
@@ -563,6 +565,7 @@ it('US64-F02: an unrelated coordinator does not see the Open for review button',
 });
 
 // AC6 · The organiser never sees the coordinator-only button on their own request.
+// SCRUM-64-TC12
 it('US64-F03: the organiser does not see the Open for review button', async () => {
   mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
   renderEvent();

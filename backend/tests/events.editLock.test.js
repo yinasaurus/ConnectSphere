@@ -42,6 +42,7 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
    * Expected: Row is updated with the new name.
    * Type:     normal
    */
+  // SCRUM-38-TC01
   it('allows the organiser to edit their own request while it is still Draft', async () => {
     await service.updateEvent(organiser, 3, { name: 'Updated title' });
     expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ name: 'Updated title' }));
@@ -54,6 +55,7 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
    * Expected: 409 EDIT_LOCKED; updateById never called.
    * Type:     error
    */
+  // SCRUM-38-TC02 (parametrized - one test per non-Draft status, currently 10 statuses)
   it.each(
     Object.values(EVENT_STATUS).filter((status) => status !== EVENT_STATUS.DRAFT)
   )('blocks the owning organiser from directly editing after submission (status %s)', async (status) => {
@@ -70,6 +72,7 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
    * Expected: Still 409 EDIT_LOCKED — lock is not field-scoped for organisers.
    * Type:     boundary
    */
+  // SCRUM-38-TC03
   it('blocks even a single-field direct edit once submitted', async () => {
     event.status = EVENT_STATUS.SUBMITTED;
     await expect(service.updateEvent(organiser, 3, { description: 'Just one field' }))
@@ -84,6 +87,7 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
    * Expected: updateById receives the new name.
    * Type:     normal
    */
+  // SCRUM-38-TC04
   it('lets the assigned coordinator edit the event after submission', async () => {
     event.status = EVENT_STATUS.UNDER_REVIEW;
     await service.updateEvent(assignedCoordinator, 3, { name: 'Coordinator-reviewed title' });
@@ -97,6 +101,7 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
    * Expected: Edit succeeds because the assigned-coordinator path applies.
    * Type:     boundary
    */
+  // SCRUM-38-TC05
   it('lets a hybrid organiser/coordinator user who is the assigned coordinator for their own request edit it after submission', async () => {
     event.status = EVENT_STATUS.UNDER_REVIEW;
     event.coordinator_id = 1; // hybridOwner is both the organiser and the assigned coordinator
@@ -111,6 +116,7 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
    * Expected: 403 FORBIDDEN; nothing written.
    * Type:     error
    */
+  // SCRUM-38-TC06
   it('rejects an unrelated role (Venue Staff) from editing a submitted request', async () => {
     event.status = EVENT_STATUS.SUBMITTED;
     await expect(service.updateEvent(venueStaff, 3, { name: 'Not my event' }))
@@ -125,6 +131,7 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
    * Expected: 403 FORBIDDEN (not EDIT_LOCKED) — wrong identity, not post-submit lock.
    * Type:     error
    */
+  // SCRUM-38-TC07
   it('rejects an organiser from a different organisation, distinct from the EDIT_LOCKED case', async () => {
     event.status = EVENT_STATUS.SUBMITTED;
     await expect(service.updateEvent(otherOrganiser, 3, { name: 'Not my event' }))
@@ -367,6 +374,47 @@ describe('SCRUM-40 edit lock HTTP route', () => {
       .send({ name: 'Still locked over HTTP' });
     expect(res.status).toBe(409);
     expect(res.body).toMatchObject({ error: 'EDIT_LOCKED' });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+});
+
+// SCRUM-38-TC08
+// Regression guard: the tests above all call service.updateEvent() directly. This one
+// confirms the 409/EDIT_LOCKED response actually survives the real route + auth
+// middleware + error handler, not just the service function in isolation.
+describe('SCRUM-38 EDIT_LOCKED through the real HTTP route', () => {
+  const request = require('supertest');
+  const jwt = require('jsonwebtoken');
+  const { createApp } = require('../src/app');
+  const { env } = require('../src/config/env');
+  const app = createApp();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    db.supabase.from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      in: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+    });
+    db.fetchMany.mockResolvedValue([]);
+  });
+
+  it('PATCH /api/events/:id returns 409 EDIT_LOCKED when the owning organiser edits a submitted request directly', async () => {
+    db.fetchOne.mockResolvedValueOnce({ id: 1, is_active: true }); // auth: signed-in user
+    db.fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_ORGANISER }]); // auth: their roles
+    db.fetchOne.mockResolvedValueOnce({ // service: the event being patched
+      id: 3, organiser_id: 1, organisation_id: 10, coordinator_id: 2, status: EVENT_STATUS.SUBMITTED, name: 'Workshop',
+    });
+
+    const token = jwt.sign({ sub: 1 }, env.jwtSecret);
+    const res = await request(app)
+      .patch('/api/events/3')
+      .set('Cookie', `${env.sessionCookieName}=${token}`)
+      .send({ name: 'Sneaky edit' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('EDIT_LOCKED');
     expect(db.updateById).not.toHaveBeenCalled();
   });
 });

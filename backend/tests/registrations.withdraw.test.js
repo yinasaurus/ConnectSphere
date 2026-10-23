@@ -65,6 +65,7 @@ describe('SCRUM-53 withdraw registration (service rules)', () => {
    * Expected: the registration is updated to WITHDRAWN with a withdrawn_at timestamp.
    * Type: normal
    */
+  // SCRUM-53-TC01
   it('US53-B01: an Attendee can withdraw their own registration', async () => {
     db.fetchMany.mockResolvedValueOnce([registrationRow()]); // the attendee's active registration
 
@@ -85,6 +86,7 @@ describe('SCRUM-53 withdraw registration (service rules)', () => {
    * Expected: the lookup query is filtered by event_id, attendee_id and neq WITHDRAWN.
    * Type: normal
    */
+  // SCRUM-53-TC02
   it('US53-B02: withdrawing only ever targets the caller\'s own active registration for this event', async () => {
     db.fetchMany.mockResolvedValueOnce([registrationRow()]);
 
@@ -101,6 +103,7 @@ describe('SCRUM-53 withdraw registration (service rules)', () => {
    * Expected: 404; nothing is written.
    * Type: error
    */
+  // SCRUM-53-TC03
   it('US53-B03: withdrawing with no active registration is 404', async () => {
     db.fetchMany.mockResolvedValueOnce([]); // no active registration found
 
@@ -113,6 +116,7 @@ describe('SCRUM-53 withdraw registration (service rules)', () => {
    * Expected: the oldest waitlisted attendee is notified a place is open.
    * Type: normal (see file header note on when this branch can actually fire today)
    */
+  // SCRUM-53-TC04
   it('US53-B04: withdrawing a REGISTERED place notifies the oldest waitlisted attendee', async () => {
     db.fetchMany.mockResolvedValueOnce([registrationRow({ status: 'REGISTERED' })]);
     db.fetchMany.mockResolvedValueOnce([{ id: 20, attendee_id: 40, status: 'WAITLISTED' }]);
@@ -135,6 +139,7 @@ describe('SCRUM-53 withdraw registration (service rules)', () => {
    *           the attendee themselves that their own registration was withdrawn.
    * Type: boundary
    */
+  // SCRUM-53-TC05
   it('US53-B05: withdrawing a WAITLISTED place does not open a place for anyone else', async () => {
     db.fetchMany.mockResolvedValueOnce([registrationRow({ status: 'WAITLISTED' })]);
 
@@ -167,6 +172,7 @@ describe('SCRUM-53 withdraw registration route', () => {
    * Expected: 200 with the updated registration.
    * Type: normal
    */
+  // SCRUM-53-TC06
   it('US53-R01: an Attendee can withdraw through the API', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 30, is_active: true }); // auth: the signed-in user
     db.fetchMany.mockResolvedValueOnce([{ role: ROLES.ATTENDEE }]); // auth: their roles
@@ -181,6 +187,7 @@ describe('SCRUM-53 withdraw registration route', () => {
     expect(res.body.registration.status).toBe('WITHDRAWN');
   });
 
+  // SCRUM-53-TC07
   it('US53-R02: the route needs a signed-in user', async () => {
     const res = await request(app).post('/api/events/3/registrations/withdraw');
     expect(res.status).toBe(401);
