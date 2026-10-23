@@ -313,6 +313,15 @@ async function decideRequest(user, id, decision) {
   const request = await fetchOne(supabase.from('equipment_requests').select('*').eq('id', id));
   if (!request) throw httpError(404, 'Equipment request not found', 'NOT_FOUND');
 
+  // SCRUM-58 AC6: a reserved request marked for review can be reserved again. That only
+  // clears the mark. Status and quantity stay, and no second stock hold is written.
+  if (request.status === 'RESERVED' && request.needs_review && decision.approve) {
+    return updateById('equipment_requests', id, {
+      needs_review: false,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
   if (request.status !== 'PENDING') {
     throw httpError(
       409,
@@ -353,6 +362,7 @@ async function decideRequest(user, id, decision) {
     decided_by: user.id,
     decision_reason: decision.reason || null,
     decided_at: new Date().toISOString(),
+    needs_review: false,
   });
 
   if (decision.approve && request.equipment_id) {

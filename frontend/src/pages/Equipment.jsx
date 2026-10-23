@@ -217,7 +217,10 @@ export default function Equipment() {
                 <div>
                   {request.event_name ? `${request.event_name} (Event #${request.event_id})` : `Event #${request.event_id}`} · {request.equipment_name || request.equipment_type || 'Unspecified'} × {request.quantity}
                 </div>
-                <div className="muted">{request.status}</div>
+                <div className="muted">
+                  {request.status}
+                  {request.needs_review && <span className="needs-review-flag">Requires review</span>}
+                </div>
 
                 {/* SCRUM-48 AC2: Technical Support can view equipment requirements and specifications */}
                 {(request.technical_requirements || request.notes) && (
@@ -288,6 +291,11 @@ export default function Equipment() {
                   </div>
                 )}
               </div>
+              {isTech && request.status === 'RESERVED' && request.needs_review && (
+                <div className="actions">
+                  <button className="btn" type="button" onClick={() => reserveRequest(request.id)}>Reserve</button>
+                </div>
+              )}
               {isTech && request.status === 'PENDING' && (
                 <div className="actions" style={{ alignSelf: 'flex-start' }}>
                   <button

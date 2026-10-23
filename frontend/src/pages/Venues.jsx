@@ -199,16 +199,36 @@ function PendingBookingCard({ booking, onDecide }) {
 }
 
 /**
- * SCRUM-18 AC7/AC8: read-only row in the decided bookings table.
- * Shows status, booking window, and (for rejected bookings) the reason and alternative.
+ * SCRUM-18 AC7/AC8: row in the decided bookings table.
+ * SCRUM-58 AC6: an approved booking marked for review gets Approve only.
+ * Reject stays off that row so the booking is not cancelled.
  */
-function BookingRow({ booking }) {
+function BookingRow({ booking, onApprove }) {
+  const [deciding, setDeciding] = useState(false);
+  const [localError, setLocalError] = useState('');
   const isRejected = booking.status === 'REJECTED';
+  const needsClear = booking.status === 'APPROVED' && booking.needs_review;
+
+  async function approveAgain() {
+    setDeciding(true);
+    setLocalError('');
+    try {
+      await onApprove(booking.id);
+    } catch (err) {
+      setLocalError(err.message);
+    } finally {
+      setDeciding(false);
+    }
+  }
+
   return (
-    <tr>
+    <tr data-testid={`booking-row-${booking.id}`}>
       <td>{booking.event_name || `Event #${booking.event_id}`}</td>
       <td>{booking.venue_name || `Venue #${booking.venue_id}`}</td>
-      <td><BookingStatusBadge status={booking.status} /></td>
+      <td>
+        <BookingStatusBadge status={booking.status} />
+        {needsClear && <span className="needs-review-flag">Requires review</span>}
+      </td>
       <td>
         {booking.start_at ? new Date(booking.start_at).toLocaleString() : '—'}
         {booking.end_at && ` – ${new Date(booking.end_at).toLocaleString()}`}
@@ -224,7 +244,18 @@ function BookingRow({ booking }) {
             Alt: {booking.alternative_suggestion}
           </span>
         )}
-        {!isRejected && <span className="muted">—</span>}
+        {needsClear && onApprove && (
+          <button
+            className="btn"
+            type="button"
+            disabled={deciding}
+            onClick={approveAgain}
+          >
+            {deciding ? 'Saving…' : 'Approve'}
+          </button>
+        )}
+        {localError && <div className="alert">{localError}</div>}
+        {!isRejected && !(needsClear && onApprove) && <span className="muted">—</span>}
       </td>
     </tr>
   );
@@ -682,7 +713,11 @@ export default function Venues() {
               </thead>
               <tbody>
                 {(isVenueStaff ? decidedBookings : bookings).map((booking) => (
-                  <BookingRow key={booking.id} booking={booking} />
+                  <BookingRow
+                    key={booking.id}
+                    booking={booking}
+                    onApprove={isVenueStaff ? (id) => handleDecide(id, true) : undefined}
+                  />
                 ))}
               </tbody>
             </table>

@@ -370,3 +370,23 @@ describe('SCRUM-48 Technical Support manages equipment requests', () => {
     expect(screen.getByText(/Beta Showcase/i)).toBeInTheDocument();
   });
 });
+
+describe('SCRUM-58 review a marked reserved equipment request', () => {
+  /*
+   * AC:       SCRUM-58 AC6
+   * Scenario: Technical Support open a request that is already reserved and marked for review.
+   * Setup:    Signed in as Technical Support. The request status is RESERVED and needs_review.
+   * Expected: Reserve is shown. Unavailable is not, so the request cannot be cancelled from here.
+   * Type:     normal
+   */
+  it('US58-F02 (AC6): Reserve is shown for a reserved request that needs review', async () => {
+    asRole('TECHNICAL_SUPPORT');
+    mockLists({
+      requests: [{ ...REQUEST, status: 'RESERVED', needs_review: true }],
+    });
+    render(<Equipment />);
+    expect(await screen.findByRole('button', { name: /^reserve$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /unavailable/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Requires review')).toBeInTheDocument();
+  });
+});

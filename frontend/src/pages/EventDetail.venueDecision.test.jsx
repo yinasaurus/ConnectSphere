@@ -140,3 +140,33 @@ describe('SCRUM-78 notice on the Notifications page', () => {
     expect(screen.getByRole('link', { name: 'Open event' })).toHaveAttribute('href', '/app/events/3');
   });
 });
+
+describe('SCRUM-58 review a marked approved booking from the event page', () => {
+  /*
+   * AC:       SCRUM-58 AC6
+   * Scenario: Venue Staff open an event whose approved booking is marked for review.
+   * Setup:    Signed in as Venue Staff. Booking 5 is APPROVED and needs_review.
+   * Expected: Approve venue is shown. Reject venue is not, because a second approval only clears the mark.
+   * Type:     normal
+   */
+  it('US58-F01 (AC6): Approve is shown for an approved booking that needs review', async () => {
+    useAuth.mockReturnValue({ user: { id: 40 }, hasRole: (...roles) => roles.includes('VENUE_STAFF') });
+    api.mockImplementation(async (path) => {
+      if (path === '/api/events/3') return { event: { id: 3, name: 'Leadership Forum', status: 'PLANNING', coordinatorId: 21 } };
+      if (path === '/api/events/3/history') return { history: [] };
+      if (path === '/api/comments/3') return { comments: [] };
+      if (path === '/api/venues') return { venues: [] };
+      if (path === '/api/events/3/venue-bookings') {
+        return { bookings: [{ id: 5, venue_name: 'Helix Hall', status: 'APPROVED', needs_review: true }] };
+      }
+      throw new Error(`Unexpected ${path}`);
+    });
+    render(
+      <MemoryRouter initialEntries={['/app/events/3']}>
+        <Routes><Route path="/app/events/:id" element={<EventDetail />} /></Routes>
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole('button', { name: 'Approve venue' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reject venue' })).not.toBeInTheDocument();
+  });
+});

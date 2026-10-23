@@ -529,4 +529,35 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
       }));
     });
   });
+
+  describe('SCRUM-58 review mark on the booking list', () => {
+    /*
+     * AC:       SCRUM-58 AC6
+     * Scenario: Venue Staff load the booking list, which includes an approved booking marked for review.
+     * Setup:    One APPROVED booking with needs_review true.
+     * Expected: The list returns needs_review true so the Venues page can show Approve.
+     * Type:     normal
+     */
+    it('US58-L01 (AC6): the booking list includes the review mark', async () => {
+      mockUser = STAFF;
+      fetchMany.mockResolvedValueOnce([
+        {
+          id: 7,
+          event_id: 3,
+          venue_id: 1,
+          status: BOOKING_STATUS.APPROVED,
+          needs_review: true,
+          start_at: '2026-11-20T10:00:00.000Z',
+          end_at: '2026-11-20T12:00:00.000Z',
+          venues: { name: 'Orchid' },
+          events: { name: 'Workshop', start_at: '2026-11-20T10:00:00.000Z', end_at: '2026-11-20T12:00:00.000Z' },
+        },
+      ]);
+
+      const res = await request(app).get('/api/venues/bookings');
+      expect(res.status).toBe(200);
+      expect(res.body.bookings[0].needs_review).toBe(true);
+      expect(res.body.bookings[0].status).toBe(BOOKING_STATUS.APPROVED);
+    });
+  });
 });
