@@ -20,7 +20,14 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  const mine = hasRole(ROLES.EVENT_COORDINATOR)
+  // Purpose: choose which events this dashboard lists.
+  // AC: SCRUM-5 — a Coordinator sees events assigned to them.
+  //     SCRUM-30 AC2 — a Lead still sees unassigned requests on the dashboard.
+  // Business rule: W7 #5. A Lead who is also a Coordinator must not lose those
+  // requests to the Coordinator's "assigned to me" filter.
+  // Inputs: the signed-in roles and GET /api/events. Output: rows for Upcoming
+  // and Needs attention. Failure: none.
+  const mine = hasRole(ROLES.EVENT_COORDINATOR) && !hasRole(ROLES.EVENT_COORDINATOR_LEAD)
     ? events.filter((event) => event.coordinatorId === user.id)
     : events;
 
