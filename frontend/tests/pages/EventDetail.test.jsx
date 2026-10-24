@@ -533,6 +533,7 @@ it('US17-F16: the organiser sees the rejection reason on a rejected event', asyn
  * Expected: People card shows Unassigned, not the old "will be auto-assigned" copy.
  * Type: normal
  */
+// SCRUM-28-TC21
 it('SCRUM-28 AC1: a submitted request with no Coordinator shows Unassigned', async () => {
   mockEvent({ coordinatorId: null, status: 'SUBMITTED' });
   renderEvent();
