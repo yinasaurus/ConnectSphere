@@ -175,6 +175,21 @@ const assignCoordinator = asyncHandler(async (req, res) => {
   res.json({ event });
 });
 
+/**
+ * Purpose: replace the Coordinator on an event that already has one.
+ * AC: SCRUM-31 AC1–AC4
+ * Inputs: event id, body.coordinatorId. Output: { event }.
+ * Failure: 403/404/409 from the service. The event status is not changed.
+ */
+const reassignCoordinator = asyncHandler(async (req, res) => {
+  const event = await eventsService.reassignEventCoordinator(
+    req.user,
+    req.params.id,
+    req.body.coordinatorId
+  );
+  res.json({ event });
+});
+
 const requestClarification = asyncHandler(async (req, res) => {
   const event = await eventsService.requestClarification(
     req.user,
@@ -269,6 +284,7 @@ module.exports = {
   acceptReassign,
   listAssignableCoordinators,
   assignCoordinator,
+  reassignCoordinator,
   requestClarification,
   respondClarification,
   listChangeRequests,

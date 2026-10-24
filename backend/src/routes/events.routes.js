@@ -36,6 +36,16 @@ router.post(
   controller.assignCoordinator
 );
 /**
+ * Purpose: Lead replaces the Coordinator on an event that already has one.
+ * AC: SCRUM-31 AC1–AC4. Same body as assign. Not the Coordinator request/accept routes below.
+ */
+router.post(
+  '/:id/reassign-coordinator',
+  requireRole(ROLES.EVENT_COORDINATOR_LEAD),
+  validateBody(assignCoordinatorSchema),
+  controller.reassignCoordinator
+);
+/**
  * Purpose: Safety Officer queue of events awaiting a safety check.
  * AC: SCRUM-55 AC1, AC4. Registered before `/:id` so the path is not parsed as an id.
  */
