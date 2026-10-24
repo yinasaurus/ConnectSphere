@@ -1072,7 +1072,7 @@ async function isReadyForSafetyCheck(eventId) {
 
 /**
  * Purpose: load a user and refuse anyone who is not an active Event Coordinator.
- * AC: SCRUM-71 AC2
+ * AC: SCRUM-71 AC2. SCRUM-31 AC1 — the same check applies when the Lead reassigns.
  * Business rule: W7 #5 — the Lead picks from Coordinators; inactive accounts cannot be assigned.
  * Inputs: coordinatorId. Output: the user row. Failure: 409 INVALID_COORDINATOR; caller must not write the event.
  */
@@ -1096,7 +1096,7 @@ async function requireActiveCoordinator(coordinatorId) {
 
 /**
  * Purpose: list Coordinators the Lead may choose from (active accounts only).
- * AC: SCRUM-71 AC1, AC2
+ * AC: SCRUM-71 AC1, AC2. SCRUM-31 AC1 — reassignment uses this same list.
  * Business rule: W4 — the Lead chooses the Coordinator manually.
  * Inputs: authenticated user. Output: { id, fullName }[]. Failure: 403 if the user is not a Lead.
  */
