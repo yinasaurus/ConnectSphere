@@ -141,14 +141,16 @@ describe('SCRUM-57 assignment overview for this Lead', () => {
   /*
    * AC: SCRUM-57 AC5
    * Scenario: This Lead assigned events that are still active and events that are finished or not started.
-   * Setup: Planning stays. Draft, Completed, Cancelled, and Rejected are the four statuses
-   *   the AC leaves out. Every row is assigned by this Lead and has a Coordinator.
-   * Expected: Only the Planning event is returned.
+   * Setup: Planning and Confirmed stay. Draft, Completed, Cancelled, and Rejected are the four
+   *   statuses the AC leaves out. Confirmed stays because AC5 leaves it off that list.
+   *   Every row is assigned by this Lead and has a Coordinator.
+   * Expected: The Planning event and the Confirmed event are returned.
    * Type: boundary
    */
   it('US57-B04: Draft, Completed, Cancelled, and Rejected events are left out', async () => {
     db.fetchMany.mockResolvedValue([
       row({ id: 1, name: 'Still planning', status: 'PLANNING' }),
+      row({ id: 6, name: 'Ready', status: 'CONFIRMED' }),
       row({ id: 2, name: 'Draft event', status: 'DRAFT' }),
       row({ id: 3, name: 'Finished', status: 'COMPLETED' }),
       row({ id: 4, name: 'Called off', status: 'CANCELLED' }),
@@ -157,7 +159,7 @@ describe('SCRUM-57 assignment overview for this Lead', () => {
 
     const assignments = await access.listAssignmentOverview(lead);
 
-    expect(assignments.map((item) => item.eventName)).toEqual(['Still planning']);
+    expect(assignments.map((item) => item.eventName)).toEqual(['Still planning', 'Ready']);
   });
 
   /*
