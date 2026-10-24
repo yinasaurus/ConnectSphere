@@ -253,4 +253,55 @@ describe('SCRUM-57 assignment overview for this Lead', () => {
     const assignments = await access.listAssignmentOverview(lead);
     expect(assignments).toEqual([]);
   });
+
+  /*
+   * AC: SCRUM-57 AC4
+   * Scenario: Coordinators hand the event to each other after this Lead assigned it.
+   * Setup: Leadership Forum is held by Chloe and recorded as assigned by user 11.
+   *   A pending request asks Daniel (user 4) to take it. Daniel accepts.
+   * Expected: The event update stores Daniel as Coordinator and leaves assigned_by_lead_id
+   *   at 11. The next overview open still lists the event for this Lead, under Daniel.
+   * Type: boundary
+   */
+  it('US57-B07: a Coordinator handoff leaves the event on the Lead who assigned it', async () => {
+    const daniel = { id: 4, roles: [ROLES.EVENT_COORDINATOR] };
+    event.coordinator_id = 2;
+    event.status = 'PLANNING';
+    event.assigned_by_lead_id = 11;
+    db.fetchOne.mockResolvedValueOnce({
+      id: 9,
+      event_id: 3,
+      from_coordinator_id: 2,
+      to_coordinator_id: 4,
+      status: 'PENDING',
+    });
+    db.updateById.mockImplementation(async (table, _id, patch) => {
+      if (table === 'events') Object.assign(event, patch);
+      return patch;
+    });
+
+    await events.acceptCoordinatorChange(daniel, 3);
+
+    const eventPatch = db.updateById.mock.calls.find((call) => call[0] === 'events')[2];
+    expect(eventPatch.coordinator_id).toBe(4);
+    expect(eventPatch).not.toHaveProperty('assigned_by_lead_id');
+    expect(event.assigned_by_lead_id).toBe(11);
+    expect(event.coordinator_id).toBe(4);
+
+    db.fetchMany.mockResolvedValueOnce([
+      row({
+        coordinator_id: 4,
+        assigned_by_lead_id: 11,
+        status: 'PLANNING',
+        coordinator: { full_name: 'Daniel Ong' },
+      }),
+    ]);
+    const assignments = await access.listAssignmentOverview(lead);
+    expect(assignments).toEqual([
+      {
+        eventId: 3, eventName: 'Leadership Forum', status: 'PLANNING',
+        coordinatorId: 4, coordinatorName: 'Daniel Ong',
+      },
+    ]);
+  });
 });
