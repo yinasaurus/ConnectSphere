@@ -1195,6 +1195,60 @@ async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
   return getEvent(user, eventId);
 }
 
+/**
+ * Purpose: the Lead replaces the Coordinator on an event that already has one, so the
+ *   event still has a single point of contact.
+ * AC: SCRUM-31 AC1 (the replacement must be an active Coordinator), AC2 (the previous
+ *     Coordinator is no longer on the event; edit checks that read coordinator_id then
+ *     refuse them), AC3 (the event record stores the new Coordinator and the status
+ *     is left as it was), AC4 (choosing the Coordinator who already holds the event
+ *     is refused and nothing is written).
+ * Business rule: W7 #5 — the Lead assigns and reassigns. Shiyin, 24 Oct 2026: this is
+ *   allowed in any status. An event with no Coordinator is first assignment (SCRUM-71),
+ *   not this action. Notices are sent by notifyCoordinatorReassigned (SCRUM-29). The
+ *   refusal for anyone who is not a Lead is also SCRUM-33. The audit entry is SCRUM-32,
+ *   so this action does not write one.
+ * Inputs: Lead user, event id, coordinatorId of the replacement.
+ * Output: the updated event. Failure: 403 if the caller is not a Lead; 404 if the event
+ *   is missing; 409 NOT_ASSIGNED if it has no Coordinator; 409 ALREADY_ASSIGNED if this
+ *   Coordinator already holds it; 409 INVALID_COORDINATOR if the chosen user is missing,
+ *   inactive, or not a Coordinator. On failure the event row is not written.
+ */
+async function reassignEventCoordinator(user, eventId, coordinatorId) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)) {
+    throw httpError(403, 'Only an Event Coordinator Lead can reassign a coordinator', 'FORBIDDEN');
+  }
+
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+
+  // First assignment is SCRUM-71. Reassignment needs someone to replace.
+  if (!existing.coordinator_id) {
+    throw httpError(409, 'This event has no coordinator to reassign', 'NOT_ASSIGNED');
+  }
+
+  const nextCoordinatorId = Number(coordinatorId);
+  // AC4: the same person is not a change. Compare numerically so "2" and 2 match.
+  if (Number(existing.coordinator_id) === nextCoordinatorId) {
+    throw httpError(409, 'This Coordinator is already assigned to the event', 'ALREADY_ASSIGNED');
+  }
+
+  await requireActiveCoordinator(nextCoordinatorId);
+
+  const previousCoordinatorId = existing.coordinator_id;
+  await updateById('events', eventId, {
+    coordinator_id: nextCoordinatorId,
+    updated_at: new Date().toISOString(),
+  });
+
+  // No earlier request told the incoming Coordinator. SCRUM-29 sends that notice here.
+  await notifyCoordinatorReassigned(existing, previousCoordinatorId, nextCoordinatorId, {
+    notifyIncoming: true,
+  });
+
+  return getEvent(user, eventId);
+}
+
 /*
  * Purpose: confirm an event once its essential arrangements are in place.
  * AC: SCRUM-73 AC1–AC8 — only the assigned Coordinator can confirm a Preparation event
@@ -2008,6 +2062,7 @@ module.exports = {
   acceptCoordinatorChange,
   notifyCoordinatorReassigned,
   assignPrimaryCoordinator,
+  reassignEventCoordinator,
   listAssignableCoordinators,
   listHistory,
   findMissingSubmissionFields,
