@@ -1126,6 +1126,8 @@ async function listAssignableCoordinators(user) {
  * AC: SCRUM-71 AC1–AC6 (assignment itself); SCRUM-45 AC2, AC3, AC5 — Coordinator notified
  *     when the Lead assigns them; Organiser notified that a Coordinator was assigned;
  *     only those two relevant users. SCRUM-29 refers to this same notice (tested once here).
+ *     SCRUM-57 AC4 — the write records this Lead on assigned_by_lead_id so their
+ *     overview shows the assignment the next time it is opened.
  * Business rule: W7 #5 (Lead assigns; relevant users notified of assignments).
  * Inputs: Lead user, event id, coordinatorId to assign.
  * Output: the updated event. Failure: 403 if not Lead; 404 if the event is missing;
@@ -1205,6 +1207,8 @@ async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
  *     refuse them), AC3 (the event record stores the new Coordinator and the status
  *     is left as it was), AC4 (choosing the Coordinator who already holds the event
  *     is refused and nothing is written).
+ *     SCRUM-57 AC4 — the Lead who reassigns is stored on assigned_by_lead_id, so
+ *     the event is listed on that Lead's overview the next time it is opened.
  * Business rule: W7 #5 — the Lead assigns and reassigns. Shiyin, 24 Oct 2026: this is
  *   allowed in any status. An event with no Coordinator is first assignment (SCRUM-71),
  *   not this action. Notices are sent by notifyCoordinatorReassigned (SCRUM-29). The
@@ -1402,6 +1406,8 @@ async function notifyCoordinatorReassigned(event, outgoingCoordinatorId, incomin
  * AC: SCRUM-45 AC2 (reassign to/from — outgoing notified here; incoming was notified on
  *     request), AC3 (only those parties), AC5 (Organiser notified when assigned Coordinator changes).
  *     SCRUM-29 AC3 (event record now shows the new Coordinator), AC5 (previous Coordinator told).
+ *     SCRUM-57 AC4 — this accept changes the Coordinator and leaves assigned_by_lead_id
+ *     as it is, so the event stays on the Lead who last assigned or reassigned it.
  * Business rule: W7 #5 — relevant users notified of reassignments.
  * Inputs: accepting Coordinator (must be to_coordinator_id), event id.
  * Output: updated event. Failure: 404 if no pending reassignment or event missing.
@@ -1425,6 +1431,9 @@ async function acceptCoordinatorChange(user, eventId) {
   // sender is no longer the one losing the event. Read it before the update below overwrites it.
   const previousCoordinatorId = existing.coordinator_id;
 
+  // SCRUM-57 AC4: a peer accept leaves assigned_by_lead_id unchanged. The overview
+  // keeps the Lead who last assigned or reassigned the event, and shows whoever
+  // holds coordinator_id after this update.
   await updateById('events', eventId, {
     coordinator_id: user.id,
     updated_at: new Date().toISOString(),
