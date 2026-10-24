@@ -1159,6 +1159,8 @@ async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
 
   await updateById('events', eventId, {
     coordinator_id: coordinatorId,
+    // SCRUM-57 AC4: this Lead's overview reads this column the next time it is opened.
+    assigned_by_lead_id: user.id,
     status: EVENT_STATUS.UNDER_REVIEW,
     sub_state: EVENT_SUB_STATE.IN_REVIEW,
     updated_at: new Date().toISOString(),
@@ -1238,6 +1240,8 @@ async function reassignEventCoordinator(user, eventId, coordinatorId) {
   const previousCoordinatorId = existing.coordinator_id;
   await updateById('events', eventId, {
     coordinator_id: nextCoordinatorId,
+    // SCRUM-57 AC4: the Lead who reassigns becomes the one whose overview lists this event.
+    assigned_by_lead_id: user.id,
     updated_at: new Date().toISOString(),
   });
 

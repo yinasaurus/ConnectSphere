@@ -100,7 +100,10 @@ describe('SCRUM-54 Lead-only unassigned queue and assignment overview', () => {
    */
   it('lists an assignment when the coordinator name join is missing', async () => {
     db.fetchMany.mockResolvedValue([
-      { id: 3, name: 'Workshop', status: 'UNDER_REVIEW', coordinator_id: 2, coordinator: null },
+      {
+        id: 3, name: 'Workshop', status: 'UNDER_REVIEW', coordinator_id: 2,
+        assigned_by_lead_id: 11, coordinator: null,
+      },
     ]);
     const assignments = await access.listAssignmentOverview(lead);
     expect(assignments[0].coordinatorName).toBeNull();
@@ -108,8 +111,8 @@ describe('SCRUM-54 Lead-only unassigned queue and assignment overview', () => {
 
   /*
    * AC: SCRUM-54 AC3
-   * Scenario: A Lead opens the overview of all coordinator assignments.
-   * Setup: One assigned event.
+   * Scenario: A Lead opens the overview for an assignment they made.
+   * Setup: One event assigned by this Lead (user 11).
    * Expected: The assignment row is returned.
    * Type: normal
    */
@@ -117,7 +120,7 @@ describe('SCRUM-54 Lead-only unassigned queue and assignment overview', () => {
     db.fetchMany.mockResolvedValue([
       {
         id: 3, name: 'Workshop', status: 'UNDER_REVIEW', coordinator_id: 2,
-        coordinator: { full_name: 'Chloe Lim' },
+        assigned_by_lead_id: 11, coordinator: { full_name: 'Chloe Lim' },
       },
     ]);
     const assignments = await access.listAssignmentOverview(lead);

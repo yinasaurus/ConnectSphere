@@ -83,6 +83,8 @@ create table if not exists events (
   organisation_id bigint references organisations(id) on delete set null,
   organiser_id bigint references users(id) on delete set null,
   coordinator_id bigint references users(id) on delete set null,
+  -- SCRUM-57: the Lead who last assigned or reassigned this event. Null until a Lead does so.
+  assigned_by_lead_id bigint references users(id) on delete set null,
   cloned_from_event_id bigint references events(id) on delete set null,
   name varchar(200) not null,
   description text,
@@ -112,6 +114,9 @@ create table if not exists events (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Existing databases created before SCRUM-57 do not get new columns from CREATE TABLE IF NOT EXISTS.
+alter table events add column if not exists assigned_by_lead_id bigint references users(id) on delete set null;
 
 create index if not exists events_status_idx on events (status);
 create index if not exists events_sub_state_idx on events (sub_state);

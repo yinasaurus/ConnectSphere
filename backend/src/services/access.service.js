@@ -176,29 +176,50 @@ async function listUnassignedQueue(user) {
   }));
 }
 
+// SCRUM-57 AC5. Draft, Completed, Cancelled, and Rejected stay off this overview.
+const OVERVIEW_HIDDEN_STATUSES = new Set([
+  EVENT_STATUS.DRAFT,
+  EVENT_STATUS.COMPLETED,
+  EVENT_STATUS.CANCELLED,
+  EVENT_STATUS.REJECTED,
+]);
+
 /**
- * Purpose: show which coordinator is assigned to each event, for the Lead only.
- * AC: SCRUM-54 AC3
- * Business rule: W7 #5
- * Inputs: authenticated user. Output: assignment rows.
- * Failure: 403 if the user is not a Lead; the error has no assignment or event list.
+ * Purpose: list the Coordinators this Lead assigned, and the events they still hold.
+ * AC: SCRUM-57 AC1 (this Lead's Coordinators and events), AC2 (another Lead's event is
+ *     left out), AC3 (an event with no Coordinator is left out; the unassigned queue
+ *     stays listUnassignedQueue), AC4 (the row is the current assignment, read when
+ *     the overview is opened), AC5 (Draft, Completed, Cancelled, and Rejected are left out).
+ *     SCRUM-54 AC3 still owns who may open this (assertLead). That refusal is not retested here.
+ * Business rule: W7 #5. Week 9, Jin Hong — the Lead supervises the Coordinators they
+ *   allocated. Week 9, Joseph — every Lead still sees all unassigned events on SCRUM-65.
+ *   A Coordinator-to-Coordinator accept does not change assigned_by_lead_id. The
+ *   coordinator name is whoever is on the event when the overview is opened.
+ * Inputs: authenticated Lead. Output: assignment rows for events this Lead assigned
+ *   that still have a Coordinator and a status this overview shows.
+ * Failure: 403 if the user is not a Lead. The error has no assignment list.
  */
 async function listAssignmentOverview(user) {
   assertLead(user);
   const rows = await fetchMany(
     supabase
       .from('events')
-      .select('id, name, status, coordinator_id, coordinator:users!coordinator_id ( full_name )')
+      .select('id, name, status, coordinator_id, assigned_by_lead_id, coordinator:users!coordinator_id ( full_name )')
+      .eq('assigned_by_lead_id', user.id)
       .not('coordinator_id', 'is', null)
       .order('start_at', { ascending: true })
   );
-  return rows.map((row) => ({
-    eventId: row.id,
-    eventName: row.name,
-    status: row.status,
-    coordinatorId: row.coordinator_id,
-    coordinatorName: row.coordinator?.full_name || null,
-  }));
+  return rows
+    .filter((row) => row.coordinator_id
+      && Number(row.assigned_by_lead_id) === Number(user.id)
+      && !OVERVIEW_HIDDEN_STATUSES.has(row.status))
+    .map((row) => ({
+      eventId: row.id,
+      eventName: row.name,
+      status: row.status,
+      coordinatorId: row.coordinator_id,
+      coordinatorName: row.coordinator?.full_name || null,
+    }));
 }
 
 /**
