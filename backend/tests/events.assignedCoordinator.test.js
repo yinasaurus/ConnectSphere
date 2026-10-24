@@ -85,6 +85,7 @@ describe('SCRUM-29 AC1 + AC3: the event record shows the assigned Coordinator', 
    * Expected: coordinatorId 2 and coordinatorName "Chloe Lim" on the returned event.
    * Type:     normal
    */
+  // SCRUM-29-TC01
   it('US29-D01: Organiser sees the assigned Coordinator on their event', async () => {
     const result = await events.getEvent(organiser, 3);
     expect(result.coordinatorId).toBe(2);
@@ -98,6 +99,7 @@ describe('SCRUM-29 AC1 + AC3: the event record shows the assigned Coordinator', 
    * Expected: coordinatorId null and coordinatorName null (page shows "Unassigned").
    * Type:     boundary
    */
+  // SCRUM-29-TC02
   it('US29-D02: an unassigned event has no Coordinator name', async () => {
     event.coordinator_id = null;
     event.coordinator = null;
@@ -114,6 +116,7 @@ describe('SCRUM-29 AC1 + AC3: the event record shows the assigned Coordinator', 
    * Expected: 404 NOT_FOUND, so the Coordinator is not leaked across organisations.
    * Type:     error
    */
+  // SCRUM-29-TC03
   it('US29-D03: another organisation cannot see the Coordinator', async () => {
     await expect(events.getEvent(otherOrganiser, 3)).rejects.toMatchObject({
       status: 404,
@@ -132,6 +135,7 @@ describe('SCRUM-29 AC1 + AC3: the event record shows the assigned Coordinator', 
    *           coordinator_id changes. It proves accept writes the new id and the next read
    *           maps it; it cannot prove the real database join.
    */
+  // SCRUM-29-TC04
   it('US29-D04: after a reassignment the Organiser sees the new Coordinator', async () => {
     const pending = {
       id: 9,
@@ -165,6 +169,7 @@ describe('SCRUM-29 AC1 + AC3: the event record shows the assigned Coordinator', 
    * Expected: No coordinatorName or coordinatorId on the Attendee copy.
    * Type:     boundary
    */
+  // SCRUM-29-TC05
   it('US29-D05: Attendees do not see who the Coordinator is', async () => {
     event.status = 'CONFIRMED';
     event.registration_required = true;
@@ -182,6 +187,7 @@ describe('SCRUM-29 AC1 over HTTP and AC5 guard', () => {
    * Expected: 200 and event.coordinatorName "Chloe Lim" in the JSON the page receives.
    * Type:     normal
    */
+  // SCRUM-29-TC06
   it('US29-R01: GET /api/events/:id returns the Coordinator name to the Organiser', async () => {
     const app = createApp();
     const token = jwt.sign({ sub: 1 }, env.jwtSecret);
@@ -205,6 +211,7 @@ describe('SCRUM-29 AC1 over HTTP and AC5 guard', () => {
    * Expected: 403 FORBIDDEN; no reassignment row is written and nobody is notified.
    * Type:     error
    */
+  // SCRUM-29-TC07
   it('US29-E01: a non-owner cannot request a reassignment and nobody is notified', async () => {
     await expect(events.requestCoordinatorChange(otherCoordinator, 3, 5)).rejects.toMatchObject({
       status: 403,
@@ -225,6 +232,7 @@ describe('SCRUM-29 AC4: notified each time, not only the first time', () => {
    * Expected: Chloe gets COORDINATOR_ASSIGNED twice — nothing de-duplicates by event/user.
    * Type:     normal
    */
+  // SCRUM-29-TC08
   it('US29-N01: assigning the same Coordinator again sends a fresh notice', async () => {
     const assignOnce = async () => {
       event.coordinator_id = null;
@@ -255,6 +263,7 @@ describe('SCRUM-29 AC4: notified each time, not only the first time', () => {
    * Expected: Dan gets COORDINATOR_REASSIGN twice.
    * Type:     boundary
    */
+  // SCRUM-29-TC09
   it('US29-N02: a repeat reassignment request notifies the same Coordinator again', async () => {
     db.fetchOne.mockResolvedValue(event);
 
@@ -275,6 +284,7 @@ describe('SCRUM-29 AC4: notified each time, not only the first time', () => {
    *           told; Dan is not told twice for the same change.
    * Type:     normal
    */
+  // SCRUM-29-TC10
   it('US29-N03: one reassignment tells Dan once, the Organiser once and Chloe once', async () => {
     db.fetchOne.mockResolvedValue(event);
     await events.requestCoordinatorChange(coordinator, 3, 4);
@@ -310,6 +320,7 @@ describe('SCRUM-29 AC5: the previous Coordinator is whoever held the event', () 
    *           no longer held the event, is not told she lost it.
    * Type:     conflict
    */
+  // SCRUM-29-TC11
   it('US29-N04: a stale pending request tells the real previous Coordinator, not the sender', async () => {
     event.coordinator_id = 4;
     const stale = {
@@ -342,6 +353,7 @@ describe('SCRUM-29 AC3 + AC5: notifyCoordinatorReassigned (shared by accept now,
    *           gets COORDINATOR_ASSIGNED; each body names the event; three notices exactly.
    * Type:     normal
    */
+  // SCRUM-29-TC12
   it('US29-H01: with notifyIncoming, all three relevant users are told', async () => {
     await events.notifyCoordinatorReassigned(row(), 2, 4, { notifyIncoming: true });
 
@@ -364,6 +376,7 @@ describe('SCRUM-29 AC3 + AC5: notifyCoordinatorReassigned (shared by accept now,
    * Expected: Only Organiser and outgoing are told; the incoming user is not.
    * Type:     boundary
    */
+  // SCRUM-29-TC13
   it('US29-H02: by default the incoming Coordinator is not told again', async () => {
     await events.notifyCoordinatorReassigned(row(), 2, 4);
 
@@ -380,6 +393,7 @@ describe('SCRUM-29 AC3 + AC5: notifyCoordinatorReassigned (shared by accept now,
    * Expected: Organiser and incoming told; no UNASSIGNED notice, no crash.
    * Type:     boundary
    */
+  // SCRUM-29-TC14
   it('US29-H03: no previous Coordinator means no unassigned notice', async () => {
     await events.notifyCoordinatorReassigned(row(), null, 4, { notifyIncoming: true });
 
@@ -394,6 +408,7 @@ describe('SCRUM-29 AC3 + AC5: notifyCoordinatorReassigned (shared by accept now,
    * Expected: Nobody is told they are unassigned; the Coordinator is not told "no longer".
    * Type:     boundary
    */
+  // SCRUM-29-TC15
   it('US29-H04: the same person as outgoing and incoming is never told they are unassigned', async () => {
     await events.notifyCoordinatorReassigned(row(), 2, 2, { notifyIncoming: true });
 
@@ -408,6 +423,7 @@ describe('SCRUM-29 AC3 + AC5: notifyCoordinatorReassigned (shared by accept now,
    * Expected: Organiser skipped; remaining body uses the "An event" fallback.
    * Type:     boundary
    */
+  // SCRUM-29-TC16
   it('US29-H05: a missing Organiser is skipped and a missing name falls back', async () => {
     await events.notifyCoordinatorReassigned({ id: 3, name: null, organiser_id: null }, 2, 4);
 

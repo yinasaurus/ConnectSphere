@@ -18,6 +18,7 @@ jest.mock('../../src/auth', () => ({ useAuth: jest.fn() }));
  * Expected: Row A shows "Chloe Lim"; row B shows "Unassigned".
  * Type:     normal
  */
+// SCRUM-29-TC20
 it('US29-F04: dashboard shows the assigned Coordinator or Unassigned per event', async () => {
   const events = [
     { id: 1, name: 'Assigned event', status: 'PLANNING', coordinatorId: 2, coordinatorName: 'Chloe Lim' },

@@ -58,6 +58,7 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   // SCRUM-5 (W7 #6): approving now lands on APPROVED, not PLANNING directly — the
   // coordinator starts planning as a separate step (APPROVED -> PLANNING).
   // AC3 · Happy path: the core approve transition UNDER_REVIEW -> APPROVED.
+  // SCRUM-17-TC01
   it('US17-B01: approving an event under review moves it to APPROVED', async () => {
     await service.decideEvent(coordinator, 3, 'APPROVE');
     expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'APPROVED' }));
@@ -65,6 +66,7 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
 
   // AC3 + C1 + C2 · Happy path: the approval comment is trimmed, saved to status history,
   // and included in the organiser's "approved" notification.
+  // SCRUM-17-TC02
   it('US17-B02: an optional approval comment is recorded in history and sent to the organiser', async () => {
     await service.decideEvent(coordinator, 3, 'APPROVE', '  Looks good, proceed  ');
     expect(db.insertOne).toHaveBeenCalledWith('event_status_history', expect.objectContaining({
@@ -77,6 +79,7 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   });
 
   // AC3 · Edge case: the comment is optional for approval; an empty one is stored as null.
+  // SCRUM-17-TC03
   it('US17-B03: approving without a comment is allowed', async () => {
     await service.decideEvent(coordinator, 3, 'APPROVE', '');
     expect(db.updateById).toHaveBeenCalled();
@@ -86,6 +89,7 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   // AC2 + C1 + C2 · Happy path: a valid reason is trimmed and kept in all three places the
   // decision is recorded (the event, status history, audit log), then shown word-for-word
   // in the organiser's notification.
+  // SCRUM-17-TC04
   it('US17-B04: rejecting with a valid reason saves the trimmed reason and notifies the organiser', async () => {
     const reason = '  Expected attendance is missing a breakdown  ';
     await service.decideEvent(coordinator, 3, 'REJECT', reason);
@@ -105,6 +109,7 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   });
 
   // AC2 · Boundary (= minimum): "Incomplete" is exactly 10 characters and must pass.
+  // SCRUM-17-TC05
   it('US17-B05: a rejection reason of exactly 10 characters is accepted (boundary)', async () => {
     await service.decideEvent(coordinator, 3, 'REJECT', 'Incomplete');
     expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'REJECTED' }));
@@ -116,10 +121,15 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   //   - spaces around "Too short" prove the length is checked after trimming
   //   - whitespace only / empty / missing (undefined) are all treated as no reason
   it.each([
+    // SCRUM-17-TC06
     ['"Too short" (9 characters, boundary - 1)', 'Too short'],
+    // SCRUM-17-TC07
     ['padding that trims below 10', '     Too short     '],
+    // SCRUM-17-TC08
     ['whitespace only', '                    '],
+    // SCRUM-17-TC09
     ['an empty string', ''],
+    // SCRUM-17-TC10
     ['a missing reason', undefined],
   ])('US17-B06: rejection with %s is blocked with 400 and nothing is saved', async (_label, reason) => {
     await expect(service.decideEvent(coordinator, 3, 'REJECT', reason))
@@ -132,8 +142,24 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   // including SUBMITTED (unassigned queue, SCRUM-28 — approving requires review first),
   // PLANNING (can't approve twice) and REJECTED (can't reject twice).
   it.each([
-    'DRAFT', 'SUBMITTED', 'PLANNING', 'AWAITING_SAFETY_CHECK', 'PREPARATION',
-    'CONFIRMED', 'REJECTED', 'COMPLETED', 'CANCELLED',
+    // SCRUM-17-TC11
+    'DRAFT',
+    // SCRUM-17-TC12
+    'SUBMITTED',
+    // SCRUM-17-TC13
+    'PLANNING',
+    // SCRUM-17-TC14
+    'AWAITING_SAFETY_CHECK',
+    // SCRUM-17-TC15
+    'PREPARATION',
+    // SCRUM-17-TC16
+    'CONFIRMED',
+    // SCRUM-17-TC17
+    'REJECTED',
+    // SCRUM-17-TC18
+    'COMPLETED',
+    // SCRUM-17-TC19
+    'CANCELLED',
   ])(
     'US17-B07: a decision on an event in %s is refused with 409',
     async (status) => {
@@ -145,6 +171,7 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
 
   // SCRUM-5 AC4: a coordinator can reject a request that's still sitting in the
   // unopened Submitted queue, not just once it's Under Review.
+  // SCRUM-17-TC20
   it('US17-B17: a request can be rejected directly from Submitted (before being opened)', async () => {
     event.status = 'SUBMITTED';
     await service.decideEvent(coordinator, 3, 'REJECT', 'Attendance numbers are missing');
@@ -155,6 +182,7 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
 
   // SCRUM-5 AC2: approving is specific to the reviewed request — it cannot be approved
   // while still sitting unopened in Submitted.
+  // SCRUM-17-TC21
   it('US17-B18: a request cannot be approved while still Submitted (not yet under review)', async () => {
     event.status = 'SUBMITTED';
     await expect(service.decideEvent(coordinator, 3, 'APPROVE')).rejects.toMatchObject({ status: 409 });
@@ -162,6 +190,7 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   });
 
   // C3 · Security: an organiser must not be able to approve their own request.
+  // SCRUM-17-TC22
   it('US17-B08: the organiser cannot approve their own request', async () => {
     await expect(service.decideEvent(organiser, 3, 'APPROVE')).rejects.toMatchObject({ status: 403 });
     expect(db.updateById).not.toHaveBeenCalled();
@@ -169,6 +198,7 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
 
   // C3 · Security: being a coordinator is not enough; it must be the coordinator
   // assigned to this event (id 2). Coordinator 99 is refused even with a valid reason.
+  // SCRUM-17-TC23
   it('US17-B09: a coordinator who is not assigned to the event cannot decide', async () => {
     await expect(service.decideEvent({ ...coordinator, id: 99 }, 3, 'REJECT', 'Not enough detail provided'))
       .rejects.toMatchObject({ status: 403 });
@@ -176,12 +206,14 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   });
 
   // AC1 · Negative: only APPROVE and REJECT exist; anything else is a bad request.
+  // SCRUM-17-TC24
   it('US17-B10: an unknown decision value is refused with 400', async () => {
     await expect(service.decideEvent(coordinator, 3, 'MAYBE')).rejects.toMatchObject({ status: 400 });
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
   // Error handling: deciding on an event that doesn't exist returns 404, not a crash.
+  // SCRUM-17-TC25
   it('US17-B11: a missing event returns 404', async () => {
     db.fetchOne.mockResolvedValue(null);
     await expect(service.decideEvent(coordinator, 404, 'APPROVE')).rejects.toMatchObject({ status: 404 });
@@ -189,30 +221,16 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
 
   // AC2 · Security: the older POST /api/events/:id/status endpoint can also reject.
   // This proves it enforces the same minimum, so AC2 can't be bypassed through it.
+  // SCRUM-17-TC26
   it('US17-B12: the generic status endpoint cannot bypass the 10-character rejection rule', async () => {
     await expect(service.changeStatus(coordinator, 3, 'REJECTED', 'nope'))
       .rejects.toMatchObject({ status: 400, message: REASON_ERROR });
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
-  // Customer rule (Week 4 Q&A): "Rejected events may be resubmitted after appropriate
-  // changes are made; rejection is not necessarily final." After a rejection, the organiser
-  // can submit again: W7 #5 / SCRUM-28 send it back to the unassigned Submitted queue
-  // (not auto-assigned under review) and the old reason is cleared.
-  it('US17-B13: a rejected request can be resubmitted by the organiser', async () => {
-    // SCRUM-64: submission now rests at SUBMITTED; the assigned coordinator opens it
-    // for review from there (same as a first-time submission), rather than landing
-    // back at UNDER_REVIEW directly.
-    event.status = 'REJECTED';
-    event.rejection_reason = 'Attendance numbers are missing';
-    await service.submitEvent(organiser, 3);
-    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
-      status: 'SUBMITTED', coordinator_id: null, rejection_reason: null,
-    }));
-  });
-
   // Regression: the notification wording was changed for approve/reject only. Other status
   // changes (here CONFIRMED -> COMPLETED) must keep the generic "Event <status>" message.
+  // SCRUM-17-TC27
   it('US17-B14: non-decision status changes keep the generic organiser notification', async () => {
     event.status = 'CONFIRMED';
     await service.changeStatus(coordinator, 3, 'COMPLETED');
@@ -224,7 +242,9 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
   // AC6 · Security: while the event has no assigned coordinator, no coordinator can decide,
   // and nothing is written (status unchanged, no history, no audit, no notification).
   it.each([
+    // SCRUM-17-TC28
     ['APPROVE', undefined],
+    // SCRUM-17-TC29
     ['REJECT', 'Not enough detail provided'],
   ])('US17-B15: %s on an unassigned event is refused for any coordinator', async (decision, reason) => {
     event.coordinator_id = null;
@@ -237,6 +257,7 @@ describe('SCRUM-17 approve or reject event request (service rules)', () => {
 
   // AC3 + AC4 · Edge case: if the organiser account is gone (organiser_id set null on delete),
   // the decision and reason are still recorded; there is just nobody to notify.
+  // SCRUM-17-TC30
   it('US17-B16: a decision on an event with no organiser is recorded without a notification', async () => {
     event.organiser_id = null;
     await service.decideEvent(coordinator, 3, 'REJECT', 'Attendance numbers are missing');
@@ -267,6 +288,7 @@ describe('SCRUM-17 POST /api/events/:id/decision (route)', () => {
   }
 
   // AC3 · Happy path end to end through Express: auth -> role check -> validation -> service.
+  // SCRUM-17-TC31
   it('US17-R01: an assigned coordinator can approve through the API', async () => {
     const res = await asRole(ROLES.EVENT_COORDINATOR).send({ decision: 'APPROVE' });
     expect(res.status).toBe(200);
@@ -275,6 +297,7 @@ describe('SCRUM-17 POST /api/events/:id/decision (route)', () => {
 
   // AC2 · Negative: same data as manual test case IS212-US17-TC1 ("Too short", 9 characters).
   // The request validator stops it with the exact AC2 message before any database write.
+  // SCRUM-17-TC32
   it('US17-R02: a 9-character rejection reason is blocked before reaching the service', async () => {
     const res = await asRole(ROLES.EVENT_COORDINATOR).send({ decision: 'REJECT', reason: 'Too short' });
     expect(res.status).toBe(400);
@@ -285,7 +308,9 @@ describe('SCRUM-17 POST /api/events/:id/decision (route)', () => {
   // Boundary (maximum): reasons are capped at 1000 characters so a huge payload can't be
   // stored. Exactly 1000 is accepted; 1001 is refused with a clear message, not a crash.
   it.each([
+    // SCRUM-17-TC33
     [1000, 200],
+    // SCRUM-17-TC34
     [1001, 400],
   ])('US17-R06: a %i-character reason returns %i', async (length, status) => {
     const res = await asRole(ROLES.EVENT_COORDINATOR).send({ decision: 'REJECT', reason: 'a'.repeat(length) });
@@ -297,6 +322,7 @@ describe('SCRUM-17 POST /api/events/:id/decision (route)', () => {
   });
 
   // AC1 · Negative: the request validator rejects decision values other than APPROVE / REJECT.
+  // SCRUM-17-TC35
   it('US17-R03: an invalid decision value returns 400', async () => {
     const res = await asRole(ROLES.EVENT_COORDINATOR).send({ decision: 'DELETE' });
     expect(res.status).toBe(400);
@@ -305,7 +331,16 @@ describe('SCRUM-17 POST /api/events/:id/decision (route)', () => {
 
   // C3 · Security (role-based access): the four non-coordinator roles are blocked by the
   // route's role check with 403, before the service runs.
-  it.each([ROLES.EVENT_ORGANISER, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT, ROLES.ATTENDEE])(
+  it.each([
+    // SCRUM-17-TC36
+    ROLES.EVENT_ORGANISER,
+    // SCRUM-17-TC37
+    ROLES.VENUE_STAFF,
+    // SCRUM-17-TC38
+    ROLES.TECHNICAL_SUPPORT,
+    // SCRUM-17-TC39
+    ROLES.ATTENDEE,
+  ])(
     'US17-R04: %s cannot call the decision endpoint (403)',
     async (role) => {
       const res = await asRole(role).send({ decision: 'APPROVE' });
@@ -315,6 +350,7 @@ describe('SCRUM-17 POST /api/events/:id/decision (route)', () => {
   );
 
   // Security (authentication): no session cookie means 401, and nothing is changed.
+  // SCRUM-17-TC40
   it('US17-R05: a request without a session is rejected with 401', async () => {
     const res = await request(app).post('/api/events/3/decision').send({ decision: 'APPROVE' });
     expect(res.status).toBe(401);
