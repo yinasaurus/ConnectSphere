@@ -147,7 +147,8 @@ export default function EventDetail() {
 
   // Loads the event, its venue bookings and, for planning roles only, history, comments,
   // venues and equipment requests; other roles never request planning data they aren't
-  // allowed to see. A Lead also loads the active-Coordinator list when this event is still unassigned.
+  // allowed to see. A Lead also loads the active-Coordinator list to assign an unassigned
+  // Submitted request, or to reassign an event that already has a Coordinator.
   const reload = useCallback(async () => {
     const [eventRes, historyRes, commentRes, venueRes, bookingRes, equipmentRes, statusRes] = await Promise.all([
       api(`/api/events/${id}`),
@@ -174,7 +175,12 @@ export default function EventDetail() {
     setBookings(bookingRes.bookings || []);
     setEquipmentRequests(equipmentRes.requests || []);
     setEquipmentError(equipmentRes.loadError || '');
-    if (isLead && eventRes.event.status === 'SUBMITTED' && !eventRes.event.coordinatorId) {
+    // SCRUM-71: Submitted and still unassigned. SCRUM-31: any status, once a Coordinator is set.
+    const leadPicksCoordinator = isLead && (
+      eventRes.event.coordinatorId
+      || (eventRes.event.status === 'SUBMITTED' && !eventRes.event.coordinatorId)
+    );
+    if (leadPicksCoordinator) {
       const coordRes = await api('/api/events/assignable-coordinators');
       setAssignableCoordinators(coordRes.coordinators || []);
     } else {
@@ -350,6 +356,44 @@ export default function EventDetail() {
                 }))}
               >
                 Assign coordinator
+              </button>
+            </div>
+          )}
+
+          {/*
+            Purpose: Lead picks a different active Coordinator. Any status is allowed.
+            AC: SCRUM-31 AC1, AC4 — the list is the active Coordinators; confirming the
+            person already assigned is refused by the API and shown here.
+            Business rule: W7 #5. Shiyin, 24 Oct 2026: reassignment is not limited by status.
+            Failure: the server message is shown and the event is left as it was loaded.
+          */}
+          {isLead && event.coordinatorId && (
+            <div className="card stack">
+              <h3>Reassign</h3>
+              <p className="muted">
+                Choose a different active Coordinator. The previous Coordinator will no longer be able to edit this event.
+              </p>
+              <label htmlFor="reassign-coordinator">Coordinator</label>
+              <select
+                id="reassign-coordinator"
+                value={assignCoordinatorId}
+                onChange={(e) => setAssignCoordinatorId(e.target.value)}
+              >
+                <option value="">Select a coordinator</option>
+                {assignableCoordinators.map((row) => (
+                  <option key={row.id} value={row.id}>{row.fullName}</option>
+                ))}
+              </select>
+              <button
+                className="btn"
+                type="button"
+                disabled={!assignCoordinatorId}
+                onClick={() => run(() => api(`/api/events/${id}/reassign-coordinator`, {
+                  method: 'POST',
+                  body: { coordinatorId: Number(assignCoordinatorId) },
+                }))}
+              >
+                Reassign coordinator
               </button>
             </div>
           )}
