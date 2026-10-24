@@ -43,10 +43,10 @@ describe('SCRUM-57 assignment overview page', () => {
 
   /*
    * AC: SCRUM-57 AC4
-   * Scenario: The Lead opens the overview again after a reassignment.
-   * Setup: The API response is the fresh read: Daniel now holds Leadership Forum.
-   *   Chloe is not in this payload.
-   * Expected: The page shows Daniel Ong and does not show Chloe Lim.
+   * Scenario: The page is given the overview from a later read, after the Coordinator changed.
+   * Setup: The API payload lists Daniel Ong on Leadership Forum. Chloe Lim is absent from this payload.
+   *   The assign and reassign writes are checked in US57-B05.
+   * Expected: The page shows Daniel Ong. Chloe Lim is absent.
    * Type: normal
    */
   it('US57-F02: the next open shows the Coordinator from the latest read', async () => {
