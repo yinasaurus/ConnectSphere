@@ -12,8 +12,8 @@ const unassignedQueue = asyncHandler(async (req, res) => {
 });
 
 /**
- * Purpose: HTTP wrapper for the Lead-only coordinator assignment overview.
- * AC: SCRUM-54 AC3
+ * Purpose: HTTP wrapper for this Lead's coordinator assignment overview.
+ * AC: SCRUM-57 AC1. SCRUM-54 AC3 — only a Lead can open this.
  * Inputs: authenticated request. Output: `{ assignments }`. Failure: 403 from the service.
  */
 const assignmentOverview = asyncHandler(async (req, res) => {
