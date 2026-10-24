@@ -82,7 +82,7 @@ describe('SCRUM-31 reassign coordinator (service rules)', () => {
    *   if she were still assigned, so a later refusal is because she was replaced.
    * Expected: The record stores coordinator 4 and the name Daniel Ong. The status stays
    *   UNDER_REVIEW. Chloe's edit is refused and the name she tried to write is not stored.
-   *   Notices are sent by the shared helper; their wording is US29-H01, not this test.
+   *   Notice wording is US29-H01. This test does not check that a notice was sent.
    * Type: normal
    */
   it('US31-B01: a Lead replaces the assigned Coordinator and the previous one can no longer edit', async () => {
@@ -174,7 +174,8 @@ describe('SCRUM-31 reassign coordinator (service rules)', () => {
   });
 
   /*
-   * AC: SCRUM-31 AC2
+   * AC: SCRUM-31 boundary with SCRUM-71. Not AC2. AC2 is the previous Coordinator
+   *   losing edit access after a successful reassignment.
    * Scenario: The event has no Coordinator yet, so there is nobody to replace.
    * Setup: coordinator_id is null. Status is SUBMITTED, which is the first-assignment case
    *   owned by SCRUM-71. This action must not take that write over.
@@ -194,7 +195,7 @@ describe('SCRUM-31 reassign coordinator (service rules)', () => {
   });
 
   /*
-   * AC: SCRUM-31 AC3
+   * AC: SCRUM-31 error path. Not AC3. AC3 is a successful reassignment updating the record.
    * Scenario: The event id does not exist.
    * Setup: The event lookup returns null. No Coordinator is loaded.
    * Expected: 404. Nothing is written.

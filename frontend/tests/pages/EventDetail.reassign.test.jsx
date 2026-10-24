@@ -122,7 +122,7 @@ describe('SCRUM-31 reassign coordinator (event page)', () => {
   });
 
   /*
-   * AC: SCRUM-31 AC1, AC3
+   * AC: SCRUM-31 AC1. The record update itself is US31-B01 and US31-R01, not this test.
    * Scenario: The Lead picks Daniel and confirms.
    * Setup: Event 3 is UNDER_REVIEW, held by Chloe. The dropdown value is 4.
    * Expected: POST /api/events/3/reassign-coordinator with coordinatorId 4.
@@ -148,8 +148,8 @@ describe('SCRUM-31 reassign coordinator (event page)', () => {
    * AC: SCRUM-31 AC4
    * Scenario: The Lead confirms the Coordinator who is already on the event.
    * Setup: Event 3 is held by Chloe (id 2). The Lead selects Chloe. The API rejects that id.
-   * Expected: The page shows the rejection. The post body is coordinatorId 2, which is the
-   *   person already assigned, so the event is not given a new Coordinator.
+   * Expected: The page shows the rejection text, and the post body is coordinatorId 2.
+   *   The unchanged event record is US31-B03 and US31-R02. This test does not read it.
    * Type: boundary
    */
   it('US31-F03: choosing the Coordinator already assigned shows the rejection', async () => {
