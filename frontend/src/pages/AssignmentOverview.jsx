@@ -4,9 +4,10 @@ import { api } from '../api';
 import StatusBadge from '../components/StatusBadge';
 
 /**
- * Purpose: Lead-only overview of which coordinator is assigned to each event.
- * AC: SCRUM-54 AC3, AC7
- * Business rule: W7 #5
+ * Purpose: show this Lead the Coordinators they assigned and the events those
+ * Coordinators still hold. The API already limits the rows to this Lead.
+ * AC: SCRUM-57 AC1. SCRUM-54 AC3, AC7 — only a Lead can open the page.
+ * Business rule: W7 #5. Week 9, Jin Hong — each Lead supervises their own allocations.
  * Inputs: GET /api/assignments/overview. Output: the assignment table, or an
  * error with no assignment rows. Failure: 403 shows the server message only.
  */
@@ -25,7 +26,7 @@ export default function AssignmentOverview() {
       <div className="topbar">
         <div>
           <h1>Coordinator assignments</h1>
-          <p>Overview of all coordinator assignments. Only an Event Coordinator Lead can open this.</p>
+          <p>Coordinators you assigned, and the events you assigned to them. Only an Event Coordinator Lead can open this.</p>
         </div>
       </div>
       {error && <div className="alert">{error}</div>}
