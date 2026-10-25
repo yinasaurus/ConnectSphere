@@ -258,6 +258,7 @@ describe('SCRUM-39 GET /api/events/:id/venue-bookings (venue, AC2)', () => {
    * Expected: needs_review is true and status is still APPROVED.
    * Type:     normal
    */
+  // SCRUM-42-TC09
   it('SCRUM-42 AC2: a flagged venue booking keeps its status and exposes needs_review', async () => {
     const get = as([ROLES.EVENT_COORDINATOR]);
     fetchOne.mockResolvedValueOnce(eventRow());
@@ -330,6 +331,7 @@ describe('SCRUM-39 GET /api/events/:id/equipment-requests (equipment, AC2)', () 
    * Expected: needs_review is true and status is still PENDING.
    * Type:     normal
    */
+  // SCRUM-42-TC10
   it('SCRUM-42 AC2: a flagged equipment request keeps its status and exposes needs_review', async () => {
     const get = as([ROLES.EVENT_COORDINATOR]);
     fetchOne.mockResolvedValueOnce(eventRow());
