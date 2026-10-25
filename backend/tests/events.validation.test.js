@@ -36,14 +36,6 @@ describe('SCUM-14 submission validation', () => {
     const missing = findMissingSubmissionFields({ ...completeDraft, expected_attendance: 0 });
     expect(missing.map((m) => m.field)).toContain('expectedAttendance');
   });
-
-  // SCRUM-15-TC01
-  it('does not enforce these fields when only a draft is being saved (SCUM-15)', () => {
-    // Draft creation only requires `name` — see createEvent(), which never calls
-    // findMissingSubmissionFields. This test documents that expectation.
-    const draftPayload = { name: 'Untitled event' };
-    expect(draftPayload.name).toBeTruthy();
-  });
 });
 
 // Bug fix: event creation/editing never checked that start comes before end
@@ -88,6 +80,19 @@ describe('event start/end date range validation', () => {
         name: 'Valid event', startAt: '2026-10-05T10:00:00Z', endAt: '2026-10-06T10:00:00Z',
       });
       expect(db.insertOne).toHaveBeenCalled();
+    });
+
+    // SCRUM-15-TC01
+    it('does not enforce compulsory submission fields when only a draft is being saved', async () => {
+      await service.createEvent(organiser, { name: 'Untitled event' });
+
+      expect(db.insertOne).toHaveBeenCalled();
+      const [, patch] = db.insertOne.mock.calls[0];
+      expect(patch.purpose).toBeNull();
+      expect(patch.description).toBeNull();
+      expect(patch.venue_requirements).toBeNull();
+      expect(patch.accessibility_needs).toBeNull();
+      expect(patch.expected_attendance).toBeNull();
     });
 
     // SCRUM-15-TC02
@@ -200,5 +205,48 @@ describe('SCUM-14/15 regression: dates are converted to real Date objects before
     const [, patch] = db.insertOne.mock.calls[0];
     expect(patch.start_at).toBeNull();
     expect(patch.end_at).toBeNull();
+  });
+});
+
+describe('SCRUM-15 draft lifecycle', () => {
+  const organiser = { id: 1, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] };
+  const coordinator = { id: 2, roles: [ROLES.EVENT_COORDINATOR] };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    db.supabase.from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      in: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+    });
+    db.fetchMany.mockResolvedValue([]);
+  });
+
+  // SCRUM-15-TC04
+  it('a draft completed via edits submits successfully', async () => {
+    db.insertOne.mockImplementation(async () => ({ id: 99, status: 'DRAFT' }));
+    await service.createEvent(organiser, { name: 'Untitled draft' });
+
+    db.fetchOne.mockImplementation(async () => ({
+      id: 99, organiser_id: 1, organisation_id: 10, status: 'DRAFT', name: 'Untitled draft',
+    }));
+    db.updateById.mockImplementation(async () => ({ id: 99 }));
+    await service.updateEvent(organiser, 99, { ...completeDraft, name: 'Untitled draft' });
+
+    db.fetchOne.mockImplementation(async () => ({
+      id: 99, organiser_id: 1, organisation_id: 10, status: 'DRAFT', ...completeDraft,
+    }));
+    await service.submitEvent(organiser, 99);
+    expect(db.updateById).toHaveBeenCalledWith('events', 99, expect.objectContaining({ status: 'SUBMITTED' }));
+  });
+
+  // SCRUM-15-TC05
+  it('a Coordinator can view a Draft event', async () => {
+    db.fetchOne.mockImplementation(async () => ({
+      id: 99, organiser_id: 1, organisation_id: 10, coordinator_id: null, status: 'DRAFT', name: 'Untitled draft',
+    }));
+    const visible = await service.getEvent(coordinator, 99);
+    expect(visible.id).toBe(99);
   });
 });
