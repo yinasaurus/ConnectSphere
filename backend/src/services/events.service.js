@@ -656,7 +656,7 @@ async function listUnassignedQueue(user) {
 /**
  * Purpose: organiser (or assigned coordinator) sends a complete request for Lead assignment.
  * Status becomes Submitted with no Coordinator so it sits in the unassigned queue.
- * AC: SCRUM-28 AC1, AC2, AC3
+ * AC: SCRUM-28 AC1, AC2, AC3; SCRUM-45 AC1 (the Organiser gets an "Event submitted" notice)
  * Business rule: W7 #5 (Oct 3 2026, SHIYIN) — auto-assignment replaced by an unassigned queue.
  * Assignment is SCRUM-71; this method must not pick a Coordinator.
  * Inputs: user, event id
@@ -703,6 +703,18 @@ async function submitEvent(user, id) {
 
   await writeStatusHistory(id, user.id, previousStatus, EVENT_STATUS.SUBMITTED, 'Submitted for review');
   await writeAudit(user.id, 'EVENT_SUBMITTED', 'event', id, { coordinatorId: null });
+
+  // SCRUM-45 AC1: the event's Organiser is told it was submitted. Nobody else is
+  // (AC3): the Lead finds it in the unassigned queue, and no Coordinator is chosen yet.
+  if (existing.organiser_id) {
+    await notifyUser(
+      existing.organiser_id,
+      'EVENT_SUBMITTED',
+      'Event submitted',
+      `"${existing.name || 'An event'}" was submitted for review. A Coordinator will be assigned.`,
+      id
+    );
+  }
 
   return getEvent(user, id);
 }

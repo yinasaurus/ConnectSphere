@@ -91,7 +91,8 @@ describe('SCRUM-28 unassigned queue (service)', () => {
       to_status: EVENT_STATUS.SUBMITTED,
     }));
     expect(audit.writeAudit).toHaveBeenCalledWith(1, 'EVENT_SUBMITTED', 'event', 3, { coordinatorId: null });
-    expect(audit.notifyUser).not.toHaveBeenCalled();
+    // No Coordinator is told on submit. The Organiser's own "Event submitted" notice is SCRUM-45.
+    expect(audit.notifyUser.mock.calls.every(([userId]) => userId === 1)).toBe(true);
   });
 
   /*
@@ -198,7 +199,8 @@ describe('SCRUM-28 unassigned queue (service)', () => {
     expect(again.status).toBe(EVENT_STATUS.SUBMITTED);
     expect(queued).toHaveLength(1);
     expect(queued[0].coordinatorId).toBeNull();
-    expect(audit.notifyUser).not.toHaveBeenCalled();
+    // Only the Organiser's own submission notice exists; no Coordinator is notified.
+    expect(audit.notifyUser.mock.calls.every(([userId]) => userId === 1)).toBe(true);
   });
 
   /*

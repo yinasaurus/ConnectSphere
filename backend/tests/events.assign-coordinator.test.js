@@ -83,7 +83,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
     }));
     expect(result.coordinatorId).toBe(2); // AC3: exactly one primary Coordinator
     expect(result.coordinatorId).not.toBeNull(); // AC4: no longer unassigned
-    // SCRUM-45 owns the assignment-notice assertions (US45-B01); keep this suite on assign rules.
+    // SCRUM-45 owns the assignment-notice assertions (SCRUM-45-TC04); keep this suite on assign rules.
     expect(audit.notifyUser).toHaveBeenCalled();
     expect(audit.writeAudit).toHaveBeenCalledWith(
       11,

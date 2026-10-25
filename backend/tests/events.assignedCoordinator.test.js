@@ -7,7 +7,7 @@
  *   AC4  Notified on every assign/reassign, not only first -> repeat tests (US29-N01, US29-N02)
  *   AC5  Previous Coordinator told they are unassigned     -> helper tests (US29-H*)
  *   AC2  Coordinator notified immediately on assignment    -> tested end to end ONCE in
- *        events.assignmentNotice.test.js (US45-B01, US45-R01). Not duplicated here (story note).
+ *        events.assignmentNotice.test.js (SCRUM-45-TC04, TC09). Not duplicated here (story note).
  *
  * Not built here: the Lead's reassign action is SCRUM-31. The shared helper
  * notifyCoordinatorReassigned is what that action will call, so its notices are tested now.
