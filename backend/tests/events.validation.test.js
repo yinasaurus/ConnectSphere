@@ -37,7 +37,7 @@ describe('SCUM-14 submission validation', () => {
     expect(missing.map((m) => m.field)).toContain('expectedAttendance');
   });
 
-  // SCRUM-14-TC15
+  // SCRUM-14-TC18
   it('flags a missing name and missing start/end date', () => {
     const missingName = findMissingSubmissionFields({ ...completeDraft, name: '' });
     expect(missingName.map((m) => m.field)).toContain('name');
@@ -91,7 +91,7 @@ describe('event start/end date range validation', () => {
       expect(db.insertOne).toHaveBeenCalled();
     });
 
-    // SCRUM-14-TC14
+    // SCRUM-14-TC17
     it('persists equipment and registration fields entered at creation', async () => {
       await service.createEvent(organiser, {
         name: 'Workshop with extras',
@@ -107,7 +107,7 @@ describe('event start/end date range validation', () => {
       expect(patch.registration_capacity).toBe(80);
     });
 
-    // SCRUM-14-TC16
+    // SCRUM-14-TC19
     it('after submitting, the Organiser can view the request and see its Submitted status', async () => {
       db.fetchOne.mockImplementation(async () => ({
         id: 99, organiser_id: 1, organisation_id: 10, coordinator_id: 2, status: 'DRAFT', ...completeDraft,
