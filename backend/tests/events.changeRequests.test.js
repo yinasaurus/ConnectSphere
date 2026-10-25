@@ -301,6 +301,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    *           The organiser is notified (SCRUM-69 AC6).
    * Type:     normal
    */
+  // SCRUM-35-TC01
   it('AC1+AC2: assigned coordinator approve copies proposed fields and leaves status', async () => {
     const pending = pendingRequest();
     db.fetchOne
@@ -356,6 +357,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Expected: events row is updated via updateById (the change-request path), status stays CONFIRMED.
    * Type:     normal
    */
+  // SCRUM-35-TC02
   it('AC2: approving a Confirmed change request updates fields without using updateEvent', async () => {
     event = planningEvent({ status: 'CONFIRMED' });
     const pending = pendingRequest({
@@ -388,6 +390,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    *           The organiser is notified (SCRUM-69 AC6).
    * Type:     normal
    */
+  // SCRUM-35-TC03
   it('AC2: reject leaves the event unchanged and stores an optional reason', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -435,6 +438,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Type:     security
    */
   it.each([
+    // SCRUM-35-TC04, 5, 6
     ['another coordinator', otherCoordinator],
     ['venue staff', venueStaff],
     ['organiser', organiser],
@@ -450,6 +454,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Expected: 409 ALREADY_DECIDED; event not written again.
    * Type:     negative
    */
+  // SCRUM-35-TC07
   it('AC1: an already decided request cannot be decided again', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -466,6 +471,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Expected: 404; the event is not patched.
    * Type:     negative
    */
+  // SCRUM-35-TC08
   it('AC1: a missing change request is 404', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -481,6 +487,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Expected: 404, so a coordinator cannot decide another event's request via this URL.
    * Type:     security
    */
+  // SCRUM-35-TC09
   it('AC1: a change request for another event is 404', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -962,6 +969,7 @@ describe('SCRUM-34/35 listChangeRequests', () => {
    * Expected: The row is returned so they can decide.
    * Type:     normal
    */
+  // SCRUM-35-TC10
   it('assigned coordinator can list requests', async () => {
     db.fetchMany.mockResolvedValue([pendingRequest()]);
     const rows = await service.listChangeRequests(coordinator, 3);
@@ -976,6 +984,7 @@ describe('SCRUM-34/35 listChangeRequests', () => {
    * Expected: 403; they do not receive the request body.
    * Type:     security
    */
+  // SCRUM-35-TC11
   it('another coordinator cannot list change requests', async () => {
     await expect(service.listChangeRequests(otherCoordinator, 3))
       .rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
@@ -1046,6 +1055,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 200 APPROVED.
    * Type:     normal
    */
+  // SCRUM-35-TC12
   it('assigned coordinator can approve through the API (200)', async () => {
     asUser(2, ROLES.EVENT_COORDINATOR);
     db.fetchOne
@@ -1093,6 +1103,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 403; no writes.
    * Type:     security
    */
+  // SCRUM-35-TC13
   it('organiser cannot call the decision endpoint (403)', async () => {
     asUser(1, ROLES.EVENT_ORGANISER);
 
@@ -1111,6 +1122,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 401; nothing is inserted.
    * Type:     security
    */
+  // SCRUM-34-TC18
   it('a request without a session is rejected with 401', async () => {
     const res = await request(app)
       .post('/api/events/3/change-requests')
@@ -1126,6 +1138,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 200 with that row (controller GET path).
    * Type:     normal
    */
+  // SCRUM-35-TC14
   it('assigned coordinator can GET change requests (200)', async () => {
     asUser(2, ROLES.EVENT_COORDINATOR);
     db.fetchOne.mockResolvedValueOnce(event);
@@ -1146,6 +1159,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 403.
    * Type:     security
    */
+  // SCRUM-35-TC15
   it('another coordinator cannot GET change requests (403)', async () => {
     const otherToken = jwt.sign({ sub: 9 }, env.jwtSecret);
     asUser(9, ROLES.EVENT_COORDINATOR);

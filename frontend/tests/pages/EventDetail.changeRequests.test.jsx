@@ -190,6 +190,7 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
    * Expected: POST decision { approve: true }.
    * Type:     normal
    */
+  // SCRUM-35-TC16
   it('US35-F01 (AC1+AC2): assigned coordinator can approve a pending change', async () => {
     let decided = null;
     mockApi({
@@ -212,6 +213,7 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
    * Expected: POST { approve: false, reason } so the decision is recorded.
    * Type:     normal
    */
+  // SCRUM-35-TC17
   it('US35-F02 (AC2): assigned coordinator can reject with an optional reason', async () => {
     let decided = null;
     mockApi({
@@ -227,13 +229,6 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
     expect(decided).toEqual({ approve: false, reason: 'Hall already booked' });
   });
 
-  /*
-   * AC:       SCRUM-35 AC1
-   * Scenario: Another coordinator opens the event.
-   * Setup:    user 9; event assigned to 2. The page does not fetch CRs for them.
-   * Expected: No approve/reject change buttons (API would 403).
-   * Type:     security
-   */
   /*
    * AC:       SCRUM-69 AC2
    * Scenario: Assigned coordinator approves, but the API refuses invalid requested values.
@@ -255,6 +250,14 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
     )).toBeInTheDocument();
   });
 
+  /*
+   * AC:       SCRUM-35 AC1
+   * Scenario: Another coordinator opens the event.
+   * Setup:    user 9; event assigned to 2. The page does not fetch CRs for them.
+   * Expected: No approve/reject change buttons (API would 403).
+   * Type:     security
+   */
+  // SCRUM-35-TC18
   it('US35-F03 (AC1): another coordinator does not see decide actions', async () => {
     mockApi({ changeRequests: [PENDING] });
     renderAs({ id: 9, roles: ['EVENT_COORDINATOR'] });
