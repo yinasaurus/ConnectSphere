@@ -144,7 +144,7 @@ it('US40-F05 (AC1+AC4): saving sends editable fields only and returns to the eve
  * Expected: PATCH again omits the registration fields, so the amend is not refused.
  * Type:     regression
  */
-it('US40-F06 (3A): organiser clarification amend also omits the registration fields', async () => {
+it('US38-F01 (SCRUM-63 regression): organiser clarification amend also omits the registration fields', async () => {
   mockApi({ ...EVENT, status: 'UNDER_REVIEW', subState: 'ACTION_REQUIRED', reviewRemarks: 'Add detail' });
   renderEdit({ id: 1, roles: ['EVENT_ORGANISER'] });
   const user = userEvent.setup();

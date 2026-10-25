@@ -102,6 +102,7 @@ describe('SCRUM-41 classify critical vs non-critical', () => {
    * Expected: expectedAttendance is the only critical field reported.
    * Type:     normal
    */
+  // SCRUM-41-TC01
   it('AC1+AC3: 80 → 150 is a critical attendance change', () => {
     expect(changedCriticalFields(eventRow(), eventRow({ expected_attendance: 150 }))).toEqual([
       'expectedAttendance',
@@ -115,6 +116,7 @@ describe('SCRUM-41 classify critical vs non-critical', () => {
    * Expected: No critical fields.
    * Type:     boundary
    */
+  // SCRUM-41-TC03
   it('AC3: 80 → 80 is not a change', () => {
     expect(changedCriticalFields(eventRow(), eventRow({ expected_attendance: '80' }))).toEqual([]);
   });
@@ -126,6 +128,7 @@ describe('SCRUM-41 classify critical vs non-critical', () => {
    * Expected: Still classified as a critical change.
    * Type:     boundary
    */
+  // SCRUM-41-TC02
   it('AC1+AC3: an attendance decrease is still critical', () => {
     expect(changedCriticalFields(
       eventRow({ expected_attendance: 150 }),
@@ -140,6 +143,7 @@ describe('SCRUM-41 classify critical vs non-critical', () => {
    * Expected: Each is reported as critical.
    * Type:     normal
    */
+  // SCRUM-41-TC04
   it('AC1: date, time, venue and equipment fields are critical', () => {
     expect(changedCriticalFields(eventRow(), eventRow({ start_at: OTHER_SLOT.start_at }))).toEqual(['startAt']);
     expect(changedCriticalFields(eventRow(), eventRow({ end_at: OTHER_SLOT.end_at }))).toEqual(['endAt']);
@@ -155,6 +159,7 @@ describe('SCRUM-41 classify critical vs non-critical', () => {
    * Expected: Not critical.
    * Type:     normal
    */
+  // SCRUM-41-TC05
   it('AC2: name, purpose and description are not critical', () => {
     expect(changedCriticalFields(eventRow(), eventRow({ name: 'Renamed', purpose: 'New', description: 'New' }))).toEqual([]);
   });
@@ -166,6 +171,7 @@ describe('SCRUM-41 classify critical vs non-critical', () => {
    * Expected: Equal unparseable values are not a change; different ones are.
    * Type:     boundary
    */
+  // SCRUM-41-TC06
   it('AC1: unparseable timestamps compare as strings', () => {
     expect(changedCriticalFields(
       eventRow({ start_at: 'not-a-date' }),
@@ -184,6 +190,7 @@ describe('SCRUM-41 classify critical vs non-critical', () => {
    * Expected: No critical fields (nothing to compare).
    * Type:     error
    */
+  // SCRUM-41-TC07
   it('AC1: missing previous or next is not a critical change', () => {
     expect(changedCriticalFields(null, eventRow())).toEqual([]);
     expect(changedCriticalFields(eventRow(), null)).toEqual([]);
@@ -199,6 +206,7 @@ describe('SCRUM-41 AC3 venue capacity vs new attendance', () => {
    *           is treated as unknown and therefore affected.
    * Type:     boundary
    */
+  // SCRUM-41-TC08
   it('AC3: a room is affected only when capacity is below the new attendance', () => {
     expect(venueCannotHoldAttendance(100, 150)).toBe(true);
     expect(venueCannotHoldAttendance(150, 150)).toBe(false);
@@ -215,6 +223,7 @@ describe('SCRUM-42 flagArrangementsForReview', () => {
    * Expected: Both rows get needs_review; status is not written; CRITICAL_CHANGE is audited.
    * Type:     normal
    */
+  // SCRUM-41-TC09
   it('AC1+AC2: over-capacity booking and equipment are flagged, status untouched', async () => {
     db.fetchMany
       .mockResolvedValueOnce([booking()])
@@ -460,6 +469,7 @@ describe('SCRUM-42 flagArrangementsForReview', () => {
    * Expected: No booking/equipment writes and no CRITICAL_CHANGE audit.
    * Type:     normal
    */
+  // SCRUM-41-TC10
   it('AC2: a non-critical change does not set or clear flags', async () => {
     const result = await flagArrangementsForReview(
       user,
@@ -504,6 +514,7 @@ describe('SCRUM-41 / SCRUM-42 updateEvent hook', () => {
    * Expected: Event is updated; venue_bookings and equipment_requests are not written.
    * Type:     normal
    */
+  // SCRUM-41-TC11
   it('AC2: a name-only edit does not flag arrangements', async () => {
     await eventsService.updateEvent(coordinator, 3, { name: 'Renamed workshop' });
 
@@ -519,6 +530,7 @@ describe('SCRUM-41 / SCRUM-42 updateEvent hook', () => {
    * Expected: That booking is flagged; status is not in the patch.
    * Type:     normal
    */
+  // SCRUM-41-TC12
   it('AC1: a coordinator date change flags the previous-slot booking', async () => {
     db.fetchMany
       .mockResolvedValueOnce([booking()])

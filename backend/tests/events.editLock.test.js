@@ -272,8 +272,11 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
    * Type:     error
    */
   it.each([
+    // SCRUM-40-TC15
     EVENT_STATUS.COMPLETED,
+    // SCRUM-40-TC16
     EVENT_STATUS.CANCELLED,
+    // SCRUM-40-TC17
     EVENT_STATUS.REJECTED,
   ])('AC/2A: assigned Coordinator cannot direct-edit terminal status %s', async (status) => {
     event.status = status;
