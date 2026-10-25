@@ -1,6 +1,7 @@
 /**
  * SCRUM-34: Event Organiser requests a change after submission.
  * SCRUM-35: Assigned Event Coordinator reviews and decides that request.
+ * SCRUM-36: Organiser is notified when that request is approved or rejected.
  *
  *   SCRUM-34 AC1  Organiser can request a change; unassigned Submitted is refused.
  *   SCRUM-34 AC2  Only date/time, expected attendance, venue requirements and equipment
@@ -13,7 +14,7 @@
  *   SCRUM-69 AC3  Reject still leaves the event unchanged.
  *   SCRUM-69 AC4  Approve audit records who, when, and previous/new per field.
  *   SCRUM-69 AC5  Approve flags affected venue/equipment rows for review (SCRUM-41/42).
- *   SCRUM-69 AC6  Organiser is notified on approve and on reject.
+ *   SCRUM-36 AC1  Organiser is notified on approve and on reject.
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
@@ -298,7 +299,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Scenario: Assigned coordinator approves a pending request on a Planning event.
    * Setup:    Request proposes new times, attendance, venue and equipment notes.
    * Expected: Those columns are written onto the event; status stays PLANNING; request APPROVED.
-   *           The organiser is notified (SCRUM-69 AC6).
+   *           The organiser is notified (SCRUM-36 AC1).
    * Type:     normal
    */
   // SCRUM-35-TC01
@@ -340,7 +341,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
       50,
       expect.objectContaining({ eventId: 3 })
     );
-    // SCRUM-69 AC6: decide notifies the organiser (create still does not).
+    // SCRUM-36 AC1: decide notifies the organiser (create still does not).
     expect(audit.notifyUser).toHaveBeenCalledWith(
       1,
       'CHANGE_REQUEST_DECIDED',
@@ -387,7 +388,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * AC:       SCRUM-35 AC2
    * Scenario: Assigned coordinator rejects, optionally with a reason.
    * Expected: Request REJECTED with the reason; events table is not written.
-   *           The organiser is notified (SCRUM-69 AC6).
+   *           The organiser is notified (SCRUM-36 AC1).
    * Type:     normal
    */
   // SCRUM-35-TC03
@@ -877,12 +878,13 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-69 AC6
+   * AC:       SCRUM-36 AC1
    * Scenario: Approve a valid request.
    * Expected: One CHANGE_REQUEST_DECIDED notice to the event organiser, after the writes.
    * Type:     normal
    */
-  it('AC6: the organiser is notified when the request is approved', async () => {
+  // SCRUM-36-TC01
+  it('AC1: the organiser is notified when the request is approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
       .mockResolvedValueOnce(pendingRequest());
@@ -900,12 +902,13 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-69 AC6
+   * AC:       SCRUM-36 AC1
    * Scenario: Reject with no reason.
    * Expected: Organiser is still notified; body has no reason line.
    * Type:     normal
    */
-  it('AC6: the organiser is notified when the request is rejected', async () => {
+  // SCRUM-36-TC02
+  it('AC1: the organiser is notified when the request is rejected', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
       .mockResolvedValueOnce(pendingRequest());
@@ -922,12 +925,13 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-69 AC6
+   * AC:       SCRUM-36 AC1
    * Scenario: Event has no organiser_id.
    * Expected: Decision still saves; notifyUser is called with a falsy user id and no-ops.
    * Type:     boundary
    */
-  it('AC6: a missing organiser still records the decision', async () => {
+  // SCRUM-36-TC03
+  it('AC1: a missing organiser still records the decision', async () => {
     event = planningEvent({ organiser_id: null });
     db.fetchOne
       .mockResolvedValueOnce(event)

@@ -1799,7 +1799,7 @@ function approvedChangeAuditFields(request, existing) {
 
 /**
  * Purpose: tell the event's Organiser that their change request was approved or rejected.
- * AC: SCRUM-69 AC6
+ * AC: SCRUM-36 AC1
  * Failure: none here — notifyUser no-ops when organiser_id is missing.
  */
 async function notifyChangeRequestDecision(event, decided, reason) {
@@ -1900,8 +1900,8 @@ async function createChangeRequest(user, eventId, payload) {
  * AC: SCRUM-35 AC1 (assigned coordinator decides), AC2 (approve applies the change);
  *     SCRUM-69 AC1 (every included field is written onto the event), AC2 (invalid
  *     requested values cannot be approved — request stays PENDING), AC3 (reject does not
- *     touch the event), AC4 (who/when plus previous and new values on approve), AC6
- *     (organiser is notified either way).
+ *     touch the event), AC4 (who/when plus previous and new values on approve).
+ *     SCRUM-36 AC1: organiser is notified either way.
  *     SCRUM-69 AC5 / SCRUM-41 / SCRUM-42: after the event write and before the request is
  *     marked APPROVED, affected venue/equipment rows get needs_review (flag only; status
  *     unchanged). If flagging fails, the request stays PENDING so approve can be retried.
