@@ -76,7 +76,7 @@ function as(roles, { id = 5, organisationId = 10 } = {}) {
 describe('SCRUM-39 GET /api/events/:id (event details)', () => {
   /*
    * AC:       SCRUM-39 AC1 + AC2
-   * Scenario: Each internal role opens an event in the Planning and in the Confirmed stage.
+   * Scenario: Each internal role opens a Planning event. The Coordinator also opens Confirmed.
    * Setup:    Coordinator, Venue Staff or Technical Support; event 3 in that status with
    *           attendance 120, 10:00-12:00 on 20 Oct, venue needs and equipment notes.
    * Expected: 200 with the status and every AC2 field: attendance, start and end (date and
@@ -84,12 +84,14 @@ describe('SCRUM-39 GET /api/events/:id (event details)', () => {
    * Type:     normal
    */
   it.each([
+    // SCRUM-39-TC01
     [ROLES.EVENT_COORDINATOR, 'PLANNING'],
+    // SCRUM-39-TC02
     [ROLES.EVENT_COORDINATOR, 'CONFIRMED'],
+    // SCRUM-39-TC03
     [ROLES.VENUE_STAFF, 'PLANNING'],
-    [ROLES.VENUE_STAFF, 'CONFIRMED'],
+    // SCRUM-39-TC04
     [ROLES.TECHNICAL_SUPPORT, 'PLANNING'],
-    [ROLES.TECHNICAL_SUPPORT, 'CONFIRMED'],
   ])('US39-D01 (AC1+AC2): %s sees the full details of a %s event', async (role, status) => {
     const get = as([role]);
     fetchOne.mockResolvedValueOnce(eventRow({ status }));
@@ -108,14 +110,15 @@ describe('SCRUM-39 GET /api/events/:id (event details)', () => {
 
   /*
    * AC:       SCRUM-39 AC1 + AC2
-   * Scenario: The Organiser whose organisation owns the event opens it while Planning or
-   *           Confirmed.
+   * Scenario: The Organiser whose organisation owns the event opens it while Planning.
    * Setup:    Organiser in organisation 10; event 3 belongs to organisation 10.
    * Expected: 200 with the same AC2 fields, because the client needs the latest
    *           arrangements for their own event.
    * Type:     normal
    */
-  it.each(['PLANNING', 'CONFIRMED'])('US39-D02 (AC1+AC2): the owning Organiser sees a %s event', async (status) => {
+  // SCRUM-39-TC05
+  it('US39-D02 (AC1+AC2): the owning Organiser sees a PLANNING event', async () => {
+    const status = 'PLANNING';
     const get = as([ROLES.EVENT_ORGANISER], { organisationId: 10 });
     fetchOne.mockResolvedValueOnce(eventRow({ status }));
     const res = await get('/api/events/3');
@@ -133,8 +136,11 @@ describe('SCRUM-39 GET /api/events/:id (event details)', () => {
    * Type:     error
    */
   it.each([
+    // SCRUM-39-TC06
     ['an Organiser from another organisation', [ROLES.EVENT_ORGANISER], 20, 'PLANNING'],
+    // SCRUM-39-TC07
     ['a user with an unknown role', ['UNKNOWN'], 10, 'CONFIRMED'],
+    // SCRUM-39-TC08
     ['an Attendee while the event is Planning', [ROLES.ATTENDEE], 10, 'PLANNING'],
   ])('US39-D03 (AC1): %s gets 404', async (_label, roles, organisationId, status) => {
     const get = as(roles, { organisationId });
@@ -152,6 +158,7 @@ describe('SCRUM-39 GET /api/events/:id (event details)', () => {
    *           internal notes. Attendees aren't authorised for planning details.
    * Type:     boundary
    */
+  // SCRUM-39-TC09
   it('US39-D04 (AC1): an Attendee sees a confirmed event without planning details', async () => {
     const get = as([ROLES.ATTENDEE]);
     fetchOne.mockResolvedValueOnce(eventRow({ status: 'CONFIRMED' }));
@@ -171,6 +178,7 @@ describe('SCRUM-39 GET /api/events/:id (event details)', () => {
    *           are public to Attendees.
    * Type:     error
    */
+  // SCRUM-39-TC10
   it('US39-D07 (AC1): an Attendee cannot see a confirmed event without registration', async () => {
     const get = as([ROLES.ATTENDEE]);
     fetchOne.mockResolvedValueOnce(eventRow({ status: 'CONFIRMED', registration_required: false }));
@@ -187,6 +195,7 @@ describe('SCRUM-39 GET /api/events/:id (event details)', () => {
    *           show "not recorded" instead of breaking.
    * Type:     boundary
    */
+  // SCRUM-39-TC11
   it('US39-D05 (AC2): empty AC2 fields come back as null', async () => {
     const get = as([ROLES.EVENT_COORDINATOR]);
     fetchOne.mockResolvedValueOnce(eventRow({
@@ -206,6 +215,7 @@ describe('SCRUM-39 GET /api/events/:id (event details)', () => {
    * Expected: (a) 404 "Event not found"; (b) 401 before any database lookup.
    * Type:     error
    */
+  // SCRUM-39-TC12
   it('US39-D06 (AC1): a missing event is 404 and no session is 401', async () => {
     const get = as([ROLES.EVENT_COORDINATOR]);
     fetchOne.mockResolvedValueOnce(null);
@@ -227,6 +237,7 @@ describe('SCRUM-39 GET /api/events/:id/venue-bookings (venue, AC2)', () => {
    * Expected: 200 with the venue name and booking status, read only for event 3.
    * Type:     normal
    */
+  // SCRUM-39-TC13
   it('US39-V01 (AC2): the booked venue is returned with the event', async () => {
     const get = as([ROLES.TECHNICAL_SUPPORT]);
     fetchOne.mockResolvedValueOnce(eventRow({ status: 'CONFIRMED' }));
@@ -270,6 +281,7 @@ describe('SCRUM-39 GET /api/events/:id/venue-bookings (venue, AC2)', () => {
    *           so the booking status stays visible.
    * Type:     boundary
    */
+  // SCRUM-39-TC14
   it('US39-V02 (AC2): a booking without a venue record still comes back', async () => {
     const get = as([ROLES.EVENT_COORDINATOR]);
     fetchOne.mockResolvedValueOnce(eventRow());
@@ -292,6 +304,7 @@ describe('SCRUM-39 GET /api/events/:id/equipment-requests (equipment, AC2)', () 
    *           decision reason, which is internal to Technical Support.
    * Type:     normal
    */
+  // SCRUM-39-TC15
   it('US39-E01 (AC2): lists the event equipment requests', async () => {
     const get = as([ROLES.EVENT_COORDINATOR]);
     fetchOne.mockResolvedValueOnce(eventRow());
@@ -341,6 +354,7 @@ describe('SCRUM-39 GET /api/events/:id/equipment-requests (equipment, AC2)', () 
    *           so a requirement never disappears just because the item record is gone.
    * Type:     boundary
    */
+  // SCRUM-39-TC16
   it('US39-E02 (AC2): no requests gives an empty list; a deleted item keeps its request', async () => {
     let get = as([ROLES.VENUE_STAFF]);
     fetchOne.mockResolvedValueOnce(eventRow());
@@ -364,7 +378,9 @@ describe('SCRUM-39 GET /api/events/:id/equipment-requests (equipment, AC2)', () 
    * Type:     error
    */
   it.each([
+    // SCRUM-39-TC17
     ['an Organiser from another organisation', [ROLES.EVENT_ORGANISER], 20, 404],
+    // SCRUM-39-TC18
     ['an Attendee', [ROLES.ATTENDEE], 10, 403],
   ])('US39-E03 (AC1): %s cannot read the equipment requests', async (_label, roles, organisationId, status) => {
     const get = as(roles, { organisationId });

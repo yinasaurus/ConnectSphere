@@ -581,10 +581,7 @@ it('US64-F03: the organiser does not see the Open for review button', async () =
 });
 
 /*
- * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility); SCRUM-39 AC1
- *           (agreed decision: Attendees keep the public view, so equipment requests are
- *           never requested either)
-
+ * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility)
  * Scenario: An attendee requests an event that has venue booking information.
  * Setup:    The attendee can access only a confirmed public event and is not a
  *           Coordinator or Venue Staff member.
@@ -616,7 +613,7 @@ it('loads an attendee event without requesting restricted planning data', async 
   expect(screen.queryByText('Status history')).not.toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith('/api/comments/3');
   expect(api).not.toHaveBeenCalledWith('/api/events/3/history');
-  // SCRUM-39: attendees don't get planning details, so equipment is never requested.
+  // Attendees don't get planning details, so equipment is never requested.
   expect(api).not.toHaveBeenCalledWith('/api/events/3/equipment-requests');
 });
 
