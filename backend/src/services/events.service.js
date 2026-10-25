@@ -441,13 +441,15 @@ async function createEvent(user, payload) {
  *     SCRUM-40 2A — Confirmed (and terminal) statuses reject every direct field patch.
  *     SCRUM-40 3A — Organiser direct-edits only Draft and clarification ACTION_REQUIRED.
  *     SCRUM-40 4A — ordinary fields via this path; critical Confirmed changes use change requests.
+ *     SCRUM-40 AC4 — an end before the start, or an attendance below 1, is refused and nothing is written.
  *     SCRUM-54 AC5, AC6, AC7 — a Coordinator who is not assigned is refused and the row is unchanged.
  *     SCRUM-41 / SCRUM-42 — after a successful write, critical field changes flag affected
  *     venue/equipment rows for review (status unchanged).
  * Inputs: user, event id, payload of fields to change
  * Outputs: mapped event after the patch
  * Failure: 404 if missing; 403 FORBIDDEN with no event body when the coordinator is not assigned;
- *     409 EDIT_LOCKED when the status or role blocks a direct edit
+ *     409 EDIT_LOCKED when the status or role blocks a direct edit;
+ *     400 VALIDATION_ERROR for a bad date range or an attendance below 1
  */
 async function updateEvent(user, id, payload) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
@@ -503,6 +505,9 @@ async function updateEvent(user, id, payload) {
       'EDIT_LOCKED'
     );
   }
+
+  // SCRUM-40 AC4: refuse a bad attendance (zero, negative, fraction) before anything is written.
+  parseOptionalAttendance(payload.expectedAttendance);
 
   const patch = toEventPatch(payload);
   const nextStart = 'start_at' in patch ? patch.start_at : existing.start_at;
