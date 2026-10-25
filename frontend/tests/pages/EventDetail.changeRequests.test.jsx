@@ -94,6 +94,7 @@ describe('SCRUM-34 organiser change request form', () => {
    * Expected: POST includes ISO start/end and the other permitted fields only.
    * Type:     normal
    */
+  // SCRUM-34-TC19
   it('US34-F01 (AC1+AC2): organiser submits date, attendance, venue and equipment changes', async () => {
     let posted = null;
     mockApi({ onCreate: (body) => { posted = body; } });
@@ -128,6 +129,7 @@ describe('SCRUM-34 organiser change request form', () => {
    * Expected: The change-request form is not shown.
    * Type:     negative
    */
+  // SCRUM-34-TC20
   it('US34-F02 (AC1): draft events do not offer a change request form', async () => {
     mockApi({ event: { ...EVENT, status: 'DRAFT' } });
     renderAs({ id: 1, roles: ['EVENT_ORGANISER'] });
@@ -142,6 +144,7 @@ describe('SCRUM-34 organiser change request form', () => {
    * Expected: No change-request form until a coordinator is assigned.
    * Type:     negative
    */
+  // SCRUM-34-TC21
   it('US34-F03 (AC1): unassigned submitted events do not offer a change request form', async () => {
     mockApi({ event: { ...EVENT, status: 'SUBMITTED', coordinatorId: null } });
     renderAs({ id: 1, roles: ['EVENT_ORGANISER'] });
@@ -156,6 +159,7 @@ describe('SCRUM-34 organiser change request form', () => {
    * Expected: The form is shown.
    * Type:     normal
    */
+  // SCRUM-34-TC22
   it('US34-F04 (AC1): confirmed events still offer a change request form', async () => {
     mockApi({ event: { ...EVENT, status: 'CONFIRMED' } });
     renderAs({ id: 1, roles: ['EVENT_ORGANISER'] });
@@ -169,6 +173,7 @@ describe('SCRUM-34 organiser change request form', () => {
    * Expected: The form is hidden (one pending at a time); the list is shown instead.
    * Type:     negative
    */
+  // SCRUM-34-TC23
   it('US34-F05 (AC1): pending request hides the organiser form', async () => {
     mockApi({ changeRequests: [PENDING] });
     renderAs({ id: 1, roles: ['EVENT_ORGANISER'] });

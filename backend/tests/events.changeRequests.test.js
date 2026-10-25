@@ -103,6 +103,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: A PENDING row is written with only those fields; audit is CHANGE_REQUEST_CREATED.
    * Type:     normal
    */
+  // SCRUM-34-TC01
   it('AC1+AC2: organiser can request permitted date, attendance, venue and equipment changes', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -145,6 +146,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 400; nothing is inserted.
    * Type:     negative
    */
+  // SCRUM-34-TC02
   it('AC2: unknown fields are refused', async () => {
     await expect(service.createChangeRequest(organiser, 3, {
       expectedAttendance: 80,
@@ -162,6 +164,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 400; nothing is inserted.
    * Type:     boundary
    */
+  // SCRUM-34-TC03
   it('AC2: at least one permitted field is required', async () => {
     await expect(service.createChangeRequest(organiser, 3, {})).rejects.toMatchObject({
       status: 400,
@@ -176,6 +179,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 409 CHANGE_NOT_ALLOWED; nothing is inserted.
    * Type:     negative
    */
+  // SCRUM-34-TC04, 5, 6, 7
   it.each(['DRAFT', 'CANCELLED', 'REJECTED', 'COMPLETED'])(
     'AC1: %s events cannot receive a change request',
     async (status) => {
@@ -193,6 +197,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 409 NO_COORDINATOR; nothing is inserted.
    * Type:     negative
    */
+  // SCRUM-34-TC08
   it('AC1: unassigned Submitted events cannot receive a change request', async () => {
     event = planningEvent({ status: 'SUBMITTED', coordinator_id: null });
     db.fetchOne.mockImplementation(async () => event);
@@ -207,6 +212,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 409 PENDING_CHANGE_EXISTS.
    * Type:     negative
    */
+  // SCRUM-34-TC09
   it('AC1: a second pending request is refused', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -222,6 +228,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 403; event and table unchanged.
    * Type:     security
    */
+  // SCRUM-34-TC10
   it('AC1: only the owning organiser can create a change request', async () => {
     await expect(service.createChangeRequest(coordinator, 3, { expectedAttendance: 80 }))
       .rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
@@ -235,6 +242,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 400 before insert, so a junk window cannot be stored.
    * Type:     negative
    */
+  // SCRUM-34-TC11
   it('AC2: an invalid date is refused', async () => {
     await expect(service.createChangeRequest(organiser, 3, { startAt: 'not-a-date' }))
       .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
@@ -247,6 +255,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 400; nothing is inserted.
    * Type:     boundary
    */
+  // SCRUM-34-TC12
   it('AC2: attendance below 1 is refused', async () => {
     await expect(service.createChangeRequest(organiser, 3, { expectedAttendance: 0 }))
       .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
@@ -260,6 +269,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 400 so the pending row cannot hold an impossible window.
    * Type:     negative
    */
+  // SCRUM-34-TC13
   it('AC1: a proposed start after the event end is refused', async () => {
     await expect(service.createChangeRequest(organiser, 3, {
       startAt: '2026-11-10T18:00:00.000Z',
@@ -273,6 +283,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 404, same as getEvent, so the row is not revealed.
    * Type:     security
    */
+  // SCRUM-34-TC14
   it('AC1: a hidden event is 404', async () => {
     const stranger = { id: 99, organisationId: 99, roles: [ROLES.EVENT_ORGANISER] };
     await expect(service.createChangeRequest(stranger, 3, { expectedAttendance: 80 }))
@@ -936,6 +947,7 @@ describe('SCRUM-34/35 listChangeRequests', () => {
    * Expected: That row is returned (organiser can see what they submitted).
    * Type:     normal
    */
+  // SCRUM-34-TC15
   it('owner can list requests', async () => {
     db.fetchMany.mockResolvedValue([pendingRequest()]);
     const rows = await service.listChangeRequests(organiser, 3);
@@ -992,6 +1004,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 201 PENDING; a row is inserted.
    * Type:     normal
    */
+  // SCRUM-34-TC16
   it('organiser can POST a change request (201)', async () => {
     asUser(1, ROLES.EVENT_ORGANISER);
     db.fetchOne
@@ -1014,6 +1027,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 403 before insert.
    * Type:     security
    */
+  // SCRUM-34-TC17
   it('coordinator cannot POST a change request (403)', async () => {
     asUser(2, ROLES.EVENT_COORDINATOR);
 
