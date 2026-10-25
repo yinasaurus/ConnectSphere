@@ -36,6 +36,15 @@ describe('SCUM-14 submission validation', () => {
     const missing = findMissingSubmissionFields({ ...completeDraft, expected_attendance: 0 });
     expect(missing.map((m) => m.field)).toContain('expectedAttendance');
   });
+
+  // SCRUM-14-TC15
+  it('flags a missing name and missing start/end date', () => {
+    const missingName = findMissingSubmissionFields({ ...completeDraft, name: '' });
+    expect(missingName.map((m) => m.field)).toContain('name');
+
+    const missingDates = findMissingSubmissionFields({ ...completeDraft, start_at: null, end_at: null });
+    expect(missingDates.map((m) => m.field)).toEqual(expect.arrayContaining(['startAt', 'endAt']));
+  });
 });
 
 // Bug fix: event creation/editing never checked that start comes before end
@@ -80,6 +89,36 @@ describe('event start/end date range validation', () => {
         name: 'Valid event', startAt: '2026-10-05T10:00:00Z', endAt: '2026-10-06T10:00:00Z',
       });
       expect(db.insertOne).toHaveBeenCalled();
+    });
+
+    // SCRUM-14-TC14
+    it('persists equipment and registration fields entered at creation', async () => {
+      await service.createEvent(organiser, {
+        name: 'Workshop with extras',
+        equipmentNotes: '2 projectors, 4 mics',
+        registrationRequired: true,
+        registrationCapacity: 80,
+      });
+
+      expect(db.insertOne).toHaveBeenCalled();
+      const [, patch] = db.insertOne.mock.calls[0];
+      expect(patch.equipment_notes).toBe('2 projectors, 4 mics');
+      expect(patch.registration_required).toBe(true);
+      expect(patch.registration_capacity).toBe(80);
+    });
+
+    // SCRUM-14-TC16
+    it('after submitting, the Organiser can view the request and see its Submitted status', async () => {
+      db.fetchOne.mockImplementation(async () => ({
+        id: 99, organiser_id: 1, organisation_id: 10, coordinator_id: 2, status: 'DRAFT', ...completeDraft,
+      }));
+      await service.submitEvent(organiser, 99);
+
+      db.fetchOne.mockImplementation(async () => ({
+        id: 99, organiser_id: 1, organisation_id: 10, coordinator_id: null, status: 'SUBMITTED', ...completeDraft,
+      }));
+      const viewed = await service.getEvent(organiser, 99);
+      expect(viewed.status).toBe('SUBMITTED');
     });
 
     // SCRUM-15-TC01
