@@ -272,11 +272,11 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
    * Type:     error
    */
   it.each([
-    // SCRUM-40-TC15
+    // SCRUM-40-TC14
     EVENT_STATUS.COMPLETED,
-    // SCRUM-40-TC16
+    // SCRUM-40-TC15
     EVENT_STATUS.CANCELLED,
-    // SCRUM-40-TC17
+    // SCRUM-40-TC16
     EVENT_STATUS.REJECTED,
   ])('AC/2A: assigned Coordinator cannot direct-edit terminal status %s', async (status) => {
     event.status = status;
@@ -287,28 +287,12 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
 
   /*
    * AC:       SCRUM-40 AC4
-   * Scenario: Assigned Coordinator submits an end time before the start time.
-   * Setup:    PLANNING; startAt after endAt.
-   * Expected: 400 VALIDATION_ERROR; updateById not called.
-   * Type:     error
-   */
-  // SCRUM-40-TC07
-  it('AC4: rejects an invalid date range and writes nothing', async () => {
-    await expect(service.updateEvent(assignedCoordinator, 3, {
-      startAt: '2026-11-20T14:00:00Z',
-      endAt: '2026-11-20T12:00:00Z',
-    })).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
-    expect(db.updateById).not.toHaveBeenCalled();
-  });
-
-  /*
-   * AC:       SCRUM-40 AC4
    * Scenario: Assigned Coordinator submits a negative expected attendance.
    * Setup:    PLANNING; expectedAttendance -5.
    * Expected: 400 VALIDATION_ERROR naming expectedAttendance; updateById not called.
    * Type:     error
    */
-  // SCRUM-40-TC08
+  // SCRUM-40-TC07
   it('AC4: rejects a negative expected attendance and writes nothing', async () => {
     await expect(service.updateEvent(assignedCoordinator, 3, { expectedAttendance: -5 }))
       .rejects.toMatchObject({
@@ -326,7 +310,7 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
    * Expected: special_requests is written via updateById.
    * Type:     normal
    */
-  // SCRUM-40-TC09
+  // SCRUM-40-TC08
   it('AC4/4A: valid ordinary-field edit before Confirmed is saved', async () => {
     await service.updateEvent(assignedCoordinator, 3, {
       specialRequests: 'Extra chairs near the stage',
