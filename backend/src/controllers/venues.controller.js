@@ -71,6 +71,17 @@ const decideBooking = asyncHandler(async (req, res) => {
   res.json({ booking });
 });
 
+/*
+ * Purpose: pass the authenticated Coordinator and booking id to the cancellation service.
+ * AC: SCRUM-61 AC1–AC7.
+ * Inputs: req.user and req.params.id. Output: 200 { booking }; service errors go to the error handler.
+ * Failure: propagates authorization, not-found, and invalid-status errors to the error handler.
+ */
+const cancelBooking = asyncHandler(async (req, res) => {
+  const booking = await venuesService.cancelBooking(req.user, req.params.id);
+  res.json({ booking });
+});
+
 const unavailability = asyncHandler(async (req, res) => {
   const rows = await venuesService.listUnavailability(req.query.venueId);
   res.json({ unavailability: rows });
@@ -91,6 +102,7 @@ module.exports = {
   bookings,
   requestBooking,
   decideBooking,
+  cancelBooking,
   unavailability,
   block,
 };

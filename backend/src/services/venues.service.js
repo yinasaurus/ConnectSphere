@@ -818,6 +818,47 @@ async function decideBooking(user, id, decision) {
   return updated;
 }
 
+/*
+ * Purpose: cancel one venue booking without changing its event or sibling bookings.
+ * AC: SCRUM-61 AC1–AC7 — assigned Coordinators may cancel pending, held, or approved bookings.
+ * Inputs: signed-in user and booking id. Output: the updated cancelled booking row.
+ * Failure: throws 403 for unauthorized users, 404 when the booking/event is missing, and 409 for invalid status.
+ */
+async function cancelBooking(user, bookingId) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
+    throw httpError(403, 'Only coordinators can cancel venue bookings', 'FORBIDDEN');
+  }
+
+  const booking = await fetchOne(
+    supabase.from('venue_bookings').select('*').eq('id', bookingId)
+  );
+  if (!booking) throw httpError(404, 'Booking not found', 'NOT_FOUND');
+  if (booking.status === BOOKING_STATUS.CANCELLED) {
+    throw httpError(409, 'This booking has already been cancelled', 'ALREADY_CANCELLED');
+  }
+  if (![BOOKING_STATUS.PENDING, BOOKING_STATUS.TENTATIVE, BOOKING_STATUS.APPROVED].includes(booking.status)) {
+    throw httpError(409, 'This booking cannot be cancelled in its current status', 'INVALID_STATUS');
+  }
+
+  const event = await fetchOne(
+    supabase.from('events').select('*').eq('id', booking.event_id)
+  );
+  if (!event) throw httpError(404, 'Event not found', 'NOT_FOUND');
+  if (event.coordinator_id !== user.id) {
+    throw httpError(403, 'Only the assigned coordinator can cancel a booking', 'FORBIDDEN');
+  }
+
+  const updated = await updateById('venue_bookings', bookingId, {
+    status: BOOKING_STATUS.CANCELLED,
+    updated_at: new Date().toISOString(),
+  });
+  await writeAudit(user.id, 'BOOKING_CANCELLED', 'venue_booking', bookingId, {
+    eventId: booking.event_id,
+    venueId: booking.venue_id,
+  });
+  return updated;
+}
+
 /**
  * Purpose: the text of the notice an event's Coordinator gets when Venue Staff approve or
  * reject their venue booking request, so they can go ahead or look for another venue
@@ -947,6 +988,7 @@ module.exports = {
   listBookings,
   requestBooking,
   decideBooking,
+  cancelBooking,
   buildBookingDecisionNotice,
   listUnavailability,
   blockVenue,

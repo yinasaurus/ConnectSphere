@@ -850,6 +850,21 @@ export default function EventDetail() {
                     ✓ Confirmed venue booking
                   </p>
                 )}
+                {/*
+                 * Purpose: expose cancellation for an eligible booking to its assigned Coordinator.
+                 * AC: SCRUM-61 AC1/AC5 — only pending, held, or approved bookings can be cancelled.
+                 * Inputs: current user, event assignment, and booking status. Output: cancel request and refreshed event data.
+                 * Failure: run displays API errors and leaves the booking unchanged when cancellation fails.
+                 */}
+                {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR)
+                  && ['PENDING', 'TENTATIVE', 'APPROVED'].includes(booking.status) && (
+                  <button
+                    className="btn ghost"
+                    onClick={() => run(() => api(`/api/venues/bookings/${booking.id}/cancel`, { method: 'POST' }))}
+                  >
+                    Cancel booking
+                  </button>
+                )}
               </div>
             )) : <p className="muted">No booking yet. Essential arrangements must be approved before confirmation.</p>}
             {/* A coordinator may create independent requests for the same event. */}
