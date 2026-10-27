@@ -150,6 +150,181 @@ describe('SCRUM-61 cancel one venue booking', () => {
   });
 
   /*
+   * - AC: SCRUM-61 AC8.
+   * - Scenario: Cancelling an approved booking on a Confirmed event returns the event to Planning.
+   * - Setup: The booking belongs to a Confirmed event assigned to the signed-in Coordinator.
+   * - Expected: The booking is cancelled, the event is updated to PLANNING, and audit records
+   *   both the booking cancellation and automatic status transition.
+   * - Type: normal.
+   */
+  it('transitions a Confirmed event to Planning when a booking is cancelled', async () => {
+    const confirmedEvent = { ...EVENT_ROW, status: 'CONFIRMED' };
+    setupCancellation(APPROVED_BOOKING, confirmedEvent);
+
+    const result = await venuesService.cancelBooking(COORDINATOR, APPROVED_BOOKING.id);
+
+    expect(result.status).toBe(BOOKING_STATUS.CANCELLED);
+    expect(updateById).toHaveBeenNthCalledWith(
+      1,
+      'venue_bookings',
+      APPROVED_BOOKING.id,
+      expect.objectContaining({ status: BOOKING_STATUS.CANCELLED })
+    );
+    expect(updateById).toHaveBeenNthCalledWith(
+      2,
+      'events',
+      confirmedEvent.id,
+      expect.objectContaining({ status: 'PLANNING', updated_at: expect.any(String) })
+    );
+    expect(writeAudit).toHaveBeenCalledTimes(2);
+    expect(writeAudit).toHaveBeenNthCalledWith(
+      1,
+      COORDINATOR.id,
+      'BOOKING_CANCELLED',
+      'venue_booking',
+      APPROVED_BOOKING.id,
+      { eventId: APPROVED_BOOKING.event_id, venueId: APPROVED_BOOKING.venue_id }
+    );
+    expect(writeAudit).toHaveBeenCalledWith(
+      COORDINATOR.id,
+      'EVENT_STATUS_AUTO_CHANGED',
+      'event',
+      confirmedEvent.id,
+      {
+        from_status: 'CONFIRMED',
+        to_status: 'PLANNING',
+        reason: 'venue_booking_cancelled',
+        cancelled_booking_id: APPROVED_BOOKING.id,
+      }
+    );
+  });
+
+  /*
+   * - AC: SCRUM-61 AC8 edge case.
+   * - Scenario: Cancelling a booking on a Planning event leaves the event in Planning.
+   * - Setup: The assigned Coordinator cancels an approved booking for a PLANNING event.
+   * - Expected: Only the booking is updated; no event status update or transition audit occurs.
+   * - Type: boundary.
+   */
+  it('keeps a Planning event in Planning when a booking is cancelled', async () => {
+    setupCancellation(APPROVED_BOOKING, EVENT_ROW);
+
+    await venuesService.cancelBooking(COORDINATOR, APPROVED_BOOKING.id);
+
+    expect(updateById).toHaveBeenCalledTimes(1);
+    expect(updateById).toHaveBeenCalledWith(
+      'venue_bookings',
+      APPROVED_BOOKING.id,
+      expect.objectContaining({ status: BOOKING_STATUS.CANCELLED })
+    );
+    expect(writeAudit).toHaveBeenCalledTimes(1);
+    expect(writeAudit).toHaveBeenCalledWith(
+      COORDINATOR.id,
+      'BOOKING_CANCELLED',
+      'venue_booking',
+      APPROVED_BOOKING.id,
+      { eventId: APPROVED_BOOKING.event_id, venueId: APPROVED_BOOKING.venue_id }
+    );
+  });
+
+  /*
+   * - AC: SCRUM-61 AC9.
+   * - Scenario: A Confirmed event permits cancellation of one of its approved venue bookings.
+   * - Setup: The assigned Coordinator cancels an approved booking on a CONFIRMED event.
+   * - Expected: Cancellation succeeds without a status-based 409 response.
+   * - Type: normal.
+   */
+  it('allows cancellation of a booking for a Confirmed event', async () => {
+    setupCancellation(APPROVED_BOOKING, { ...EVENT_ROW, status: 'CONFIRMED' });
+
+    await expect(
+      venuesService.cancelBooking(COORDINATOR, APPROVED_BOOKING.id)
+    ).resolves.toMatchObject({ status: BOOKING_STATUS.CANCELLED });
+  });
+
+  /*
+   * - AC: SCRUM-61 AC10.
+   * - Scenario: Cancellation of a booking for a Completed event is rejected.
+   * - Setup: The assigned Coordinator attempts to cancel an approved booking belonging to a COMPLETED event.
+   * - Expected: The service returns 409 with the completed-event message and changes neither
+   *   the booking nor audit records.
+   * - Type: error.
+   */
+  it('rejects cancellation of bookings for Completed events', async () => {
+    setupCancellation(APPROVED_BOOKING, { ...EVENT_ROW, status: 'COMPLETED' });
+
+    await expect(
+      venuesService.cancelBooking(COORDINATOR, APPROVED_BOOKING.id)
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'Cannot cancel bookings for completed events',
+      code: 'EVENT_COMPLETED',
+    });
+    expect(updateById).not.toHaveBeenCalled();
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  /*
+   * - AC: SCRUM-61 AC10 boundary.
+   * - Scenario: Completed-event validation takes precedence over duplicate cancellation validation.
+   * - Setup: The event is COMPLETED and its selected booking is already CANCELLED.
+   * - Expected: The service returns the completed-event 409 message, not ALREADY_CANCELLED.
+   * - Type: boundary.
+   */
+  it('prioritizes Completed event validation over duplicate cancellation check', async () => {
+    setupCancellation(CANCELLED_BOOKING, { ...EVENT_ROW, status: 'COMPLETED' });
+
+    await expect(
+      venuesService.cancelBooking(COORDINATOR, CANCELLED_BOOKING.id)
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'Cannot cancel bookings for completed events',
+      code: 'EVENT_COMPLETED',
+    });
+    expect(updateById).not.toHaveBeenCalled();
+  });
+
+  /*
+   * - AC: SCRUM-61 AC8 partial-success handling.
+   * - Scenario: The event status update fails after a venue booking is cancelled.
+   * - Setup: The event is CONFIRMED and the event update helper rejects with a database error.
+   * - Expected: The booking remains committed as cancelled and the caller receives an explicit
+   *   partial-success error.
+   * - Type: error.
+   */
+  it('reports partial success when the Confirmed event status update fails', async () => {
+    setupCancellation(APPROVED_BOOKING, { ...EVENT_ROW, status: 'CONFIRMED' });
+    updateById
+      .mockResolvedValueOnce({ id: APPROVED_BOOKING.id, status: BOOKING_STATUS.CANCELLED })
+      .mockRejectedValueOnce(new Error('database unavailable'));
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await expect(
+        venuesService.cancelBooking(COORDINATOR, APPROVED_BOOKING.id)
+      ).rejects.toMatchObject({
+        status: 500,
+        code: 'EVENT_STATUS_UPDATE_FAILED',
+        message: expect.stringContaining('booking was cancelled'),
+      });
+      expect(updateById).toHaveBeenCalledTimes(2);
+      expect(writeAudit).toHaveBeenCalledWith(
+        COORDINATOR.id,
+        'BOOKING_CANCELLED',
+        'venue_booking',
+        APPROVED_BOOKING.id,
+        { eventId: APPROVED_BOOKING.event_id, venueId: APPROVED_BOOKING.venue_id }
+      );
+      expect(consoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to move event'),
+        expect.any(Error)
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  /*
    * - AC: SCRUM-61 AC4.
    * - Scenario: A cancelled booking overlaps a venue availability search window.
    * - Setup: The conflict query returns a booking with status CANCELLED at the requested venue
@@ -201,7 +376,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
     ['REJECTED', REJECTED_BOOKING, 'INVALID_STATUS'],
   ])('rejects a %s booking with 409', async (_label, booking, code) => {
     mockUser = COORDINATOR;
-    fetchOne.mockResolvedValueOnce(booking);
+    fetchOne.mockResolvedValueOnce(booking).mockResolvedValueOnce(EVENT_ROW);
 
     const result = await request(app).post(`/api/venues/bookings/${booking.id}/cancel`);
 

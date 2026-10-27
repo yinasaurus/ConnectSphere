@@ -857,6 +857,7 @@ export default function EventDetail() {
                  * Failure: run displays API errors and leaves the booking unchanged when cancellation fails.
                  */}
                 {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR)
+                  && event.status !== 'COMPLETED'
                   && ['PENDING', 'TENTATIVE', 'APPROVED'].includes(booking.status) && (
                   <button
                     className="btn ghost"

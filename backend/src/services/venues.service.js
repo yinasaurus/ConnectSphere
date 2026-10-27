@@ -8,7 +8,7 @@ const {
   throwIf,
 } = require('../config/db');
 const { ROLES } = require('../constants/roles');
-const { BOOKING_STATUS } = require('../constants/statuses');
+const { BOOKING_STATUS, EVENT_STATUS } = require('../constants/statuses');
 const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
 const { writeAudit, notifyUser } = require('./audit.service');
@@ -819,10 +819,10 @@ async function decideBooking(user, id, decision) {
 }
 
 /*
- * Purpose: cancel one venue booking without changing its event or sibling bookings.
- * AC: SCRUM-61 AC1–AC7 — assigned Coordinators may cancel pending, held, or approved bookings.
+ * Purpose: cancel one venue booking and move its Confirmed event back to Planning when needed.
+ * AC: SCRUM-61 AC1–AC10 — assigned Coordinators may cancel eligible bookings except for Completed events.
  * Inputs: signed-in user and booking id. Output: the updated cancelled booking row.
- * Failure: throws 403 for unauthorized users, 404 when the booking/event is missing, and 409 for invalid status.
+ * Failure: throws authorization, missing-row, or conflict errors before mutation; status update failures report partial success.
  */
 async function cancelBooking(user, bookingId) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
@@ -833,12 +833,6 @@ async function cancelBooking(user, bookingId) {
     supabase.from('venue_bookings').select('*').eq('id', bookingId)
   );
   if (!booking) throw httpError(404, 'Booking not found', 'NOT_FOUND');
-  if (booking.status === BOOKING_STATUS.CANCELLED) {
-    throw httpError(409, 'This booking has already been cancelled', 'ALREADY_CANCELLED');
-  }
-  if (![BOOKING_STATUS.PENDING, BOOKING_STATUS.TENTATIVE, BOOKING_STATUS.APPROVED].includes(booking.status)) {
-    throw httpError(409, 'This booking cannot be cancelled in its current status', 'INVALID_STATUS');
-  }
 
   const event = await fetchOne(
     supabase.from('events').select('*').eq('id', booking.event_id)
@@ -846,6 +840,23 @@ async function cancelBooking(user, bookingId) {
   if (!event) throw httpError(404, 'Event not found', 'NOT_FOUND');
   if (event.coordinator_id !== user.id) {
     throw httpError(403, 'Only the assigned coordinator can cancel a booking', 'FORBIDDEN');
+  }
+
+  /*
+   * Purpose: block changes to bookings that belong to a completed event.
+   * AC: SCRUM-61 AC10 — completed events are historical records and cannot be modified.
+   * Inputs: the assigned event row. Output: throws 409 before any database writes.
+   * Failure: the request is rejected with EVENT_COMPLETED and the booking remains unchanged.
+   */
+  if (event.status === EVENT_STATUS.COMPLETED) {
+    throw httpError(409, 'Cannot cancel bookings for completed events', 'EVENT_COMPLETED');
+  }
+
+  if (booking.status === BOOKING_STATUS.CANCELLED) {
+    throw httpError(409, 'This booking has already been cancelled', 'ALREADY_CANCELLED');
+  }
+  if (![BOOKING_STATUS.PENDING, BOOKING_STATUS.TENTATIVE, BOOKING_STATUS.APPROVED].includes(booking.status)) {
+    throw httpError(409, 'This booking cannot be cancelled in its current status', 'INVALID_STATUS');
   }
 
   const updated = await updateById('venue_bookings', bookingId, {
@@ -856,6 +867,39 @@ async function cancelBooking(user, bookingId) {
     eventId: booking.event_id,
     venueId: booking.venue_id,
   });
+
+  /*
+   * Purpose: return a Confirmed event to Planning after losing a venue booking.
+   * AC: SCRUM-61 AC8/AC9 — Confirmed events permit booking cancellation and require re-planning afterward.
+   * Inputs: the previously loaded event and cancelled booking. Output: event status is set to PLANNING and the transition is audited.
+   * Failure: logs the event-update error and returns an explicit partial-success error; the booking remains cancelled.
+   */
+  if (event.status === EVENT_STATUS.CONFIRMED) {
+    try {
+      const eventUpdate = await updateById('events', event.id, {
+        status: EVENT_STATUS.PLANNING,
+        updated_at: new Date().toISOString(),
+      });
+      if (!eventUpdate) {
+        throw new Error(`Event ${event.id} was not updated after its venue booking was cancelled`);
+      }
+    } catch (error) {
+      console.error(`Failed to move event ${event.id} to Planning after booking ${bookingId} was cancelled`, error);
+      throw httpError(
+        500,
+        'The booking was cancelled, but the event could not be moved to Planning. The cancellation has been saved.',
+        'EVENT_STATUS_UPDATE_FAILED'
+      );
+    }
+
+    await writeAudit(user.id, 'EVENT_STATUS_AUTO_CHANGED', 'event', event.id, {
+      from_status: EVENT_STATUS.CONFIRMED,
+      to_status: EVENT_STATUS.PLANNING,
+      reason: 'venue_booking_cancelled',
+      cancelled_booking_id: bookingId,
+    });
+  }
+
   return updated;
 }
 

@@ -16,10 +16,18 @@ import { useAuth } from '../../src/auth';
 jest.mock('../../src/api', () => ({ api: jest.fn() }));
 jest.mock('../../src/auth', () => ({ useAuth: jest.fn() }));
 
-function renderBookingPage(status, assigned = true) {
+function renderBookingPage(status, assigned = true, eventStatus = 'PLANNING', afterCancellationStatus = eventStatus) {
+  let cancellationSucceeded = false;
   api.mockImplementation(async (path) => {
     if (path === '/api/events/3') {
-      return { event: { id: 3, name: 'Workshop', coordinatorId: assigned ? 21 : 99, status: 'PLANNING' } };
+      return {
+        event: {
+          id: 3,
+          name: 'Workshop',
+          coordinatorId: assigned ? 21 : 99,
+          status: cancellationSucceeded ? afterCancellationStatus : eventStatus,
+        },
+      };
     }
     if (path === '/api/events/3/history') return { history: [] };
     if (path === '/api/comments/3') return { comments: [] };
@@ -28,7 +36,10 @@ function renderBookingPage(status, assigned = true) {
       return { bookings: [{ id: 10, event_id: 3, venue_id: 8, venue_name: 'Innovation Hall', status }] };
     }
     if (path === '/api/events/3/status') return { event: { status: 'PLANNING' } };
-    if (path === '/api/venues/bookings/10/cancel') return { booking: { id: 10, status: 'CANCELLED' } };
+    if (path === '/api/venues/bookings/10/cancel') {
+      cancellationSucceeded = true;
+      return { booking: { id: 10, status: 'CANCELLED' } };
+    }
     if (path === '/api/events/3/registrations') return { registrations: [] };
     if (path === '/api/events/3/change-requests') return { changeRequests: [] };
     throw new Error(`Unexpected API path: ${path}`);
@@ -93,6 +104,31 @@ describe('SCRUM-61 cancel booking action', () => {
   });
 
   /*
+   * - AC: SCRUM-61 AC10.
+   * - Scenario: The assigned Coordinator views a booking for a Completed event.
+   * - Setup: The event is COMPLETED and its booking is APPROVED.
+   * - Expected: The Cancel booking button is not rendered.
+   * - Type: boundary.
+   */
+  it('hides Cancel booking for bookings on Completed events', async () => {
+    renderBookingPage('APPROVED', true, 'COMPLETED');
+    await screen.findByText('Innovation Hall');
+    expect(screen.queryByRole('button', { name: /cancel booking/i })).not.toBeInTheDocument();
+  });
+
+  /*
+   * - AC: SCRUM-61 AC9.
+   * - Scenario: The assigned Coordinator views an approved booking for a Confirmed event.
+   * - Setup: The event is CONFIRMED and the booking is APPROVED.
+   * - Expected: The Cancel booking button is visible and can be clicked.
+   * - Type: normal.
+   */
+  it('shows Cancel booking for bookings on Confirmed events', async () => {
+    renderBookingPage('APPROVED', true, 'CONFIRMED');
+    expect(await screen.findByRole('button', { name: /cancel booking/i })).toBeInTheDocument();
+  });
+
+  /*
    * - AC: SCRUM-61 AC1, AC2.
    * - Scenario: The assigned Coordinator clicks Cancel booking.
    * - Setup: Booking 10 is cancellable and its event is assigned to the signed-in Coordinator.
@@ -105,5 +141,21 @@ describe('SCRUM-61 cancel booking action', () => {
     await user.click(await screen.findByRole('button', { name: /cancel booking/i }));
 
     expect(api).toHaveBeenCalledWith('/api/venues/bookings/10/cancel', { method: 'POST' });
+  });
+
+  /*
+   * - AC: SCRUM-61 AC8.
+   * - Scenario: The event page reflects the automatic transition after cancelling a Confirmed event's booking.
+   * - Setup: The event begins CONFIRMED; cancellation succeeds and the next event fetch returns PLANNING.
+   * - Expected: The page displays the updated Planning status after the cancellation action.
+   * - Type: normal.
+   */
+  it('displays Planning after cancelling a booking on a Confirmed event', async () => {
+    renderBookingPage('APPROVED', true, 'CONFIRMED', 'PLANNING');
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: /cancel booking/i }));
+
+    expect(await screen.findByText('Planning')).toBeInTheDocument();
   });
 });
