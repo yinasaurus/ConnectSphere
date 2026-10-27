@@ -76,7 +76,7 @@ beforeEach(() => jest.clearAllMocks());
  * Expected: Form is not shown; locked message mentions change requests.
  * Type:     error / UI lock
  */
-// SCRUM-40-TC11
+// SCRUM-40-TC10
 it('US40-F03 (AC3/2A): Confirmed edit URL shows the locked message instead of the form', async () => {
   mockApi({ ...EVENT, status: 'CONFIRMED' });
   renderEdit(COORDINATOR);
@@ -95,7 +95,7 @@ it('US40-F03 (AC3/2A): Confirmed edit URL shows the locked message instead of th
  *           "Submit for review" (those belong to the organiser's draft flow).
  * Type:     normal
  */
-// SCRUM-40-TC12
+// SCRUM-40-TC11
 it('US40-F04 (AC1/1C): Coordinator sees Save changes, not the draft / submit buttons', async () => {
   mockApi(EVENT);
   renderEdit(COORDINATOR);
@@ -116,7 +116,7 @@ it('US40-F04 (AC1/1C): Coordinator sees Save changes, not the draft / submit but
  *           lands back on the event page, not the drafts list; /submit is never called.
  * Type:     normal / regression
  */
-// SCRUM-40-TC13
+// SCRUM-40-TC12
 it('US40-F05 (AC1+AC4): saving sends editable fields only and returns to the event page', async () => {
   mockApi(EVENT);
   renderEdit(COORDINATOR);

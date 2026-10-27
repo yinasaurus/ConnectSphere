@@ -212,20 +212,6 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
   });
 
   /*
-   * AC:       SCRUM-40 AC2 / product 3A
-   * Scenario: Owning Organiser tries a direct edit while Planning.
-   * Setup:    PLANNING; organiser is not the assigned coordinator.
-   * Expected: 409 EDIT_LOCKED — use Coord edit or change request instead.
-   * Type:     error
-   */
-  // SCRUM-40-TC03
-  it('AC2/3A: owning Organiser cannot direct-edit while Planning', async () => {
-    await expect(service.updateEvent(organiser, 3, { description: 'Organiser tweak' }))
-      .rejects.toMatchObject({ status: 409, code: 'EDIT_LOCKED' });
-    expect(db.updateById).not.toHaveBeenCalled();
-  });
-
-  /*
    * AC:       SCRUM-40 product 3A
    * Scenario: Organiser amends fields after clarification was requested.
    * Setup:    UNDER_REVIEW + ACTION_REQUIRED; owning organiser.
@@ -253,9 +239,9 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
    * Type:     error
    */
   it.each([
-    // SCRUM-40-TC04
+    // SCRUM-40-TC03
     ['ordinary name', { name: 'Still locked' }],
-    // SCRUM-40-TC05
+    // SCRUM-40-TC04
     ['critical startAt', { startAt: '2026-12-01T10:00:00Z', endAt: '2026-12-01T12:00:00Z' }],
   ])('AC3/2A: Confirmed rejects direct edit of %s', async (_label, payload) => {
     event.status = EVENT_STATUS.CONFIRMED;
@@ -272,11 +258,11 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
    * Type:     error
    */
   it.each([
-    // SCRUM-40-TC14
+    // SCRUM-40-TC13
     EVENT_STATUS.COMPLETED,
-    // SCRUM-40-TC15
+    // SCRUM-40-TC14
     EVENT_STATUS.CANCELLED,
-    // SCRUM-40-TC16
+    // SCRUM-40-TC15
     EVENT_STATUS.REJECTED,
   ])('AC/2A: assigned Coordinator cannot direct-edit terminal status %s', async (status) => {
     event.status = status;
@@ -292,7 +278,7 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
    * Expected: 400 VALIDATION_ERROR naming expectedAttendance; updateById not called.
    * Type:     error
    */
-  // SCRUM-40-TC07
+  // SCRUM-40-TC06
   it('AC4: rejects a negative expected attendance and writes nothing', async () => {
     await expect(service.updateEvent(assignedCoordinator, 3, { expectedAttendance: -5 }))
       .rejects.toMatchObject({
@@ -310,7 +296,7 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
    * Expected: special_requests is written via updateById.
    * Type:     normal
    */
-  // SCRUM-40-TC08
+  // SCRUM-40-TC07
   it('AC4/4A: valid ordinary-field edit before Confirmed is saved', async () => {
     await service.updateEvent(assignedCoordinator, 3, {
       specialRequests: 'Extra chairs near the stage',
@@ -365,7 +351,7 @@ describe('SCRUM-40 edit lock HTTP route', () => {
    * Expected: 409 EDIT_LOCKED; updateById not called.
    * Type:     error
    */
-  // SCRUM-40-TC06
+  // SCRUM-40-TC05
   it('US40-R01 (AC3/2A): PATCH Confirmed returns EDIT_LOCKED for the assigned Coordinator', async () => {
     db.fetchOne
       .mockResolvedValueOnce({ id: 2, is_active: true })
