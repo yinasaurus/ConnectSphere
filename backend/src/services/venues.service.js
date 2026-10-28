@@ -880,6 +880,9 @@ async function cancelBooking(user, bookingId) {
         status: EVENT_STATUS.PLANNING,
         updated_at: new Date().toISOString(),
       });
+      if (!eventUpdate) {
+        throw new Error(`Event ${event.id} was not updated after its venue booking was cancelled`);
+      }
       // Inserts a record into event_status_history table when a cancellation for confirmed event occurs
       // This to ensure the "status history" section of event page displays the status change
       await insertOne('event_status_history', {
@@ -889,9 +892,6 @@ async function cancelBooking(user, bookingId) {
         to_status: EVENT_STATUS.PLANNING,
         note: 'Venue booking cancelled',
       });
-      if (!eventUpdate) {
-        throw new Error(`Event ${event.id} was not updated after its venue booking was cancelled`);
-      }
     } catch (error) {
       console.error(`Failed to move event ${event.id} to Planning after booking ${bookingId} was cancelled`, error);
       throw httpError(
