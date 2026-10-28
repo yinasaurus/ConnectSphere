@@ -36,7 +36,7 @@ jest.mock('../src/middleware/auth', () => {
   };
 });
 
-const { supabase, fetchOne, fetchMany, updateById } = require('../src/config/db');
+const { supabase, fetchOne, fetchMany, insertOne, updateById } = require('../src/config/db');
 const { writeAudit } = require('../src/services/audit.service');
 const venuesService = require('../src/services/venues.service');
 const { createApp } = require('../src/app');
@@ -175,6 +175,16 @@ describe('SCRUM-61 cancel one venue booking', () => {
       'events',
       confirmedEvent.id,
       expect.objectContaining({ status: 'PLANNING', updated_at: expect.any(String) })
+    );
+    expect(insertOne).toHaveBeenCalledWith(
+      'event_status_history',
+      expect.objectContaining({
+        event_id: confirmedEvent.id,
+        actor_id: COORDINATOR.id,
+        from_status: 'CONFIRMED',
+        to_status: 'PLANNING',
+        note: 'Venue booking cancelled',
+      })
     );
     expect(writeAudit).toHaveBeenCalledTimes(2);
     expect(writeAudit).toHaveBeenNthCalledWith(

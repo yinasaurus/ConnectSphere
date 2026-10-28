@@ -880,6 +880,15 @@ async function cancelBooking(user, bookingId) {
         status: EVENT_STATUS.PLANNING,
         updated_at: new Date().toISOString(),
       });
+      // Inserts a record into event_status_history table when a cancellation for confirmed event occurs
+      // This to ensure the "status history" section of event page displays the status change
+      await insertOne('event_status_history', {
+        event_id: event.id,
+        actor_id: user.id,
+        from_status: EVENT_STATUS.CONFIRMED,
+        to_status: EVENT_STATUS.PLANNING,
+        note: 'Venue booking cancelled',
+      });
       if (!eventUpdate) {
         throw new Error(`Event ${event.id} was not updated after its venue booking was cancelled`);
       }
