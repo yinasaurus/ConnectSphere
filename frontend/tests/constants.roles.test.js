@@ -8,6 +8,7 @@ describe('SCRUM-54 role labels after login', () => {
    * Expected: Lead is labelled "Lead" and Safety Officer is labelled "Safety Officer".
    * Type: normal
    */
+  // SCRUM-54-TC25
   it('labels Event Coordinator Lead as Lead and Safety Officer as Safety Officer', () => {
     expect(ROLE_LABELS[ROLES.EVENT_COORDINATOR_LEAD]).toBe('Lead');
     expect(ROLE_LABELS[ROLES.SAFETY_OFFICER]).toBe('Safety Officer');
@@ -20,6 +21,7 @@ describe('SCRUM-54 role labels after login', () => {
    * Expected: Home is the unassigned queue (Lead is checked first), which they are allowed to use.
    * Type: normal
    */
+  // SCRUM-54-TC26
   it('sends a Coordinator + Lead hybrid to the unassigned queue', () => {
     expect(homePathForRoles([ROLES.EVENT_COORDINATOR, ROLES.EVENT_COORDINATOR_LEAD])).toBe(
       '/app/events/unassigned'

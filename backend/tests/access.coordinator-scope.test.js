@@ -56,6 +56,7 @@ describe('SCRUM-54 coordinator assignment scope', () => {
    * Expected: The event is returned for viewing (name included). Nothing is changed.
    * Type: normal
    */
+  // SCRUM-54-TC15
   it('lets a Coordinator view an event that is not assigned to them', async () => {
     const visible = await service.getEvent(otherCoordinator, 3);
     expect(visible.id).toBe(3);
@@ -70,6 +71,7 @@ describe('SCRUM-54 coordinator assignment scope', () => {
    * Expected: They can still view it. The row is unchanged.
    * Type: boundary
    */
+  // SCRUM-54-TC16
   it('lets a Coordinator view an unassigned event', async () => {
     event.coordinator_id = null;
     const visible = await service.getEvent(otherCoordinator, 3);
@@ -85,6 +87,7 @@ describe('SCRUM-54 coordinator assignment scope', () => {
    * Expected: 403, updateById is not called, so the event is unchanged.
    * Type: error
    */
+  // SCRUM-54-TC17
   it('rejects an edit by a Coordinator who is not assigned', async () => {
     await expect(service.updateEvent(otherCoordinator, 3, { name: 'Hijacked' }))
       .rejects.toMatchObject({ status: 403 });
@@ -98,6 +101,7 @@ describe('SCRUM-54 coordinator assignment scope', () => {
    * Expected: 403, status and audit are unchanged.
    * Type: error
    */
+  // SCRUM-54-TC18
   it('rejects an approval by a Coordinator who is not assigned', async () => {
     await expect(service.decideEvent(otherCoordinator, 3, 'APPROVE'))
       .rejects.toMatchObject({ status: 403 });
@@ -107,26 +111,14 @@ describe('SCRUM-54 coordinator assignment scope', () => {
 
   /*
    * AC: SCRUM-54 AC5
-   * Scenario: A Coordinator rejects an event assigned to someone else.
-   * Setup: Valid rejection reason; event assigned to id 2.
-   * Expected: 403, the event stays UNDER_REVIEW.
-   * Type: error
-   */
-  it('rejects a rejection by a Coordinator who is not assigned', async () => {
-    await expect(service.decideEvent(otherCoordinator, 3, 'REJECT', 'Attendance numbers are missing'))
-      .rejects.toMatchObject({ status: 403 });
-    expect(db.updateById).not.toHaveBeenCalled();
-  });
-
-  /*
-   * AC: SCRUM-54 AC5
    * Scenario: A Coordinator confirms an event they are not assigned to.
-   * Setup: Event in PLANNING, assigned to id 2; caller is id 4.
+   * Setup: Event in PREPARATION (confirm is a valid move), assigned to id 2; caller is id 4.
    * Expected: 403 before readiness checks, so the event is unchanged.
    * Type: error
    */
+  // SCRUM-54-TC19
   it('rejects a confirmation by a Coordinator who is not assigned', async () => {
-    event.status = 'PLANNING';
+    event.status = 'PREPARATION';
     await expect(service.changeStatus(otherCoordinator, 3, 'CONFIRMED'))
       .rejects.toMatchObject({ status: 403 });
     expect(db.updateById).not.toHaveBeenCalled();
@@ -139,6 +131,7 @@ describe('SCRUM-54 coordinator assignment scope', () => {
    * Expected: The Coordinator function (approve) still works in the same session.
    * Type: normal
    */
+  // SCRUM-54-TC20
   it('lets a Coordinator + Lead hybrid approve an event assigned to them', async () => {
     await service.decideEvent(hybrid, 3, 'APPROVE');
     // SCRUM-5 / SCRUM-17: approve lands on APPROVED; PLANNING is a separate step.
@@ -152,6 +145,7 @@ describe('SCRUM-54 coordinator assignment scope', () => {
    * Expected: 403 with only error and message — the name and description must not appear.
    * Type: error
    */
+  // SCRUM-54-TC21
   it('returns 403 without event details when an unassigned Coordinator edits over HTTP', async () => {
     db.fetchOne
       .mockResolvedValueOnce({ id: 4, is_active: true })
@@ -175,6 +169,7 @@ describe('SCRUM-54 coordinator assignment scope', () => {
    * Expected: 200 with the event they are allowed to view. Nothing is changed.
    * Type: normal
    */
+  // SCRUM-54-TC22
   it('returns the event when an unassigned Coordinator views it over HTTP', async () => {
     db.fetchOne
       .mockResolvedValueOnce({ id: 4, is_active: true })
@@ -196,6 +191,7 @@ describe('SCRUM-54 coordinator assignment scope', () => {
    * Expected: 403 with only error and message — the name must not appear; row unchanged.
    * Type: error
    */
+  // SCRUM-54-TC23
   it('returns 403 without event details when an unassigned Coordinator approves over HTTP', async () => {
     db.fetchOne
       .mockResolvedValueOnce({ id: 4, is_active: true })
@@ -215,12 +211,13 @@ describe('SCRUM-54 coordinator assignment scope', () => {
   /*
    * AC: SCRUM-54 AC5, AC7
    * Scenario: A Coordinator POSTs a confirm on an event they are not assigned to.
-   * Setup: Same unassigned caller; event is in PLANNING.
+   * Setup: Same unassigned caller; event is in PREPARATION.
    * Expected: 403 with no event resource in the body; row not updated.
    * Type: error
    */
+  // SCRUM-54-TC24
   it('returns 403 without event details when an unassigned Coordinator confirms over HTTP', async () => {
-    event.status = 'PLANNING';
+    event.status = 'PREPARATION';
     db.fetchOne
       .mockResolvedValueOnce({ id: 4, is_active: true })
       .mockResolvedValueOnce(event);

@@ -58,10 +58,42 @@ const EXPECTED_ALLOWED = [
 ];
 
 const ALL_STATUSES = Object.values(EVENT_STATUS);
-const isAllowed = (from, to) => EXPECTED_ALLOWED.some(([f, t]) => f === from && t === to);
-const EXPECTED_BLOCKED = ALL_STATUSES
-  .flatMap((from) => ALL_STATUSES.map((to) => [from, to]))
-  .filter(([from, to]) => !isAllowed(from, to));
+
+// M05 checks every pair against EXPECTED_ALLOWED. M01 and M02 run assertTransition on the
+// moves the ACs name and on the shortcuts the ACs forbid, to show it reads that matrix.
+const AC_MOVES = [
+  // SCRUM-5-TC02
+  ['DRAFT', 'SUBMITTED'],
+  // SCRUM-5-TC03
+  ['UNDER_REVIEW', 'APPROVED'], // AC2
+  // SCRUM-5-TC04
+  ['APPROVED', 'PLANNING'], // AC3
+  // SCRUM-5-TC05
+  ['SUBMITTED', 'REJECTED'], // AC4
+  // SCRUM-5-TC06
+  ['UNDER_REVIEW', 'REJECTED'], // AC4
+  // SCRUM-5-TC07
+  ['PLANNING', 'AWAITING_SAFETY_CHECK'], // AC6
+  // SCRUM-5-TC08
+  ['AWAITING_SAFETY_CHECK', 'PREPARATION'], // AC7
+];
+
+const FORBIDDEN_SHORTCUTS = [
+  // SCRUM-5-TC09
+  ['PLANNING', 'PREPARATION'], // AC7: skips the safety check
+  // SCRUM-5-TC10
+  ['APPROVED', 'AWAITING_SAFETY_CHECK'], // AC6: skips planning
+  // SCRUM-5-TC11
+  ['SUBMITTED', 'APPROVED'], // AC2: approved only after review
+  // SCRUM-5-TC12
+  ['APPROVED', 'REJECTED'], // AC4: rejected only from Submitted or Under Review
+  // SCRUM-5-TC13
+  ['REJECTED', 'APPROVED'], // must be resubmitted and reviewed again
+  // SCRUM-5-TC14
+  ['CANCELLED', 'PLANNING'], // Cancelled is final
+  // SCRUM-5-TC15
+  ['PLANNING', 'PLANNING'], // staying on the same status is not a move
+];
 
 function errorFrom(fn) {
   try {
@@ -74,32 +106,36 @@ function errorFrom(fn) {
 
 describe('SCRUM-5 event status machine', () => {
   // AC1 · The system supports exactly the 11 statuses in the story.
+  // SCRUM-5-TC01
   it('US5-M00: defines exactly the AC1 statuses', () => {
     expect(Object.values(EVENT_STATUS).sort()).toEqual([...AC1_STATUSES].sort());
   });
 
-  // Every allowed step in the matrix succeeds.
-  it.each(EXPECTED_ALLOWED)('US5-M01: allows %s -> %s', (from, to) => {
+  // Each move the ACs name succeeds.
+  it.each(AC_MOVES)('US5-M01: allows %s -> %s', (from, to) => {
     expect(() => assertTransition(from, to)).not.toThrow();
   });
 
-  // Every other pair of statuses (skipping steps, going backwards, staying on the same
-  // status, leaving COMPLETED/CANCELLED) fails with 409 INVALID_STATUS_TRANSITION.
-  // This includes the key "no bypass" cases, e.g. PLANNING -> PREPARATION (skips the
-  // safety check, AC7), APPROVED -> REJECTED (AC4 only from Submitted / Under Review)
-  // and REJECTED -> APPROVED (must be resubmitted and reviewed again).
-  it.each(EXPECTED_BLOCKED)('US5-M02: blocks %s -> %s with 409', (from, to) => {
+  // Each shortcut the ACs forbid fails with 409 INVALID_STATUS_TRANSITION.
+  it.each(FORBIDDEN_SHORTCUTS)('US5-M02: blocks %s -> %s with 409', (from, to) => {
     expect(errorFrom(() => assertTransition(from, to)))
       .toMatchObject({ status: 409, code: 'INVALID_STATUS_TRANSITION' });
   });
 
-  // A status that doesn't exist (typo, the removed VENUE_SECURED value, missing) is refused.
-  it.each(['ARCHIVED', 'VENUE_SECURED', undefined])('US5-M03: refuses unknown target status %s', (to) => {
+  // A status that doesn't exist (a typo, or missing) is refused. The removed VENUE_SECURED
+  // value is not separate: TC01 already shows it is not one of the statuses.
+  it.each([
+    // SCRUM-5-TC16
+    'ARCHIVED',
+    // SCRUM-5-TC17
+    undefined,
+  ])('US5-M03: refuses unknown target status %s', (to) => {
     expect(errorFrom(() => assertTransition('DRAFT', to)))
       .toMatchObject({ status: 409, message: `Unknown event status: ${to}` });
   });
 
   // An event stuck on an unknown current status (bad data) can't move anywhere.
+  // SCRUM-5-TC18
   it('US5-M04: an event with an unknown current status cannot move', () => {
     expect(errorFrom(() => assertTransition('VENUE_SECURED', 'PLANNING')))
       .toMatchObject({ status: 409 });
@@ -107,6 +143,7 @@ describe('SCRUM-5 event status machine', () => {
 
   // Safety net: every status has a row in the matrix, so a status added later can't be
   // forgotten, and the matrix has no extra entries beyond the agreed list.
+  // SCRUM-5-TC19
   it('US5-M05: the matrix defines exactly the agreed transitions for every status', () => {
     expect(Object.keys(ALLOWED_TRANSITIONS).sort()).toEqual([...ALL_STATUSES].sort());
     const actualPairs = Object.entries(ALLOWED_TRANSITIONS)

@@ -153,30 +153,6 @@ function assertSafetyOfficer(user) {
 }
 
 /**
- * Purpose: list events that still have no assigned coordinator, for the Lead only.
- * AC: SCRUM-54 AC3
- * Business rule: W7 #5
- * Inputs: authenticated user. Output: slim event rows (id, name, status, startAt).
- * Failure: 403 if the user is not a Lead; does not include event rows in the error.
- */
-async function listUnassignedQueue(user) {
-  assertLead(user);
-  const rows = await fetchMany(
-    supabase
-      .from('events')
-      .select('id, name, status, start_at, coordinator_id')
-      .is('coordinator_id', null)
-      .order('start_at', { ascending: true })
-  );
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    status: row.status,
-    startAt: row.start_at,
-  }));
-}
-
-/**
  * Purpose: show which coordinator is assigned to each event, for the Lead only.
  * AC: SCRUM-54 AC3
  * Business rule: W7 #5
@@ -725,7 +701,6 @@ async function hasApprovedSafetyCheck(eventId) {
 module.exports = {
   assertLead,
   assertSafetyOfficer,
-  listUnassignedQueue,
   listAssignmentOverview,
   listSafetyQueue,
   openSafetyCheck,

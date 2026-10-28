@@ -212,26 +212,6 @@ describe('SCRUM-65 Unassigned queue (Lead)', () => {
   });
 
   /*
-   * AC: SCRUM-54 AC3, AC7
-   * Scenario: A blocked (non-Lead) request reaches the page anyway.
-   * Setup: API returns 403 with only a message, no events array.
-   * Expected: The message is shown and no event names are rendered as links.
-   * Type: error
-   */
-  it('shows the refusal and no event details when the queue is blocked', async () => {
-    const err = new Error('You do not have access to this action');
-    err.status = 403;
-    api.mockRejectedValue(err);
-    render(
-      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <UnassignedQueue />
-      </MemoryRouter>
-    );
-    expect(await screen.findByText('You do not have access to this action')).toBeInTheDocument();
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
-  });
-
-  /*
    * AC: SCRUM-65 AC4
    * Scenario: A queued request has no equipment notes and a missing organiser name.
    * Setup: equipmentNotes is null, organiserName is null; other AC4 fields are present.
@@ -346,5 +326,32 @@ describe('SCRUM-65 Unassigned queue (Lead)', () => {
     await screen.findByText('Town Hall');
     expect(screen.queryByText('TBC')).not.toBeInTheDocument();
     expect(screen.getByText(new Date(queuedEvent.startAt).toLocaleString())).toBeInTheDocument();
+  });
+});
+
+describe('SCRUM-54 blocked unassigned queue', () => {
+  beforeEach(() => {
+    api.mockReset();
+  });
+
+  /*
+   * AC: SCRUM-54 AC3, AC7
+   * Scenario: A blocked (non-Lead) request reaches the page anyway.
+   * Setup: API returns 403 with only a message, no events array.
+   * Expected: The message is shown and no event names are rendered as links.
+   * Type: error
+   */
+  // SCRUM-54-TC40
+  it('shows the refusal and no event details when the queue is blocked', async () => {
+    const err = new Error('You do not have access to this action');
+    err.status = 403;
+    api.mockRejectedValue(err);
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <UnassignedQueue />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('You do not have access to this action')).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 });

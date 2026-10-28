@@ -56,6 +56,7 @@ describe('SCRUM-54 event page role limits', () => {
    * Expected: They can see the event name, but not approve, reject, or confirm.
    * Type: normal
    */
+  // SCRUM-54-TC41
   it('lets an unassigned Coordinator view an event but not change it', async () => {
     useAuth.mockReturnValue({
       user: { id: 9, roles: ['EVENT_COORDINATOR'] },
@@ -76,6 +77,7 @@ describe('SCRUM-54 event page role limits', () => {
    * Expected: They see Safety queue and Open safety check.
    * Type: normal
    */
+  // SCRUM-54-TC42
   it('shows Open safety check to a Safety Officer', async () => {
     useAuth.mockReturnValue({
       user: { id: 12, roles: ['SAFETY_OFFICER'] },
@@ -94,6 +96,7 @@ describe('SCRUM-54 event page role limits', () => {
    * Expected: The safety-check control is not shown.
    * Type: error
    */
+  // SCRUM-54-TC43
   it('does not show Open safety check to a Coordinator who is not a Safety Officer', async () => {
     useAuth.mockReturnValue({
       user: { id: 2, roles: ['EVENT_COORDINATOR'] },

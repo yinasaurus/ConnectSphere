@@ -16,6 +16,7 @@ const STATUSES = [
   'PREPARATION', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'REJECTED',
 ];
 
+// SCRUM-5-TC58
 it('US5-F06: "Needs attention" counts only events waiting on the coordinator', async () => {
   const events = STATUSES.map((status, index) => ({ id: index + 1, coordinatorId: 2, name: `Event ${status}`, status }));
   api.mockImplementation(async (path) => (path === '/api/events' ? { events } : { unread: 0 }));
@@ -37,6 +38,7 @@ it('US5-F06: "Needs attention" counts only events waiting on the coordinator', a
 
 // AC5 · A status change made elsewhere shows up on the dashboard within 10 seconds, without
 // a reload, and the dashboard stops polling once the user leaves it.
+// SCRUM-5-TC59
 it('US5-F07: the dashboard picks up status changes every 10 seconds and stops when closed', async () => {
   jest.useFakeTimers();
   const events = [{ id: 1, coordinatorId: 2, name: 'Live event', status: 'UNDER_REVIEW' }];
