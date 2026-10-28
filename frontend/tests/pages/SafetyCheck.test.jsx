@@ -49,6 +49,7 @@ describe('SCRUM-55 / SCRUM-56 safety check page', () => {
    * Expected: Those fields are shown; POST sends outcome APPROVE.
    * Type:     normal
    */
+  // SCRUM-55-TC15
   it('shows review details and lets a Safety Officer approve', async () => {
     api.mockImplementation(async (path, options = {}) => {
       if (path === '/api/events/3/safety-check' && options.method === 'POST') {
@@ -141,6 +142,7 @@ describe('SCRUM-55 / SCRUM-56 safety check page', () => {
    * Expected: The refusal is shown and review fields are not rendered.
    * Type:     error
    */
+  // SCRUM-55-TC16
   it('shows the refusal and no extra event details when opening is blocked', async () => {
     const err = new Error('You do not have access to this action');
     err.status = 403;
