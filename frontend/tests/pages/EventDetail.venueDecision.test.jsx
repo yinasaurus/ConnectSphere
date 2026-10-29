@@ -149,6 +149,7 @@ describe('SCRUM-58 review a marked approved booking from the event page', () => 
    * Expected: Approve venue is shown. Reject venue is not, because a second approval only clears the mark.
    * Type:     normal
    */
+  // SCRUM-58-TC14
   it('US58-F01 (AC6): Approve is shown for an approved booking that needs review', async () => {
     useAuth.mockReturnValue({ user: { id: 40 }, hasRole: (...roles) => roles.includes('VENUE_STAFF') });
     api.mockImplementation(async (path) => {

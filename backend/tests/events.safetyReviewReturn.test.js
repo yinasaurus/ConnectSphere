@@ -188,6 +188,7 @@ describe('SCRUM-58 request changes marks arrangements and returns to Planning', 
    *           times are unchanged.
    * Type:     normal
    */
+  // SCRUM-58-TC01
   it('US58-A01 (AC1, AC2, AC4): request changes marks the selected booking and leaves its details', async () => {
     await access.recordSafetyCheck(safetyOfficer, 3, {
       outcome: 'REQUEST_CHANGES',
@@ -210,6 +211,7 @@ describe('SCRUM-58 request changes marks arrangements and returns to Planning', 
    * Expected: The equipment request is not marked and stays RESERVED.
    * Type:     normal
    */
+  // SCRUM-58-TC02
   it('US58-A02 (AC3): an arrangement that was not selected is left alone', async () => {
     await access.recordSafetyCheck(safetyOfficer, 3, {
       outcome: 'REQUEST_CHANGES',
@@ -229,6 +231,7 @@ describe('SCRUM-58 request changes marks arrangements and returns to Planning', 
    * Expected: That request is marked. Status and quantity stay the same. No reservation row is added.
    * Type:     normal
    */
+  // SCRUM-58-TC03
   it('US58-A03 (AC2, AC4): the selected equipment request is marked and not edited', async () => {
     await access.recordSafetyCheck(safetyOfficer, 3, {
       outcome: 'REQUEST_CHANGES',
@@ -250,6 +253,7 @@ describe('SCRUM-58 request changes marks arrangements and returns to Planning', 
    * Expected: Neither arrangement is marked.
    * Type:     boundary
    */
+  // SCRUM-58-TC04
   it('US58-A04 (AC2): approving does not mark any arrangement', async () => {
     await access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE' });
     expect(booking.needs_review).toBe(false);
@@ -265,6 +269,7 @@ describe('SCRUM-58 safety queue hides an event until every mark is cleared', () 
    * Expected: The Safety Officer queue does not include the event.
    * Type:     normal
    */
+  // SCRUM-58-TC05
   it('US58-Q01 (AC5): any review mark keeps the event off the safety queue', async () => {
     booking.needs_review = true;
     const rows = await access.listSafetyQueue(safetyOfficer);
@@ -278,6 +283,7 @@ describe('SCRUM-58 safety queue hides an event until every mark is cleared', () 
    * Expected: The event is on the Safety Officer queue.
    * Type:     normal
    */
+  // SCRUM-58-TC06
   it('US58-Q02 (AC6): the event returns to the queue once every mark is cleared', async () => {
     const rows = await access.listSafetyQueue(safetyOfficer);
     expect(rows.map((row) => row.id)).toContain(3);
@@ -290,6 +296,7 @@ describe('SCRUM-58 safety queue hides an event until every mark is cleared', () 
    * Expected: The send succeeds. The queue still omits the event, because the mark remains.
    * Type:     normal
    */
+  // SCRUM-58-TC07
   it('US58-Q03 (AC5): sending back while a mark is set leaves the event off the queue', async () => {
     event.status = 'PLANNING';
     booking.needs_review = true;
@@ -311,6 +318,7 @@ describe('SCRUM-58 reviewing a marked arrangement clears the mark only', () => {
    * Expected: The mark clears. Status, venue and times stay. The Coordinator is not notified again.
    * Type:     normal
    */
+  // SCRUM-58-TC08
   it('US58-R01 (AC4, AC6): approving again clears the booking mark and changes nothing else', async () => {
     booking.needs_review = true;
     audit.notifyUser.mockClear();
@@ -326,12 +334,13 @@ describe('SCRUM-58 reviewing a marked arrangement clears the mark only', () => {
   });
 
   /*
-   * AC:       SCRUM-18 AC4 (must still hold)
+   * AC:       SCRUM-58 AC4; SCRUM-18 AC4 (must still hold)
    * Scenario: Venue Staff try to approve a booking that is already approved and not marked.
    * Setup:    Booking 7 is APPROVED with needs_review false.
    * Expected: 409 ALREADY_DECIDED. The booking is not written.
    * Type:     error
    */
+  // SCRUM-58-TC09
   it('US58-R02 (AC4): an approved booking with no mark cannot be decided again', async () => {
     await expect(
       venues.decideBooking(venueStaff, 7, { approve: true })
@@ -346,6 +355,7 @@ describe('SCRUM-58 reviewing a marked arrangement clears the mark only', () => {
    * Expected: 409. Status stays APPROVED and the mark stays. Nothing is cancelled.
    * Type:     error
    */
+  // SCRUM-58-TC10
   it('US58-R03 (AC4): rejecting a marked approved booking does not cancel it', async () => {
     booking.needs_review = true;
     await expect(
@@ -362,6 +372,7 @@ describe('SCRUM-58 reviewing a marked arrangement clears the mark only', () => {
    * Expected: The mark clears. Status and quantity stay. No second reservation row is written.
    * Type:     normal
    */
+  // SCRUM-58-TC11
   it('US58-R04 (AC4, AC6): reserving again clears the equipment mark and does not hold stock twice', async () => {
     kit.needs_review = true;
     tables.equipment_reservations.push({
@@ -383,6 +394,7 @@ describe('SCRUM-58 reviewing a marked arrangement clears the mark only', () => {
    * Expected: 409 ALREADY_DECIDED.
    * Type:     error
    */
+  // SCRUM-58-TC12
   it('US58-R05: a reserved request with no mark cannot be reserved again', async () => {
     await expect(
       equipment.decideRequest(tech, 21, { approve: true })
@@ -397,6 +409,7 @@ describe('SCRUM-58 reviewing a marked arrangement clears the mark only', () => {
    * Expected: 409. Status stays RESERVED. The mark stays.
    * Type:     error
    */
+  // SCRUM-58-TC13
   it('US58-R06 (AC4): a marked reserved request cannot be set unavailable', async () => {
     kit.needs_review = true;
     await expect(
