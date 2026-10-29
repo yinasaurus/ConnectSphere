@@ -1,5 +1,15 @@
 const { insertOne } = require('../config/db');
 
+/**
+ * Purpose: insert one audit_logs row so a later reader can see who did an action,
+ *   which record it was, and the details kept in metadata.
+ * AC: SCRUM-32 AC1, AC2 — a confirmed reassignment uses this helper. Other stories
+ *   use it as well, including first assignment and event confirmation.
+ * Inputs: actorId (who), action, entityType, entityId, and metadata.
+ * Output: nothing. When is audit_logs.created_at. The table defaults that column to
+ *   now(), and this function does not set it.
+ * Failure: a database error from insertOne is passed to the caller.
+ */
 async function writeAudit(actorId, action, entityType, entityId, metadata) {
   await insertOne('audit_logs', {
     actor_id: actorId,
