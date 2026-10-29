@@ -153,3 +153,20 @@ it('US40-F06 (3A): organiser clarification amend also omits the registration fie
   expect(patch[1].body).not.toHaveProperty('registrationOpen');
   expect(patch[1].body).not.toHaveProperty('registrationOpensAt');
 });
+
+/*
+ * AC:       SCRUM-38 (Organiser is prevented from directly editing after submission — UI level)
+ * Scenario: The owning Organiser opens the edit page for their own Submitted request
+ *           (not a clarification amend).
+ * Setup:    organiserId matches the caller; status SUBMITTED, subState not ACTION_REQUIRED.
+ * Expected: Access-denied message is shown instead of the edit form; no edit form renders.
+ * Type:     error / UI lock
+ */
+// SCRUM-38-TC09
+it('the owning Organiser cannot open the edit page for a Submitted request', async () => {
+  mockApi({ ...EVENT, status: 'SUBMITTED', organiserId: 1, subState: null });
+  renderEdit({ id: 1, roles: ['EVENT_ORGANISER'] });
+
+  expect(await screen.findByText(/you do not have access to edit this event/i)).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: /edit event details/i })).not.toBeInTheDocument();
+});

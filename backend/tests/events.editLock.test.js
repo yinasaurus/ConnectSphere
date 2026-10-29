@@ -36,12 +36,12 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
   });
 
   /*
-   * AC:       SCRUM-38 (organiser may edit Draft)
-   * Scenario: Owning Organiser patches their Draft request.
-   * Setup:    status DRAFT; organiser_id matches caller.
-   * Expected: Row is updated with the new name.
-   * Type:     normal
-   */
+  * AC:       SCRUM-38 (AC1: organiser may edit while Draft)
+  * Scenario: Organiser can edit their own request while it is still Draft.
+  * Setup:    Event is DRAFT; caller is its owning Organiser; patch is { name: 'Updated title' }.
+  * Expected: Update succeeds; updateById is called with the new name.
+  * Type:     normal
+  */
   // SCRUM-38-TC01
   it('allows the organiser to edit their own request while it is still Draft', async () => {
     await service.updateEvent(organiser, 3, { name: 'Updated title' });
@@ -49,12 +49,12 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
   });
 
   /*
-   * AC:       SCRUM-38 (no direct organiser edit after submit)
-   * Scenario: Owning Organiser tries to PATCH after leaving Draft (any later status).
-   * Setup:    status matrix excludes DRAFT; sub_state not ACTION_REQUIRED.
-   * Expected: 409 EDIT_LOCKED; updateById never called.
-   * Type:     error
-   */
+  * AC:       SCRUM-38 (AC1: no direct organiser edit after submit)
+  * Scenario: Owning Organiser is blocked from directly editing the request at every non-Draft status.
+  * Setup:    Parametrized over every EVENT_STATUS value except DRAFT; patch is { name: 'Sneaky edit' }.
+  * Expected: Rejected with 409 EDIT_LOCKED at every status; updateById is never called.
+  * Type:     error
+  */
   // SCRUM-38-TC02 (parametrized - one test per non-Draft status, currently 10 statuses)
   it.each(
     Object.values(EVENT_STATUS).filter((status) => status !== EVENT_STATUS.DRAFT)
@@ -66,12 +66,12 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
   });
 
   /*
-   * AC:       SCRUM-38
-   * Scenario: Organiser changes only one non-critical field after submit.
-   * Setup:    SUBMITTED; payload is description only.
-   * Expected: Still 409 EDIT_LOCKED — lock is not field-scoped for organisers.
-   * Type:     boundary
-   */
+  * AC:       SCRUM-38 (lock is not field-scoped for organisers)
+  * Scenario: Even a single-field direct edit is blocked once the request is Submitted.
+  * Setup:    Event is SUBMITTED; caller is the owning Organiser; patch is { description: 'Just one field' } only.
+  * Expected: Rejected with 409 EDIT_LOCKED; updateById is not called.
+  * Type:     boundary
+  */
   // SCRUM-38-TC03
   it('blocks even a single-field direct edit once submitted', async () => {
     event.status = EVENT_STATUS.SUBMITTED;
@@ -81,12 +81,12 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
   });
 
   /*
-   * AC:       SCRUM-38 (assigned Coordinator may edit after submit)
-   * Scenario: Assigned Coordinator patches title while Under Review.
-   * Setup:    coordinator_id matches caller; status UNDER_REVIEW.
-   * Expected: updateById receives the new name.
-   * Type:     normal
-   */
+  * AC:       SCRUM-38 (AC1: assigned Coordinator may edit after submit)
+  * Scenario: The assigned Coordinator can edit the event after submission.
+  * Setup:    Event is UNDER_REVIEW, assigned to coordinator id 2; caller is that coordinator; patch is { name: 'Coordinator-reviewed title' }.
+  * Expected: Update succeeds; updateById is called with the new name.
+  * Type:     normal
+  */
   // SCRUM-38-TC04
   it('lets the assigned coordinator edit the event after submission', async () => {
     event.status = EVENT_STATUS.UNDER_REVIEW;
@@ -95,12 +95,12 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
   });
 
   /*
-   * AC:       SCRUM-38
-   * Scenario: Hybrid organiser/coordinator who is the assigned coordinator edits own request.
-   * Setup:    Same user id is organiser_id and coordinator_id; UNDER_REVIEW.
-   * Expected: Edit succeeds because the assigned-coordinator path applies.
-   * Type:     boundary
-   */
+  * AC:       SCRUM-38 (hybrid organiser/coordinator still counts as assigned Coordinator)
+  * Scenario: A hybrid Organiser/Coordinator who is the assigned Coordinator for their own request can edit it after submission.
+  * Setup:    Event is UNDER_REVIEW; organiser_id and coordinator_id both equal the caller's id; patch is { name: 'Self-reviewed title' }.
+  * Expected: Update succeeds; updateById is called with the new name.
+  * Type:     boundary
+  */
   // SCRUM-38-TC05
   it('lets a hybrid organiser/coordinator user who is the assigned coordinator for their own request edit it after submission', async () => {
     event.status = EVENT_STATUS.UNDER_REVIEW;
@@ -110,7 +110,7 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
   });
 
   /*
-   * AC:       SCRUM-38 / SCRUM-54
+   * AC:       SCRUM-38 / SCRUM-54 (unrelated roles are rejected as 403 FORBIDDEN; the Organiser is rejected as 409 EDIT_LOCKED)
    * Scenario: Venue Staff tries to PATCH a submitted request.
    * Setup:    SUBMITTED; caller has VENUE_STAFF only.
    * Expected: 403 FORBIDDEN; nothing written.
@@ -125,7 +125,7 @@ describe('SCRUM-38 restrict direct organiser edits after submission', () => {
   });
 
   /*
-   * AC:       SCRUM-38
+   * AC:       SCRUM-38 (identity check is separate from the post-submit lock)
    * Scenario: Organiser from another organisation tries to edit.
    * Setup:    SUBMITTED; caller organisation differs; not the owner.
    * Expected: 403 FORBIDDEN (not EDIT_LOCKED) — wrong identity, not post-submit lock.
@@ -378,6 +378,13 @@ describe('SCRUM-40 edit lock HTTP route', () => {
   });
 });
 
+/*
+* AC:       SCRUM-38 (regression — EDIT_LOCKED proven through the real route, not just the service function)
+* Scenario: PATCH /api/events/:id returns 409 EDIT_LOCKED through a real HTTP request.
+* Setup:    Event is SUBMITTED, owned by the caller; a real signed-in session sends PATCH /api/events/3 with { name: 'Sneaky edit' }.
+* Expected: Response status 409, body.error='EDIT_LOCKED'; db.updateById is not called.
+* Type:     error
+*/
 // SCRUM-38-TC08
 // Regression guard: the tests above all call service.updateEvent() directly. This one
 // confirms the 409/EDIT_LOCKED response actually survives the real route + auth
