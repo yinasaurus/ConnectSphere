@@ -117,6 +117,7 @@ describe('SCRUM-54 event page role limits', () => {
    * Expected: The Safety check outcome card shows the outcome and reason.
    * Type: normal
    */
+  // SCRUM-56-TC22
   it('shows the safety check outcome card when the API includes safetyCheck', async () => {
     useAuth.mockReturnValue({
       user: { id: 2, roles: ['EVENT_COORDINATOR'] },
@@ -143,6 +144,7 @@ describe('SCRUM-54 event page role limits', () => {
    * Expected: The outcome card is not shown.
    * Type: boundary
    */
+  // SCRUM-56-TC23
   it('does not show the safety check outcome card when the API omits safetyCheck', async () => {
     useAuth.mockReturnValue({
       user: { id: 20, roles: ['EVENT_COORDINATOR_LEAD'] },

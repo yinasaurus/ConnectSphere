@@ -329,6 +329,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: Outcome APPROVED stored; event moves to PREPARATION; history and audit written.
    * Type:     normal
    */
+  // SCRUM-56-TC01
   it('approves without a reason and moves the event to Preparation', async () => {
     const result = await access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE' });
     expect(result.outcome).toBe('APPROVED');
@@ -350,6 +351,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: Event returns to PLANNING; cannot stay awaiting.
    * Type:     normal
    */
+  // SCRUM-56-TC02
   it('rejects with a reason and returns the event to Planning', async () => {
     const result = await access.recordSafetyCheck(safetyOfficer, 3, {
       outcome: 'REJECT',
@@ -366,6 +368,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: 400; event and safety_checks unchanged.
    * Type:     error
    */
+  // SCRUM-56-TC03
   it('refuses reject without a reason', async () => {
     await expect(
       access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'REJECT' })
@@ -381,6 +384,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: 400 VALIDATION_ERROR; nothing written.
    * Type:     error
    */
+  // SCRUM-56-TC04
   it('refuses request changes without a reason', async () => {
     await expect(
       access.recordSafetyCheck(safetyOfficer, 3, {
@@ -399,6 +403,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: 400 VALIDATION_ERROR; event unchanged.
    * Type:     error
    */
+  // SCRUM-56-TC05
   it('refuses an unknown safety-check outcome', async () => {
     await expect(
       access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'MAYBE' })
@@ -414,6 +419,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: REQUEST_CHANGES stored with affected arrangement; event → PLANNING.
    * Type:     normal
    */
+  // SCRUM-56-TC06
   it('records request changes with a selected venue booking', async () => {
     const result = await access.recordSafetyCheck(safetyOfficer, 3, {
       outcome: 'REQUEST_CHANGES',
@@ -432,6 +438,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: 400; nothing written.
    * Type:     error
    */
+  // SCRUM-56-TC07
   it('refuses request changes without an affected arrangement', async () => {
     await expect(
       access.recordSafetyCheck(safetyOfficer, 3, {
@@ -450,6 +457,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: 400 VALIDATION_ERROR; nothing written.
    * Type:     error
    */
+  // SCRUM-56-TC08
   it('refuses request changes for a venue booking that is not on the event', async () => {
     await expect(
       access.recordSafetyCheck(safetyOfficer, 3, {
@@ -468,6 +476,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: 400 VALIDATION_ERROR; nothing written.
    * Type:     error
    */
+  // SCRUM-56-TC09
   it('refuses request changes with an unknown arrangement type', async () => {
     await expect(
       access.recordSafetyCheck(safetyOfficer, 3, {
@@ -486,6 +495,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: 400 VALIDATION_ERROR; nothing written.
    * Type:     error
    */
+  // SCRUM-56-TC10
   it('refuses request changes when an arrangement has no id', async () => {
     await expect(
       access.recordSafetyCheck(safetyOfficer, 3, {
@@ -504,6 +514,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: 400 VALIDATION_ERROR; nothing written.
    * Type:     error
    */
+  // SCRUM-56-TC11
   it('refuses request changes for an equipment request that is not on the event', async () => {
     await expect(
       access.recordSafetyCheck(safetyOfficer, 3, {
@@ -522,6 +533,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: 409 INVALID_STATUS; no second safety_checks row.
    * Type:     conflict
    */
+  // SCRUM-56-TC12
   it('refuses a second outcome after the event left Awaiting Safety Check', async () => {
     await access.recordSafetyCheck(safetyOfficer, 3, {
       outcome: 'REJECT',
@@ -540,6 +552,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: 403; event unchanged.
    * Type:     error
    */
+  // SCRUM-56-TC13
   it('refuses recording by a non Safety Officer', async () => {
     await expect(
       access.recordSafetyCheck(coordinator, 3, { outcome: 'APPROVE' })
@@ -555,6 +568,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: 409 NOT_READY_FOR_SAFETY_CHECK; no safety_checks row.
    * Type:     error
    */
+  // SCRUM-56-TC14
   it('refuses to record when arrangements are no longer ready', async () => {
     tables.venue_bookings[0].status = 'PENDING';
     await expect(
@@ -640,6 +654,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: 409; no safety_checks row written (claim happens before insert).
    * Type:     conflict
    */
+  // SCRUM-56-TC15
   it('refuses a concurrent second outcome when the status claim loses the race', async () => {
     db.updateByIdWhere.mockImplementationOnce(async () => null);
     await expect(
@@ -656,6 +671,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: safetyCheck is present for them; an unrelated organiser does not get it.
    * Type:     normal
    */
+  // SCRUM-56-TC16
   it('shows the outcome to the organiser and assigned coordinator only', async () => {
     await access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE', reason: 'Clear' });
 
@@ -680,6 +696,7 @@ describe('SCRUM-56 record safety outcome', () => {
    * Expected: getEvent succeeds and safetyCheck is omitted (not leaked to unrelated viewers).
    * Type:     boundary
    */
+  // SCRUM-56-TC17
   it('hides the outcome from a same-org organiser and a Lead who are not the event contacts', async () => {
     await access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE', reason: 'Clear' });
 
@@ -748,6 +765,7 @@ describe('SCRUM-55/56 HTTP routes', () => {
    * Expected: 200 APPROVED; in-memory event moves to PREPARATION.
    * Type:     normal
    */
+  // SCRUM-56-TC18
   it('records an approve outcome for a Safety Officer over HTTP', async () => {
     const res = await request(app)
       .post('/api/events/3/safety-check')
