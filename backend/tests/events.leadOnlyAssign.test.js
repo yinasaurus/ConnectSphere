@@ -99,7 +99,8 @@ describe('SCRUM-33 service refusals', () => {
    * AC: SCRUM-33 AC1, AC2, AC3
    * Scenario: Someone who is not a Lead replaces the Coordinator on an event that has one.
    * Setup: Event 3 is held by Coordinator 2. The caller tries to put Coordinator 4 on it.
-   *   The assigned Coordinator used to be allowed to reassign. Week 7 change #5 blocks them.
+   *   This Lead reassign action already rejected a Coordinator. Week 7 change #5
+   *   is what closes their request and accept, covered by US33-B03 and US33-B04.
    * Expected: 403 FORBIDDEN. The event stays with Coordinator 2. No audit entry.
    *   A Lead reassignment is US31-B01 and still writes the SCRUM-32 audit.
    * Type: error
@@ -196,7 +197,8 @@ describe('SCRUM-33 HTTP refusals', () => {
    * AC: SCRUM-33 AC2, AC3
    * Scenario: The assigned Coordinator calls the Lead reassign route.
    * Setup: Session user 2 is that Coordinator and not a Lead. Event 3 is held by user 2.
-   *   Body names Coordinator 4. This is the caller Week 7 change #5 newly blocks.
+   *   Body names Coordinator 4. This route already required a Lead. Week 7 change #5
+   *   closes the old request and accept routes, covered by US33-R03 and US33-R04.
    * Expected: 403. The event stays with Coordinator 2. No audit entry.
    * Type: error
    */
