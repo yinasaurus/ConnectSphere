@@ -145,11 +145,11 @@ describe('TC-DRAFT-04 (Draft Saving & Resuming)', () => {
   });
 
   /*
-  * AC: SCRUM-15 (AC3: Organiser can continue editing and later submit the draft as a complete request)
+  * AC:       SCRUM-15 (AC3: Organiser can continue editing and later submit the draft as a complete request)
   * Scenario: A previously-saved partial draft is resumed, completed, and submitted through the form.
-  * Setup: draftEvent (same partial draft as the "resumes editing" test above) is loaded for editing; every remaining compulsory field is filled in; "Submit for review" is clicked.
+  * Setup:    draftEvent (same partial draft as the "resumes editing" test above) is loaded for editing; every remaining compulsory field is filled in; "Submit for review" is clicked.
   * Expected: PATCH /api/events/123 sends the completed fields; POST /api/events/123/submit is called; page navigates to the event detail page.
-  * Type: normal
+  * Type:     normal
   */
   // SCRUM-15-TC06
   it('completing and submitting a resumed draft saves and submits through the UI', async () => {
@@ -244,11 +244,11 @@ describe('TC-DRAFT-04 (Draft Saving & Resuming)', () => {
 
 describe('Drafts list page (client-side filtering)', () => {
   /*
-   * AC: SCRUM-15 (AC1/AC4: Draft requests exist as a distinct, Organiser-owned set; also guards the client-side organiserId filter in Drafts.jsx)
+   * AC:       SCRUM-15 (AC1/AC4: Draft requests exist as a distinct, Organiser-owned set; also guards the client-side organiserId filter in Drafts.jsx)
    * Scenario: The signed-in Organiser's drafts list is rendered alongside another Organiser's draft.
-   * Setup: /api/events?status=DRAFT returns two drafts — one owned by the caller (organiserId: 1), one owned by someone else (organiserId: 99).
+   * Setup:    /api/events?status=DRAFT returns two drafts — one owned by the caller (organiserId: 1), one owned by someone else (organiserId: 99).
    * Expected: Only the caller's own draft is shown; the other Organiser's is filtered out.
-   * Type: normal
+   * Type:     normal
    */
   // SCRUM-15-TC07
   it("shows only the signed-in organiser's own drafts, not another organiser's", async () => {
@@ -278,11 +278,11 @@ describe('Drafts list page (client-side filtering)', () => {
   });
 
   /*
-   * AC: SCRUM-15 (AC1/AC4: Draft requests exist as a distinct set — empty-state case)
+   * AC:       SCRUM-15 (AC1/AC4: Draft requests exist as a distinct set — empty-state case)
    * Scenario: The Organiser has no saved drafts.
-   * Setup: /api/events?status=DRAFT returns an empty list.
+   * Setup:    /api/events?status=DRAFT returns an empty list.
    * Expected: The "No drafts yet..." empty-state message is shown.
-   * Type: boundary
+   * Type:     boundary
    */
   // SCRUM-15-TC08
   it('shows the empty-state message when the organiser has no drafts', async () => {
