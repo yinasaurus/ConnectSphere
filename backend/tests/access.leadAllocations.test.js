@@ -300,4 +300,27 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
       },
     ]);
   });
+
+  /*
+   * AC: SCRUM-57 AC1
+   * Scenario: The allocation audit stores the event id and the Lead id as strings.
+   * Setup: The event row uses numeric id 3, held by Chloe. The audit uses entity_id '3'
+   *   and actor_id '11', which is how a route param can be written. Lead 11's session id
+   *   is the number 11. The overview compares both sides with Number().
+   * Expected: The event is on this Lead's overview, held by Chloe.
+   * Type: boundary
+   */
+  it('US57-B09: a string event id and actor id still match this Lead', async () => {
+    const assignments = await openOverview(
+      [eventRow()],
+      [allocation({ entity_id: '3', actor_id: '11' })]
+    );
+
+    expect(assignments).toEqual([
+      {
+        eventId: 3, eventName: 'Workshop', status: 'PLANNING',
+        coordinatorId: 2, coordinatorName: 'Chloe Lim',
+      },
+    ]);
+  });
 });
