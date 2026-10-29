@@ -106,6 +106,8 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
     await service.reassignEventCoordinator(lead, 3, 4);
     await service.reassignEventCoordinator(lead, 3, 5);
 
+    // AC1: one entry for each confirmed change, and no third entry.
+    expect(audit.writeAudit).toHaveBeenCalledTimes(2);
     expect(audit.writeAudit).toHaveBeenNthCalledWith(1, 11, 'COORDINATOR_REASSIGNED', 'event', 3, {
       fromCoordinatorId: 2,
       toCoordinatorId: 4,
@@ -231,6 +233,8 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
       .send({ coordinatorId: 4 });
 
     expect(res.status).toBe(200);
+    // AC1: the route writes one entry, not a second one from notices or the reload.
+    expect(audit.writeAudit).toHaveBeenCalledTimes(1);
     expect(audit.writeAudit).toHaveBeenCalledWith(11, 'COORDINATOR_REASSIGNED', 'event', '3', {
       fromCoordinatorId: 2,
       toCoordinatorId: 4,
