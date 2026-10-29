@@ -109,6 +109,7 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
    * Setup: Lead 11 assigned event 3 to Chloe. Later Lead 12 reassigned it to Daniel.
    *   The event row now names Daniel. Lead 12's audit is the newer one.
    * Expected: Lead 11's overview does not include event 3.
+   *   Lead 12's overview includes event 3, held by Daniel.
    * Type: conflict
    */
   it('US57-B02: an event assigned by another Lead is left out', async () => {
@@ -130,7 +131,12 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
     const forOtherLead = await access.listAssignmentOverview(otherLead);
 
     expect(assignments).toEqual([]);
-    expect(forOtherLead.map((row) => row.eventId)).toEqual([3]);
+    expect(forOtherLead).toEqual([
+      {
+        eventId: 3, eventName: 'Workshop', status: 'PLANNING',
+        coordinatorId: 4, coordinatorName: 'Daniel Ong',
+      },
+    ]);
   });
 
   /*
