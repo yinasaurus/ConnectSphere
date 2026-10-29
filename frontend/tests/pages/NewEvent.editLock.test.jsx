@@ -162,7 +162,7 @@ it('US40-F06 (3A): organiser clarification amend also omits the registration fie
  * Expected: Access-denied message is shown instead of the edit form; no edit form renders.
  * Type:     error / UI lock
  */
-// SCRUM-38-TC09
+// SCRUM-38-TC10
 it('the owning Organiser cannot open the edit page for a Submitted request', async () => {
   mockApi({ ...EVENT, status: 'SUBMITTED', organiserId: 1, subState: null });
   renderEdit({ id: 1, roles: ['EVENT_ORGANISER'] });
