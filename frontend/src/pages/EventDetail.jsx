@@ -30,7 +30,8 @@ function BookingStatusBadge({ status }) {
       color: '#fff',
       marginLeft: 6,
     }}>
-      {status}
+      {/* SCRUM-75 AC1: a hold is stored as TENTATIVE and shown as Held. */}
+      {status === 'TENTATIVE' ? 'HELD' : status}
     </span>
   );
 }
