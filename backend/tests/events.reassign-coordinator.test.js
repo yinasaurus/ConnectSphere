@@ -97,6 +97,8 @@ describe('SCRUM-31 reassign coordinator (service rules)', () => {
     expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
       coordinator_id: 4,
     }));
+    // No coordinator_reassignments row is inserted. The audit insert is mocked in this
+    // file; SCRUM-32 checks that row in events.reassignAudit.test.js.
     expect(db.insertOne).not.toHaveBeenCalled();
 
     await expect(service.updateEvent(previousCoordinator, 3, { name: 'Taken over' })).rejects.toMatchObject({
