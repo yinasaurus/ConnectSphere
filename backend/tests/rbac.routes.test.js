@@ -19,7 +19,7 @@ const venues = require('../src/services/venues.service');
 const events = require('../src/services/events.service');
 const { createApp } = require('../src/app');
 
-describe('SCUM-13 routes with real JWT authentication and role middleware', () => {
+describe('SCRUM-13 routes with real JWT authentication and role middleware', () => {
   const app = createApp();
   const token = jwt.sign({ sub: 1, roles: [ROLES.VENUE_STAFF] }, env.jwtSecret);
   const cases = [

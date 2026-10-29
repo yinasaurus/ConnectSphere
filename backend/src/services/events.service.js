@@ -36,8 +36,8 @@ const EVENT_SELECT = `
   organiser:users!organiser_id ( full_name ),
   coordinator:users!coordinator_id ( full_name )
 `;
-// SCUM-14: fields the customer briefing marks compulsory for a submitted event request.
-// Drafts (SCUM-15) intentionally skip this — only `name` is required to save a draft.
+// SCRUM-14: fields the customer briefing marks compulsory for a submitted event request.
+// Drafts (SCRUM-15) intentionally skip this — only `name` is required to save a draft.
 const REQUIRED_FOR_SUBMISSION = [
   { column: 'name', field: 'name', label: 'Event name' },
   { column: 'purpose', field: 'purpose', label: 'Purpose' },
@@ -66,7 +66,7 @@ function findMissingSubmissionFields(row) {
 
 // Guards against events like "starts 6 Oct, ends 5 Oct" that are never valid,
 // whichever of create/update set the dates. Skipped when either side is
-// absent (e.g. a draft saved before its dates are filled in, SCUM-15).
+// absent (e.g. a draft saved before its dates are filled in, SCRUM-15).
 function validateDateRange(startAt, endAt) {
   if (startAt === null || startAt === undefined || endAt === null || endAt === undefined) return;
   const start = new Date(startAt);
@@ -391,7 +391,7 @@ async function listEquipmentRequests(user, eventId) {
 }
 
 /**
- * Purpose: save a new event request as a Draft so the organiser can finish it later (SCUM-15).
+ * Purpose: save a new event request as a Draft so the organiser can finish it later (SCRUM-15).
  * AC: SCRUM-28 AC4 — a draft stays DRAFT with no Coordinator and is not placed in the unassigned queue.
  * Inputs: user (organiser or coordinator), payload (name required; other fields optional)
  * Outputs: the created mapped event

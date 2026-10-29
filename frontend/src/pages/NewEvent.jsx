@@ -21,8 +21,8 @@ const empty = {
   clonedFromEventId: '',
 };
 
-// SCUM-14: mirrors backend REQUIRED_FOR_SUBMISSION in events.service.js.
-// Draft saves (SCUM-15) skip this check entirely.
+// SCRUM-14: mirrors backend REQUIRED_FOR_SUBMISSION in events.service.js.
+// Draft saves (SCRUM-15) skip this check entirely.
 const REQUIRED_FOR_SUBMISSION = [
   { field: 'name', label: 'Event name' },
   { field: 'purpose', label: 'Purpose' },
@@ -65,7 +65,7 @@ function toDateTimeLocal(value) {
 
 /**
  * Purpose: create a new event request, or edit an existing one when the caller is allowed.
- * AC: SCUM-14 / SCUM-15 (required fields on submit; draft saves skip them).
+ * AC: SCRUM-14 / SCRUM-15 (required fields on submit; draft saves skip them).
  *     SCRUM-28 AC1/AC4 (submit → unassigned queue).
  *     SCRUM-40 1C / 2A / 3A — edit route opens only for Organiser Draft or clarification
  *     ACTION_REQUIRED, or for the assigned Coordinator before Confirmed; Confirmed and

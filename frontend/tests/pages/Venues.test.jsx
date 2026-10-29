@@ -230,7 +230,7 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC4; SCRUM-59 AC4 (setup and turnaround rows)
+   * AC:       SCRUM-7 AC4; SCRUM-59 AC4 (setup and turnaround rows)
    * Scenario: Venue Staff clear the capacity, setup or teardown (turnaround) box on the
    *           Update venue form and save.
    * Setup:    Helix Hall selected. A cleared number box is sent as '', and the mocked API
@@ -273,7 +273,7 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC1
+   * AC:       SCRUM-7 AC1
    * Scenario: Venue Staff fill in every detail of a new venue in the Add venue form.
    * Setup:    Logged in as Venue Staff. The form starts with THEATRE ticked; the user ticks
    *           CLASSROOM and BOARDROOM and unticks THEATRE.
@@ -317,7 +317,7 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC4
+   * AC:       SCRUM-7 AC4
    * Scenario: Venue Staff clear the capacity box and try to save a new venue.
    * Setup:    The API rejects the POST with the field error the real validator returns
    *           ("Capacity is required"), as it does for an empty capacity.
@@ -352,7 +352,7 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC2 (editing layouts)
+   * AC:       SCRUM-7 AC2 (editing layouts)
    * Scenario: Venue Staff rename one layout, remove another and add a new one.
    * Setup:    Helix Hall has THEATRE (id 10) and CLASSROOM (id 11).
    * Expected: The PATCH sends the rename and the delete with their ids and the new layout
@@ -387,7 +387,7 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC2
+   * AC:       SCRUM-7 AC2
    * Scenario: Venue Staff deactivate a venue from the Update venue form.
    * Setup:    Helix Hall is active.
    * Expected: Unticking "Venue is active" and saving sends isActive: false, which keeps the
@@ -412,7 +412,7 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC2
+   * AC:       SCRUM-7 AC2
    * Scenario: Venue Staff open a venue whose optional details were never filled in.
    * Setup:    A venue with only id, name and layouts as plain names (no ids, no capacity,
    *           times or text fields), as an older record might be.
@@ -435,7 +435,7 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC2
+   * AC:       SCRUM-7 AC2
    * Scenario: Venue Staff open a venue for editing, then cancel.
    * Setup:    Helix Hall selected and its name changed in the form.
    * Expected: The form closes without sending anything, and the saved venue is unchanged.
@@ -586,14 +586,14 @@ function mockDeferredSearchApi() {
   return pending;
 }
 
-describe('SCUM-24 venue search results', () => {
+describe('SCRUM-24 venue search results', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     useAuth.mockReturnValue({ hasRole: () => false });
   });
 
   /*
-   * AC:       SCUM-24 AC1-AC4
+   * AC:       SCRUM-24 AC1-AC4
    * Scenario: Coordinator runs a search and reads a result card
    * Setup:    Search returns Helix Hall with facilities, accessibility and layouts
    * Expected: The card shows name, location, capacity, facilities, accessibility and layout pills
@@ -615,7 +615,7 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC5
+   * AC:       SCRUM-24 AC5
    * Scenario: Coordinator opens and closes extra details on a result
    * Setup:    Search returns Helix Hall; they click View details then Close
    * Expected: Operating hours and setup/turnaround appear, then disappear
@@ -636,7 +636,7 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 (empty results)
+   * AC:       SCRUM-24 (empty results)
    * Scenario: Search matches nothing
    * Setup:    Search API returns an empty list
    * Expected: "No venues match your selected filters."
@@ -652,7 +652,7 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC6
+   * AC:       SCRUM-24 AC6
    * Scenario: A second search returns updated catalogue data
    * Setup:    First search capacity 180, second search capacity 200
    * Expected: The page shows 200 and not 180
@@ -673,7 +673,7 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC5
+   * AC:       SCRUM-24 AC5
    * Scenario: Coordinator had details open and runs a new search
    * Setup:    View details is open, then Search venues is clicked again
    * Expected: The detail panel closes
@@ -692,7 +692,7 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC3, AC4
+   * AC:       SCRUM-24 AC3, AC4
    * Scenario: A result has no facilities, accessibility or layouts on file
    * Setup:    Search returns Bare Room with facilities '', accessibility null, layouts []
    *           and no operating hours; the coordinator also opens its details
@@ -726,7 +726,7 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC5
+   * AC:       SCRUM-24 AC5
    * Scenario: Coordinator has details open and clicks Clear
    * Setup:    Search returns Helix Hall; View details is open
    * Expected: The detail panel and the results are both gone
@@ -746,7 +746,7 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC5
+   * AC:       SCRUM-24 AC5
    * Scenario: Coordinator compares two results by opening each one's details
    * Setup:    Search returns Helix Hall and Orchid Room with different hours and times
    * Expected: The panel shows the venue that was clicked, and switches when another is clicked
@@ -778,7 +778,7 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC6
+   * AC:       SCRUM-24 AC6
    * Scenario: Coordinator clicks Clear while a search is still loading
    * Setup:    The search response is held back until after Clear
    * Expected: The late response is ignored, so no results reappear; Search is usable again
@@ -798,7 +798,7 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC6
+   * AC:       SCRUM-24 AC6
    * Scenario: Two searches overlap and the older one finishes last
    * Setup:    The newer search returns capacity 200 first, then the older returns 180
    * Expected: The page keeps showing 200, not the stale 180
@@ -822,7 +822,7 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC6
+   * AC:       SCRUM-24 AC6
    * Scenario: The latest search fails
    * Setup:    The search request is rejected with "Search failed"
    * Expected: The error is still shown and Search is usable again
@@ -841,7 +841,7 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC6
+   * AC:       SCRUM-24 AC6
    * Scenario: A search fails after the coordinator already clicked Clear
    * Setup:    The search request is rejected only after Clear
    * Expected: No error message appears for the abandoned search

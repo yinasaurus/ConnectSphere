@@ -20,7 +20,7 @@ jest.mock('../../src/auth', () => {
   };
 });
 
-describe('SCUM-16 (Event Clarification & Review Panel)', () => {
+describe('SCRUM-16 (Event Clarification & Review Panel)', () => {
   const coordinatorUser = {
     id: 10,
     fullName: 'Chloe Lim',

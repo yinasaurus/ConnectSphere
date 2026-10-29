@@ -6,7 +6,7 @@
  *   AC4  A negative or non-numeric value is rejected and the saved value is unchanged.
  *   AC5  Anyone who isn't Venue Staff is rejected and the values are unchanged.
  *
- * This is a verification card: the fields were built in SCUM-7. Every request goes
+ * This is a verification card: the fields were built in SCRUM-7. Every request goes
  * through the real app (session cookie, role check, body validation, venues service);
  * only the database is replaced by in-memory tables, so each test can check what was
  * actually saved. "Turnaround" is stored and sent as teardown_minutes / teardownMinutes.

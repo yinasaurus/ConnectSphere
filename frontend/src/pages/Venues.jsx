@@ -326,7 +326,7 @@ export default function Venues() {
     return value === '' ? '' : Number(value);
   }
 
-  // SCUM-7 AC1: a new venue can support several room layouts, so each one is a toggle.
+  // SCRUM-7 AC1: a new venue can support several room layouts, so each one is a toggle.
   function toggleNewVenueLayout(layout) {
     setForm((current) => ({
       ...current,
