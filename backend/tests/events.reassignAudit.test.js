@@ -64,9 +64,9 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
    * Scenario: A Lead replaces the Coordinator on an event.
    * Setup: Event 3 is held by Coordinator 2. Lead 11 chooses active Coordinator 4.
    *   The change is saved, so it is confirmed. A refused change is a different test.
-   * Expected: One audit entry. The actor is the Lead. The old Coordinator is 2 and the
-   *   new one is 4. When is audit_logs.created_at, which the database sets on insert,
-   *   the same way as every other audit entry. writeAudit does not pass that timestamp.
+   * Expected: One audit call. The actor is the Lead. The old Coordinator is 2 and the
+   *   new one is 4. This test does not assert when. The insert test checks that
+   *   created_at is left off the row so the database default records it.
    * Type: normal
    */
   it('records who changed the Coordinator, and the old and new Coordinator, when a Lead reassigns', async () => {
