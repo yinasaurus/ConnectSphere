@@ -31,6 +31,13 @@ describe('SCUM-13 routes with real JWT authentication and role middleware', () =
     ['post', '/api/events', events.createEvent, [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR], 201],
     ['patch', '/api/events/3', events.updateEvent, [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR], 200],
     ['post', '/api/events/3/submit', events.submitEvent, [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR], 200],
+    /*
+    * AC:       SCRUM-64 (AC6: only users with the Event Coordinator role can perform this action — route level)
+    * Scenario: Route-level role check: only an Event Coordinator may call POST /api/events/:id/review.
+    * Setup:    A real signed-in session for every role in the system (plus UNKNOWN and no session) calls POST /api/events/3/review through the real app.
+    * Expected: Only EVENT_COORDINATOR gets 200 and reaches the handler; every other role gets 403; no session gets 401.
+    * Type:     normal
+    */
     // SCRUM-64-TC09 (data row - drives the shared it.each role-matrix loop below, not a standalone test)
     ['post', '/api/events/3/review', events.openForReview, [ROLES.EVENT_COORDINATOR], 200],
     ['post', '/api/events/3/status', events.changeStatus, [ROLES.EVENT_COORDINATOR], 200],

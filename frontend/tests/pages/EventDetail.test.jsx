@@ -541,10 +541,15 @@ it('SCRUM-28 AC1: a submitted request with no Coordinator shows Unassigned', asy
  * and wires to the right endpoint.
  */
 
-// AC1 + AC6 · The assigned coordinator sees an "Open for review" button on a
-// Submitted request, and it calls the review endpoint.
+  /*
+  * AC:       SCRUM-64 (AC1 + AC6: button only available to the assigned Coordinator)
+  * Scenario: The assigned Coordinator sees and can click the 'Open for review' button.
+  * Setup:    Logged in as the event's assigned Coordinator (id 2); event status is SUBMITTED.
+  * Expected: Button is present and clicking it calls POST /api/events/3/review.
+  * Type:     normal
+  */
 // SCRUM-64-TC10
-it('US64-F01: the assigned coordinator opens a submitted request for review', async () => {
+it('the assigned coordinator opens a submitted request for review', async () => {
   useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
   renderEvent();
@@ -553,10 +558,15 @@ it('US64-F01: the assigned coordinator opens a submitted request for review', as
   expect(api).toHaveBeenCalledWith('/api/events/3/review', { method: 'POST' });
 });
 
-// AC3 · A coordinator who isn't assigned to this request (id 9) never sees the button,
-// even though they can still view the event for planning purposes.
+/*
+ * AC:       SCRUM-64 (AC3: button hidden from a Coordinator this request isn't assigned to)
+ * Scenario: An unrelated Coordinator does not see the 'Open for review' button.
+ * Setup:    Logged in as a Coordinator not assigned to the event (id 9); event status is SUBMITTED.
+ * Expected: Event page renders (view-only), but no 'Open for review' button is shown.
+ * Type:     error
+ */
 // SCRUM-64-TC11
-it('US64-F02: an unrelated coordinator does not see the Open for review button', async () => {
+it('an unrelated coordinator does not see the Open for review button', async () => {
   useAuth.mockReturnValue({ user: { id: 9 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
   renderEvent();
@@ -564,9 +574,15 @@ it('US64-F02: an unrelated coordinator does not see the Open for review button',
   expect(screen.queryByRole('button', { name: 'Open for review' })).not.toBeInTheDocument();
 });
 
-// AC6 · The organiser never sees the coordinator-only button on their own request.
+/*
+ * AC:       SCRUM-64 (AC6: button hidden from the Organiser — Coordinator-only action)
+ * Scenario: The Organiser does not see the 'Open for review' button on their own request.
+ * Setup:    Logged in as the event's Organiser; event status is SUBMITTED.
+ * Expected: Event page renders, but no 'Open for review' button is shown.
+ * Type:     error
+ */
 // SCRUM-64-TC12
-it('US64-F03: the organiser does not see the Open for review button', async () => {
+it('the organiser does not see the Open for review button', async () => {
   mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
   renderEvent();
   expect(await screen.findByText('Review me')).toBeInTheDocument();
