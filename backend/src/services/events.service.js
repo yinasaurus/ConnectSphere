@@ -1468,7 +1468,7 @@ async function acceptCoordinatorChange(user, eventId) {
     resolved_at: new Date().toISOString(),
   });
 
-  // SCRUM-32 AC1, AC2: the incoming Coordinator confirmed the change. Who is their id.
+  // SCRUM-32 AC1, AC2: the Lead who accepted confirmed the change. Who is their id.
   // When is audit_logs.created_at. Old and new Coordinator are the metadata.
   await writeAudit(user.id, 'COORDINATOR_REASSIGNED', 'event', eventId, {
     fromCoordinatorId: previousCoordinatorId,
