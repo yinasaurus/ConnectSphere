@@ -121,6 +121,7 @@ describe('SCRUM-59 venue setup and turnaround times', () => {
    * Expected: 200, and both values are stored in minutes on the venue record.
    * Type:     normal
    */
+  // SCRUM-59-TC01
   it('lets Venue Staff set the setup and turnaround minutes of a venue', async () => {
     const res = await request(app).patch('/api/venues/1')
       .set('Cookie', cookieFor(USERS.venueStaff))
@@ -139,6 +140,7 @@ describe('SCRUM-59 venue setup and turnaround times', () => {
    * Expected: 201, and the new venue is stored with 10 and 25, not the 30-minute defaults.
    * Type:     normal
    */
+  // SCRUM-59-TC02
   it('stores the setup and turnaround minutes given when a venue is created', async () => {
     const res = await request(app).post('/api/venues')
       .set('Cookie', cookieFor(USERS.venueStaff))
@@ -157,6 +159,7 @@ describe('SCRUM-59 venue setup and turnaround times', () => {
    *           no setup or turnaround can be recorded that way.
    * Type:     boundary
    */
+  // SCRUM-59-TC03
   it('saves 0 minutes when editing a venue', async () => {
     const res = await request(app).patch('/api/venues/1')
       .set('Cookie', cookieFor(USERS.venueStaff))
@@ -175,6 +178,7 @@ describe('SCRUM-59 venue setup and turnaround times', () => {
    *           can be edited on its own.
    * Type:     normal
    */
+  // SCRUM-59-TC04
   it('lets Venue Staff change either value on its own later', async () => {
     await request(app).patch('/api/venues/1')
       .set('Cookie', cookieFor(USERS.venueStaff))
@@ -196,6 +200,7 @@ describe('SCRUM-59 venue setup and turnaround times', () => {
    *           Update venue form is filled from when the venue is opened.
    * Type:     normal
    */
+  // SCRUM-59-TC05
   it('returns the saved values when the venue is loaded again', async () => {
     const saved = await request(app).patch('/api/venues/1')
       .set('Cookie', cookieFor(USERS.venueStaff))
@@ -218,6 +223,7 @@ describe('SCRUM-59 venue setup and turnaround times', () => {
    * Expected: 400 VALIDATION_ERROR naming the field, and the saved 30/45 is unchanged.
    * Type:     error
    */
+  // SCRUM-59-TC06
   it.each([
     ['setupMinutes', -1],
     ['setupMinutes', -30],
@@ -249,6 +255,7 @@ describe('SCRUM-59 venue setup and turnaround times', () => {
    *           keep their saved values, because the whole save is rejected.
    * Type:     error
    */
+  // SCRUM-59-TC07
   it('rejects the whole save when one value is negative', async () => {
     const res = await request(app).patch('/api/venues/1')
       .set('Cookie', cookieFor(USERS.venueStaff))
@@ -265,6 +272,7 @@ describe('SCRUM-59 venue setup and turnaround times', () => {
    * Expected: 400 naming setupMinutes, and no venue is created.
    * Type:     error
    */
+  // SCRUM-59-TC08
   it('rejects a negative setup time on a new venue', async () => {
     const res = await request(app).post('/api/venues')
       .set('Cookie', cookieFor(USERS.venueStaff))
@@ -283,6 +291,7 @@ describe('SCRUM-59 venue setup and turnaround times', () => {
    * Expected: 403 for every role, and the saved 30/45 is unchanged.
    * Type:     error
    */
+  // SCRUM-59-TC09
   it.each([
     ['Event Coordinator', USERS.coordinator],
     ['Event Organiser', USERS.organiser],
@@ -305,6 +314,7 @@ describe('SCRUM-59 venue setup and turnaround times', () => {
    * Expected: 401, and the saved values are unchanged.
    * Type:     error
    */
+  // SCRUM-59-TC10
   it('refuses a change without a session and keeps the saved values', async () => {
     const res = await request(app).patch('/api/venues/1').send({ setupMinutes: 5 });
 
@@ -320,6 +330,7 @@ describe('SCRUM-59 venue setup and turnaround times', () => {
    *           on a new venue either.
    * Type:     error
    */
+  // SCRUM-59-TC11
   it('refuses to let a non-Venue-Staff user create a venue with times', async () => {
     const res = await request(app).post('/api/venues')
       .set('Cookie', cookieFor(USERS.coordinator))

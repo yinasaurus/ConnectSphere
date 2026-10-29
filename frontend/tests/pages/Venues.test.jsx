@@ -230,17 +230,40 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCRUM-7 AC4; SCRUM-59 AC4 (setup and turnaround rows)
-   * Scenario: Venue Staff clear the capacity, setup or teardown (turnaround) box on the
-   *           Update venue form and save.
+   * AC:       SCRUM-7 AC4
+   * Scenario: Venue Staff clear the capacity box on the Update venue form and save.
    * Setup:    Helix Hall selected. A cleared number box is sent as '', and the mocked API
-   *           answers with the same messages the real validator gives for a non-number.
-   * Expected: The form shows which field is wrong and why, and the saved venue is unchanged,
+   *           answers with the same message the real validator gives for a non-number.
+   * Expected: The form shows which field is wrong and why, and the saved venue name is unchanged,
    *           because an empty value is not a number and is rejected rather than saved.
    * Type:     error
    */
+  it('shows the rejection when the capacity box is cleared', async () => {
+    const user = userEvent.setup();
+    mockDatabaseApi({ validateUpdate: true });
+    renderVenues();
+    await user.click(await screen.findByRole('button', { name: /Helix Hall/i }));
+
+    const input = within(formCard('Update venue')).getByLabelText('Capacity');
+    await user.clear(input);
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText('capacity: Capacity must be a number')).toBeInTheDocument();
+    expect(database.venues[0].name).toBe('Helix Hall');
+  });
+
+  /*
+   * AC:       SCRUM-59 AC4
+   * Scenario: Venue Staff clear the setup or teardown (turnaround) box on the Update venue
+   *           form and save.
+   * Setup:    Helix Hall selected. A cleared number box is sent as '', and the mocked API
+   *           answers with the same message the real validator gives for a non-number.
+   * Expected: The form shows which field is wrong and why, and the saved venue name is unchanged,
+   *           because an empty value is not a number and is rejected rather than saved.
+   * Type:     error
+   */
+  // SCRUM-59-TC15
   it.each([
-    ['capacity', 'Capacity', 'capacity: Capacity must be a number'],
     ['setup minutes', 'Setup (mins)', 'setupMinutes: Setup minutes must be a number'],
     ['teardown minutes', 'Teardown (mins)', 'teardownMinutes: Teardown minutes must be a number'],
   ])('shows the rejection when the %s box is cleared', async (_field, label, expectedMessage) => {
@@ -465,6 +488,7 @@ describe('Venues page inputs', () => {
    *           the form shows 15 and 0. 0 must not come back as the 30-minute default.
    * Type:     boundary
    */
+  // SCRUM-59-TC12
   it('shows the saved setup and turnaround minutes when the venue is reopened', async () => {
     const user = userEvent.setup();
     renderVenues();
@@ -501,6 +525,7 @@ describe('Venues page inputs', () => {
    *           venue shows the saved 30, not the rejected -5.
    * Type:     error
    */
+  // SCRUM-59-TC13
   it('shows the rejection for a negative setup time and keeps the saved value', async () => {
     const user = userEvent.setup();
     const normal = api.getMockImplementation();
@@ -537,6 +562,7 @@ describe('Venues page inputs', () => {
    *           venues.setupTurnaround.test.js.)
    * Type:     error
    */
+  // SCRUM-59-TC14
   it('does not offer the setup and turnaround fields to a non-Venue-Staff user', async () => {
     const user = userEvent.setup();
     useAuth.mockReturnValue({ hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
