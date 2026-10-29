@@ -1206,8 +1206,8 @@ async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
  * Business rule: W7 #5 — the Lead assigns and reassigns. Shiyin, 24 Oct 2026: this is
  *   allowed in any status. An event with no Coordinator is first assignment (SCRUM-71),
  *   not this action. Notices are sent by notifyCoordinatorReassigned (SCRUM-29). The
- *   refusal for anyone who is not a Lead is also SCRUM-33. The audit entry is SCRUM-32,
- *   so this action does not write one.
+ *   refusal for anyone who is not a Lead is also SCRUM-33. SCRUM-32 writes the audit
+ *   entry only after the Coordinator on the event has actually changed.
  * Inputs: Lead user, event id, coordinatorId of the replacement.
  * Output: the updated event. Failure: 403 if the caller is not a Lead; 404 if the event
  *   is missing; 409 NOT_ASSIGNED if it has no Coordinator; 409 ALREADY_ASSIGNED if this
@@ -1239,6 +1239,14 @@ async function reassignEventCoordinator(user, eventId, coordinatorId) {
   await updateById('events', eventId, {
     coordinator_id: nextCoordinatorId,
     updated_at: new Date().toISOString(),
+  });
+
+  // SCRUM-32 AC1, AC2: one audit row per confirmed change. actor_id is who did it.
+  // created_at on audit_logs is when. The metadata is the old and new Coordinator.
+  // A refused reassignment returns before this, so it leaves no row.
+  await writeAudit(user.id, 'COORDINATOR_REASSIGNED', 'event', eventId, {
+    fromCoordinatorId: previousCoordinatorId,
+    toCoordinatorId: nextCoordinatorId,
   });
 
   // No earlier request told the incoming Coordinator. SCRUM-29 sends that notice here.
@@ -1315,6 +1323,7 @@ async function confirmEvent(user, id) {
  * AC: SCRUM-45 AC2 — the incoming Coordinator is notified of the reassignment request.
  *     SCRUM-29 AC4 — this notice is sent on every request, with no de-duplication, so a
  *     Coordinator asked again is told again.
+ *     SCRUM-32 AC1 — a request is not confirmed, so this function does not write an audit entry.
  * Business rule: Week 4 Q&A — reassignment is agreed offline; original Coordinator requests,
  *   new Coordinator accepts.
  * Inputs: current assigned Coordinator, event id, newCoordinatorId.
@@ -1398,6 +1407,8 @@ async function notifyCoordinatorReassigned(event, outgoingCoordinatorId, incomin
  * AC: SCRUM-45 AC2 (reassign to/from — outgoing notified here; incoming was notified on
  *     request), AC3 (only those parties), AC5 (Organiser notified when assigned Coordinator changes).
  *     SCRUM-29 AC3 (event record now shows the new Coordinator), AC5 (previous Coordinator told).
+ *     SCRUM-32 AC1, AC2 — accepting is the confirmed reassignment, so it writes the audit
+ *     entry. The request itself is not confirmed and does not.
  * Business rule: W7 #5 — relevant users notified of reassignments.
  * Inputs: accepting Coordinator (must be to_coordinator_id), event id.
  * Output: updated event. Failure: 404 if no pending reassignment or event missing.
@@ -1428,6 +1439,13 @@ async function acceptCoordinatorChange(user, eventId) {
   await updateById('coordinator_reassignments', request.id, {
     status: 'ACCEPTED',
     resolved_at: new Date().toISOString(),
+  });
+
+  // SCRUM-32 AC1, AC2: the incoming Coordinator confirmed the change. Who is their id.
+  // When is audit_logs.created_at. Old and new Coordinator are the metadata.
+  await writeAudit(user.id, 'COORDINATOR_REASSIGNED', 'event', eventId, {
+    fromCoordinatorId: previousCoordinatorId,
+    toCoordinatorId: user.id,
   });
 
   // Incoming Coordinator already received COORDINATOR_REASSIGN on request — do not notify them again.

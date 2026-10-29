@@ -6,7 +6,7 @@
  *   US31-R..  HTTP route (auth cookie + Lead role + body validation)
  *
  * Notices are SCRUM-29 (US29-H01). The non-Lead refusal is SCRUM-33.
- * The audit row is SCRUM-32. Those cases are not repeated here.
+ * The audit row is SCRUM-32, in events.reassignAudit.test.js.
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
@@ -98,8 +98,6 @@ describe('SCRUM-31 reassign coordinator (service rules)', () => {
       coordinator_id: 4,
     }));
     expect(db.insertOne).not.toHaveBeenCalled();
-    // SCRUM-32 owns the audit entry. This action must not write one.
-    expect(audit.writeAudit).not.toHaveBeenCalled();
 
     await expect(service.updateEvent(previousCoordinator, 3, { name: 'Taken over' })).rejects.toMatchObject({
       status: 403,
