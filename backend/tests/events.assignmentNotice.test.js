@@ -5,6 +5,9 @@
  * SCRUM-29 also covers assignment notices: the E2E assign notice is tested once here;
  * SCRUM-29 should refer to this suite rather than duplicating it.
  *
+ * SCRUM-33: a Coordinator request or accept is rejected and sends no notice.
+ * Reassignment notices are asserted on the Lead reassign action.
+ *
  * Already covered elsewhere (do not re-implement):
  *   AC1 approve/reject → events.decision / events.notifications (EVENT_STATUS_CHANGED)
  *   AC1 clarification request → requestClarification tests / EventDetail SCRUM-16
@@ -177,55 +180,50 @@ describe('SCRUM-45 Lead assignment notices (AC2, AC3, AC5)', () => {
 
 describe('SCRUM-45 reassignment notices (AC2, AC3, AC5)', () => {
   /*
-   * AC:       SCRUM-45 AC2
-   * Scenario: Current Coordinator requests that Coordinator 4 take over.
-   * Setup:    Event assigned to 2; request to 4.
-   * Expected: One COORDINATOR_REASSIGN notice to user 4 only (incoming).
-   * Type:     normal
+   * AC:       SCRUM-33 AC2, AC3 (this used to be the SCRUM-45 request notice)
+   * Scenario: The assigned Coordinator asks another Coordinator to take the event.
+   * Setup:    Event assigned to Coordinator 2, who is not a Lead. Week 7 change #5
+   *           blocks that caller. The Lead reassignment notice is US45-B05.
+   * Expected: 403 FORBIDDEN. Nobody is notified, no handover row is stored, and
+   *           the Coordinator on the event is still 2.
+   * Type:     error
    */
-  it('US45-B04: reassignment request notifies only the incoming Coordinator', async () => {
+  it('US45-B04: a Coordinator reassignment request is rejected and notifies nobody', async () => {
     event.coordinator_id = 2;
     event.status = 'PLANNING';
-    db.fetchOne.mockResolvedValueOnce(event);
 
-    await events.requestCoordinatorChange(coordinator, 3, 4);
+    await expect(events.requestCoordinatorChange(coordinator, 3, 4)).rejects.toMatchObject({
+      status: 403,
+      code: 'FORBIDDEN',
+    });
 
-    expect(audit.notifyUser).toHaveBeenCalledTimes(1);
-    expect(audit.notifyUser).toHaveBeenCalledWith(
-      4,
-      'COORDINATOR_REASSIGN',
-      expect.any(String),
-      expect.stringMatching(/Leadership Forum|take over/i),
-      3
-    );
+    expect(audit.notifyUser).not.toHaveBeenCalled();
+    expect(db.insertOne).not.toHaveBeenCalled();
+    expect(event.coordinator_id).toBe(2);
   });
 
   /*
    * AC:       SCRUM-45 AC2, AC3, AC5
-   * Scenario: Incoming Coordinator accepts; Organiser and outgoing Coordinator are told.
-   * Setup:    Pending reassignment from 2 → 4; event still shows coordinator 2.
-   * Expected: COORDINATOR_CHANGED to Organiser 1; COORDINATOR_UNASSIGNED to outgoing 2;
-   *           incoming 4 is not notified again on accept.
+   * Scenario: The Lead replaces the Coordinator. There is no earlier request, so the
+   *           incoming Coordinator has not been told yet.
+   * Setup:    Event assigned to Coordinator 2. Lead 11 chooses active Coordinator 4.
+   *           SCRUM-33: a Coordinator accept is no longer how this notice is sent.
+   * Expected: Organiser 1 gets COORDINATOR_CHANGED, outgoing 2 gets COORDINATOR_UNASSIGNED,
+   *           and incoming 4 gets COORDINATOR_ASSIGNED. Nobody else is told.
    * Type:     normal
    */
-  it('US45-B05: accepting reassignment notifies Organiser and outgoing Coordinator only', async () => {
+  it('US45-B05: a Lead reassignment notifies the Organiser and both Coordinators', async () => {
     event.coordinator_id = 2;
     event.status = 'PLANNING';
-    const pending = {
-      id: 9,
-      event_id: 3,
-      from_coordinator_id: 2,
-      to_coordinator_id: 4,
-      status: 'PENDING',
-    };
     db.fetchOne
-      .mockResolvedValueOnce(pending)
       .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce({ id: 4, full_name: 'Dan Ong', is_active: true })
       .mockResolvedValue(event);
+    db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }]);
 
-    await events.acceptCoordinatorChange(otherCoordinator, 3);
+    await events.reassignEventCoordinator(lead, 3, 4);
 
-    expect(audit.notifyUser).toHaveBeenCalledTimes(2);
+    expect(audit.notifyUser).toHaveBeenCalledTimes(3);
     expect(audit.notifyUser).toHaveBeenCalledWith(
       1,
       'COORDINATOR_CHANGED',
@@ -240,54 +238,65 @@ describe('SCRUM-45 reassignment notices (AC2, AC3, AC5)', () => {
       expect.stringMatching(/Leadership Forum/),
       3
     );
-    const recipients = audit.notifyUser.mock.calls.map(([userId]) => userId);
-    expect(recipients).not.toContain(4);
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      4,
+      'COORDINATOR_ASSIGNED',
+      'Event assigned to you',
+      expect.stringMatching(/Leadership Forum/),
+      3
+    );
   });
 
   /*
-   * AC:       SCRUM-45 AC2, AC5
-   * Scenario: Accept with no matching pending request.
-   * Setup:    fetchOne returns null for the reassignment row.
-   * Expected: 404; no notices.
+   * AC:       SCRUM-33 AC2, AC3
+   * Scenario: A Coordinator accepts a handover. They are not a Lead.
+   * Setup:    Caller is Coordinator 4. Whether a pending row exists does not matter,
+   *           because the role check happens first.
+   * Expected: 403 FORBIDDEN and no notices. The older 404 for a missing request
+   *           applies only after a Lead gets past this check.
    * Type:     error
    */
-  it('US45-B06: accepting with no pending reassignment creates no notices', async () => {
-    db.fetchOne.mockResolvedValueOnce(null);
+  it('US45-B06: a Coordinator cannot accept a reassignment, so no notices are sent', async () => {
     await expect(events.acceptCoordinatorChange(otherCoordinator, 3)).rejects.toMatchObject({
-      status: 404,
+      status: 403,
+      code: 'FORBIDDEN',
     });
     expect(audit.notifyUser).not.toHaveBeenCalled();
+    expect(db.updateById).not.toHaveBeenCalled();
   });
 
   /*
    * AC:       SCRUM-45 AC2, AC5
-   * Scenario: Accept reassignment when the event has no organiser_id.
-   * Setup:    Pending 2→4; organiser_id null.
-   * Expected: Only outgoing Coordinator 2 gets COORDINATOR_UNASSIGNED.
+   * Scenario: The Lead reassigns an event that has no Organiser on the record.
+   * Setup:    organiser_id null. Event assigned to Coordinator 2. Replacement is
+   *           active Coordinator 4.
+   * Expected: Outgoing Coordinator 2 and incoming Coordinator 4 are told. There is
+   *           no Organiser notice and no third call.
    * Type:     boundary
    */
-  it('US45-B10: accepting reassignment with no organiser notifies only the outgoing Coordinator', async () => {
+  it('US45-B10: a Lead reassignment with no organiser notifies the two Coordinators', async () => {
     event.organiser_id = null;
     event.coordinator_id = 2;
     event.status = 'PLANNING';
-    const pending = {
-      id: 9,
-      event_id: 3,
-      from_coordinator_id: 2,
-      to_coordinator_id: 4,
-      status: 'PENDING',
-    };
     db.fetchOne
-      .mockResolvedValueOnce(pending)
       .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce({ id: 4, full_name: 'Dan Ong', is_active: true })
       .mockResolvedValue(event);
+    db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }]);
 
-    await events.acceptCoordinatorChange(otherCoordinator, 3);
+    await events.reassignEventCoordinator(lead, 3, 4);
 
-    expect(audit.notifyUser).toHaveBeenCalledTimes(1);
+    expect(audit.notifyUser).toHaveBeenCalledTimes(2);
     expect(audit.notifyUser).toHaveBeenCalledWith(
       2,
       'COORDINATOR_UNASSIGNED',
+      expect.any(String),
+      expect.any(String),
+      3
+    );
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      4,
+      'COORDINATOR_ASSIGNED',
       expect.any(String),
       expect.any(String),
       3
@@ -438,33 +447,29 @@ describe('SCRUM-45 assignment notice HTTP route', () => {
 
   /*
    * AC:       SCRUM-45 AC2, AC5
-   * Scenario: Incoming Coordinator accepts through the real HTTP route.
-   * Setup:    Cookie for Coordinator 4; pending reassignment from 2; event owned by Organiser 1.
-   * Expected: 200; Organiser and outgoing Coordinator notified; incoming not notified again.
+   * Scenario: The Lead reassigns through the real HTTP route, so the relevant users are told.
+   * Setup:    Cookie for Lead 11. Event 3 is held by Coordinator 2. Body names active
+   *           Coordinator 4. SCRUM-33 rejects a Coordinator accept on /reassign/accept,
+   *           so this notice is sent from the Lead route instead.
+   * Expected: 200. Organiser, outgoing Coordinator, and incoming Coordinator are each told once.
    * Type:     normal
    */
-  it('US45-R02: POST reassign/accept notifies Organiser and outgoing Coordinator', async () => {
-    const acceptApp = createApp();
-    const acceptToken = jwt.sign({ sub: 4 }, env.jwtSecret);
+  it('US45-R02: POST reassign-coordinator notifies the Organiser and both Coordinators', async () => {
     event.coordinator_id = 2;
     event.status = 'PLANNING';
-    const pending = {
-      id: 9,
-      event_id: 3,
-      from_coordinator_id: 2,
-      to_coordinator_id: 4,
-      status: 'PENDING',
-    };
     db.fetchOne
-      .mockResolvedValueOnce({ id: 4, is_active: true })
-      .mockResolvedValueOnce(pending)
+      .mockResolvedValueOnce({ id: 11, is_active: true })
       .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce({ id: 4, full_name: 'Dan Ong', is_active: true })
       .mockResolvedValue(event);
-    db.fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_COORDINATOR }]);
+    db.fetchMany
+      .mockResolvedValueOnce([{ role: ROLES.EVENT_COORDINATOR_LEAD }])
+      .mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }]);
 
-    const res = await request(acceptApp)
-      .post('/api/events/3/reassign/accept')
-      .set('Cookie', `${env.sessionCookieName}=${acceptToken}`);
+    const res = await request(app)
+      .post('/api/events/3/reassign-coordinator')
+      .set('Cookie', `${env.sessionCookieName}=${token}`)
+      .send({ coordinatorId: 4 });
 
     expect(res.status).toBe(200);
     expect(audit.notifyUser).toHaveBeenCalledWith(
@@ -481,7 +486,12 @@ describe('SCRUM-45 assignment notice HTTP route', () => {
       expect.any(String),
       expect.anything()
     );
-    const recipients = audit.notifyUser.mock.calls.map(([userId]) => userId);
-    expect(recipients).not.toContain(4);
+    expect(audit.notifyUser).toHaveBeenCalledWith(
+      4,
+      'COORDINATOR_ASSIGNED',
+      expect.any(String),
+      expect.any(String),
+      expect.anything()
+    );
   });
 });
