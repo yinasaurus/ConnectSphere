@@ -25,11 +25,18 @@ const { createApp } = require('../src/app');
 const { ROLES } = require('../src/constants/roles');
 const { env } = require('../src/config/env');
 
-const callers = [
-  ['the assigned Coordinator', { id: 2, roles: [ROLES.EVENT_COORDINATOR] }],
+const assignCallers = [
+  ['a Coordinator', { id: 2, roles: [ROLES.EVENT_COORDINATOR] }],
   ['another Coordinator', { id: 4, roles: [ROLES.EVENT_COORDINATOR] }],
   ['an Event Organiser', { id: 1, roles: [ROLES.EVENT_ORGANISER] }],
   ['Venue Staff', { id: 5, roles: [ROLES.VENUE_STAFF] }],
+];
+
+const callers = [
+  ['the assigned Coordinator', assignCallers[0][1]],
+  ['another Coordinator', assignCallers[1][1]],
+  ['an Event Organiser', assignCallers[2][1]],
+  ['Venue Staff', assignCallers[3][1]],
 ];
 
 let event;
@@ -78,13 +85,14 @@ describe('SCRUM-33 service refusals', () => {
    * AC: SCRUM-33 AC1, AC2, AC3
    * Scenario: Someone who is not a Lead assigns a Coordinator to an open request.
    * Setup: Event 3 is Submitted and has no Coordinator, so a Lead assign would succeed.
-   *   The caller is the assigned Coordinator, another Coordinator, an Organiser, or Venue Staff.
-   *   Those four are the people the story names, plus another role standing in for "any other user".
+   *   The caller is a Coordinator, another Coordinator, an Organiser, or Venue Staff.
+   *   Nobody holds this event yet, so the first caller is a Coordinator rather than
+   *   the assigned one. Venue Staff stands in for any other user.
    * Expected: 403 FORBIDDEN before the event is written. coordinator_id stays null.
    *   No audit entry. Lead success itself is US71-B01.
    * Type: error
    */
-  it.each(callers)('US33-B01: %s cannot assign a Coordinator', async (_label, user) => {
+  it.each(assignCallers)('US33-B01: %s cannot assign a Coordinator', async (_label, user) => {
     event.coordinator_id = null;
     event.status = 'SUBMITTED';
 
