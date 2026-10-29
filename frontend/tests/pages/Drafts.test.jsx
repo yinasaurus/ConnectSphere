@@ -172,7 +172,7 @@ describe('TC-DRAFT-04 (Draft Saving & Resuming)', () => {
       clonedFromEventId: null,
       organiserId: 1,
     };
-    
+
     const user = userEvent.setup();
     let patchPayload = null;
     let submitCalled = false;
