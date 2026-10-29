@@ -323,4 +323,32 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
       },
     ]);
   });
+
+  /*
+   * AC: SCRUM-57 AC5
+   * Scenario: This Lead allocated a Confirmed event and a Completed event.
+   * Setup: Both newest allocation audits are by Lead 11. Confirmed is not one of the
+   *   four statuses the overview leaves out. Completed is.
+   * Expected: The Confirmed event is listed. The Completed event is absent.
+   * Type: boundary
+   */
+  it('US57-B10: a Confirmed event this Lead allocated stays on the overview', async () => {
+    const assignments = await openOverview(
+      [
+        eventRow({ id: 8, name: 'Closed', status: 'COMPLETED' }),
+        eventRow({ id: 3, name: 'Workshop', status: 'CONFIRMED' }),
+      ],
+      [
+        allocation({ entity_id: 8 }),
+        allocation({ id: 2, entity_id: 3 }),
+      ]
+    );
+
+    expect(assignments).toEqual([
+      {
+        eventId: 3, eventName: 'Workshop', status: 'CONFIRMED',
+        coordinatorId: 2, coordinatorName: 'Chloe Lim',
+      },
+    ]);
+  });
 });
