@@ -240,4 +240,43 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
       toCoordinatorId: 4,
     });
   });
+
+  /*
+   * AC: SCRUM-32 AC1, AC2
+   * Scenario: The incoming Coordinator accepts through the HTTP route.
+   * Setup: Session user 4 is a Coordinator. A pending request asks them to take event 3
+   *   from Coordinator 2. The route is POST /api/events/:id/reassign/accept.
+   * Expected: 200, and one audit entry. Who is Coordinator 4. The old Coordinator is 2
+   *   and the new one is 4. The event id is the route param, which Express passes as a string.
+   * Type: normal
+   */
+  it('writes the audit entry when the incoming Coordinator accepts over HTTP', async () => {
+    const { createApp } = require('../src/app');
+    const app = createApp();
+    const token = jwt.sign({ sub: 4 }, env.jwtSecret);
+    const pending = {
+      id: 9,
+      event_id: 3,
+      from_coordinator_id: 2,
+      to_coordinator_id: 4,
+      status: 'PENDING',
+    };
+    db.fetchOne
+      .mockResolvedValueOnce({ id: 4, is_active: true, full_name: 'Daniel Ong' })
+      .mockResolvedValueOnce(pending)
+      .mockResolvedValueOnce(event)
+      .mockResolvedValue(event);
+    db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }]);
+
+    const res = await request(app)
+      .post('/api/events/3/reassign/accept')
+      .set('Cookie', `${env.sessionCookieName}=${token}`);
+
+    expect(res.status).toBe(200);
+    expect(audit.writeAudit).toHaveBeenCalledTimes(1);
+    expect(audit.writeAudit).toHaveBeenCalledWith(4, 'COORDINATOR_REASSIGNED', 'event', '3', {
+      fromCoordinatorId: 2,
+      toCoordinatorId: 4,
+    });
+  });
 });
