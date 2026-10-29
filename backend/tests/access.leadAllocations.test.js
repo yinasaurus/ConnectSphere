@@ -265,4 +265,39 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
       },
     ]);
   });
+
+  /*
+   * AC: SCRUM-57 AC2
+   * Scenario: Another Lead reassigned the event later, and that audit has the lower id.
+   * Setup: Lead 11's assignment has id 9 and the earlier time. Lead 12's reassignment
+   *   has id 2 and the later time. The event now holds Daniel. Id order and time order disagree.
+   * Expected: Lead 11's overview is empty. Lead 12's overview shows event 3 held by Daniel.
+   * Type: boundary
+   */
+  it('US57-B08: the later reassignment wins even when its audit id is lower', async () => {
+    const heldByDaniel = [eventRow({ coordinator_id: 4, coordinator: { full_name: 'Daniel Ong' } })];
+    const audits = [
+      allocation({ id: 9, created_at: '2026-10-01T00:00:00.000Z' }),
+      allocation({
+        id: 2, actor_id: 12, action: 'COORDINATOR_REASSIGNED',
+        created_at: '2026-10-08T00:00:00.000Z',
+      }),
+    ];
+    db.fetchMany
+      .mockResolvedValueOnce(heldByDaniel)
+      .mockResolvedValueOnce(audits)
+      .mockResolvedValueOnce(heldByDaniel)
+      .mockResolvedValueOnce(audits);
+
+    const assignments = await access.listAssignmentOverview(lead);
+    const forOtherLead = await access.listAssignmentOverview(otherLead);
+
+    expect(assignments).toEqual([]);
+    expect(forOtherLead).toEqual([
+      {
+        eventId: 3, eventName: 'Workshop', status: 'PLANNING',
+        coordinatorId: 4, coordinatorName: 'Daniel Ong',
+      },
+    ]);
+  });
 });
