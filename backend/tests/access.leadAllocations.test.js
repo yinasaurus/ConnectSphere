@@ -210,10 +210,11 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
 
   /*
    * AC: SCRUM-57 AC4
-   * Scenario: The reassignment audit is stored without created_at, as writeAudit does,
-   *   and a later id marks it as the current allocation.
-   * Setup: Both audits share an empty time. The reassignment has the higher id.
-   *   The event now holds Daniel. This matches the database assigning created_at and id.
+   * Scenario: Both allocation audits have no created_at, so the higher id is the current one.
+   * Setup: writeAudit does not set created_at. Both rows here leave it empty, and the
+   *   reassignment has the higher id. A row read back from audit_logs has created_at from
+   *   the database default; this case is the tie-break when the times are missing.
+   *   The event now holds Daniel.
    * Expected: The overview shows Daniel, the Coordinator after the reassignment.
    * Type: boundary
    */
