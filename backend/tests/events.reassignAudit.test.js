@@ -238,8 +238,8 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
    *   and nobody has accepted.
    * Setup: User 2 holds event 3 and holds the Lead role. They request Coordinator 4.
    *   SCRUM-33 allows this caller past the role check. The request stays PENDING.
-   * Expected: No audit entry. Asking is not a confirmed reassignment, and the
-   *   Coordinator on the event is still 2.
+   * Expected: One pending handover row is stored. No audit entry. Asking is not a
+   *   confirmed reassignment, and the Coordinator on the event is still 2.
    * Type: boundary
    */
   it('does not write an audit entry for a reassignment that has only been requested', async () => {
@@ -251,6 +251,13 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
       4
     );
 
+    expect(db.insertOne).toHaveBeenCalledTimes(1);
+    expect(db.insertOne).toHaveBeenCalledWith('coordinator_reassignments', expect.objectContaining({
+      event_id: 3,
+      from_coordinator_id: 2,
+      to_coordinator_id: 4,
+      status: 'PENDING',
+    }));
     expect(audit.writeAudit).not.toHaveBeenCalled();
     expect(event.coordinator_id).toBe(2);
   });
