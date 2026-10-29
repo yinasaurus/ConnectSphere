@@ -138,6 +138,24 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
   });
 
   /*
+   * AC: SCRUM-32 AC1
+   * Scenario: A Coordinator who is not a Lead tries to replace the Coordinator.
+   * Setup: Event 3 is held by Coordinator 2. The caller is Coordinator 2, with no Lead
+   *   role. SCRUM-33 owns the refusal itself. This test checks the audit consequence:
+   *   the call is not a confirmed reassignment.
+   * Expected: 403 FORBIDDEN, no audit entry, and the Coordinator on the event is still 2.
+   * Type: error
+   */
+  it('does not write an audit entry when the caller is not a Lead', async () => {
+    await expect(service.reassignEventCoordinator(outgoing, 3, 4)).rejects.toMatchObject({
+      status: 403,
+      code: 'FORBIDDEN',
+    });
+    expect(audit.writeAudit).not.toHaveBeenCalled();
+    expect(event.coordinator_id).toBe(2);
+  });
+
+  /*
    * AC: SCRUM-32 AC1, AC2
    * Scenario: The incoming Coordinator accepts a pending reassignment.
    * Setup: Coordinator 2 holds event 3 and has asked Coordinator 4 to take it.
