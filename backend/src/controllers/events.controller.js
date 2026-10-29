@@ -137,6 +137,12 @@ const history = asyncHandler(async (req, res) => {
   res.json({ history: historyRows });
 });
 
+/**
+ * Purpose: store a pending Coordinator handover for a Lead who currently holds the event.
+ * AC: SCRUM-33 AC1, AC2. The route already rejects anyone who is not a Lead.
+ * Inputs: event id, body.coordinatorId. Output: { ok: true }.
+ * Failure: 403 if the caller is not a Lead or does not hold the event. No row is written.
+ */
 const requestReassign = asyncHandler(async (req, res) => {
   const result = await eventsService.requestCoordinatorChange(
     req.user,
@@ -146,6 +152,13 @@ const requestReassign = asyncHandler(async (req, res) => {
   res.json(result);
 });
 
+/**
+ * Purpose: let a Lead accept a pending handover and return the updated event.
+ * AC: SCRUM-33 AC1, AC2, AC3. A Coordinator is rejected before the event changes.
+ * Inputs: event id. Output: { event }.
+ * Failure: 403 if the caller is not a Lead; 404 if nothing is pending. No audit entry
+ *   is written on failure.
+ */
 const acceptReassign = asyncHandler(async (req, res) => {
   const event = await eventsService.acceptCoordinatorChange(req.user, req.params.id);
   res.json({ event });
