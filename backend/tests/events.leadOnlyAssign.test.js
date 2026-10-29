@@ -164,6 +164,27 @@ describe('SCRUM-33 service refusals', () => {
     expect(db.fetchOne).not.toHaveBeenCalled();
     expectUnchanged(2);
   });
+
+  /*
+   * AC: SCRUM-33 AC2, AC3
+   * Scenario: A Lead asks for a handover on an event they do not hold.
+   * Setup: Event 3 is held by Coordinator 2. Caller 11 is a Lead and is not
+   *   Coordinator 2. The role check lets a Lead through, so the holder check
+   *   has to refuse this request.
+   * Expected: 403 FORBIDDEN. No handover row, no notice, and no audit entry.
+   *   Coordinator 2 still holds the event.
+   * Type: error
+   */
+  it('US33-B05: a Lead who does not hold the event cannot request a reassignment', async () => {
+    const lead = { id: 11, roles: [ROLES.EVENT_COORDINATOR_LEAD] };
+
+    await expect(service.requestCoordinatorChange(lead, 3, 4)).rejects.toMatchObject({
+      status: 403,
+      code: 'FORBIDDEN',
+    });
+    expect(db.insertOne).not.toHaveBeenCalled();
+    expectUnchanged(2);
+  });
 });
 
 describe('SCRUM-33 HTTP refusals', () => {
