@@ -236,4 +236,33 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
     expect(assignments[0].coordinatorId).toBe(4);
     expect(assignments[0].coordinatorName).toBe('Daniel Ong');
   });
+
+  /*
+   * AC: SCRUM-57 AC2, AC4
+   * Scenario: After this Lead assigned the event, a later audit records something else.
+   * Setup: Lead 11's COORDINATOR_ASSIGNED row is older. A newer row by Lead 12 has
+   *   action STATUS_CHANGED. The event still holds Chloe. The overview loads every
+   *   event audit, so this row is present and must be ignored.
+   * Expected: The event stays on Lead 11's overview, held by Chloe.
+   * Type: boundary
+   */
+  it('US57-B07: a later audit that is not an allocation leaves this Lead\'s assignment in place', async () => {
+    const assignments = await openOverview(
+      [eventRow()],
+      [
+        allocation({ id: 1, created_at: '2026-10-01T00:00:00.000Z' }),
+        allocation({
+          id: 2, actor_id: 12, action: 'STATUS_CHANGED',
+          created_at: '2026-10-05T00:00:00.000Z',
+        }),
+      ]
+    );
+
+    expect(assignments).toEqual([
+      {
+        eventId: 3, eventName: 'Workshop', status: 'PLANNING',
+        coordinatorId: 2, coordinatorName: 'Chloe Lim',
+      },
+    ]);
+  });
 });
