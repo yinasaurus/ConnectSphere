@@ -103,6 +103,26 @@ describe('SCRUM-84 coordinator event list', () => {
   });
 
   /*
+   * AC: SCRUM-84 AC3
+   * Scenario: A Lead turns Assigned to me on, then off.
+   * Setup: Same two events. The signed-in user is a Lead and a Coordinator.
+   * Expected: The other event disappears while the filter is on, then comes back when it is off.
+   * Type: boundary
+   */
+  it('AC3: a Lead sees the full list again after clearing Assigned to me', async () => {
+    renderEvents(jordan, '/app/events');
+    await screen.findByRole('heading', { name: 'Theirs' });
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Assigned to me' }));
+    expect(screen.queryByRole('heading', { name: 'Theirs' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Assigned to me' }));
+
+    expect(await screen.findByRole('heading', { name: 'Theirs' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Mine' })).toBeInTheDocument();
+  });
+
+  /*
    * AC: SCRUM-39 AC1
    * Scenario: An Organiser opens Events, including with ?assigned=me in the address.
    * Setup: Organiser is not a Coordinator.
