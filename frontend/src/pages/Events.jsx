@@ -42,6 +42,9 @@ export default function Events() {
     ? events.filter((event) => event.coordinatorId === user?.id)
     : events;
 
+  // Purpose: let a Lead, or another broad role who is also a Coordinator, narrow the list.
+  // AC: SCRUM-84 AC3. A Coordinator with no broader role has no checkbox, so this is unused for them.
+  // Inputs: whether Assigned to me is checked. Output: updates ?assigned=me. Failure: none.
   function toggleAssignedToMe(checked) {
     const next = new URLSearchParams(searchParams);
     if (checked) next.set('assigned', 'me');

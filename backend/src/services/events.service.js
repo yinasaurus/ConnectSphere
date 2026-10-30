@@ -197,7 +197,8 @@ function canViewEvent(user, row) {
  * Purpose: whether a user's roles allow planning details (attendance, venue needs,
  * equipment, history, comments) rather than the public Attendee view.
  * AC: SCRUM-39 AC1 + AC2 (Attendees keep the public view, agreed decision).
- *     SCRUM-54 AC6 — Coordinators, Leads and Safety Officers are planning readers.
+ *     SCRUM-84 AC1 — a Coordinator is a planning reader only for an event they may open.
+ *     SCRUM-54 AC6's view-all rule is superseded.
  *     SCRUM-65 AC4, AC5 — the Lead needs those planning fields on the queue and the detail page.
  *     SCRUM-71 AC1 — Lead is a planning reader so they can assign from the event page.
  * Output: true for Organiser, Coordinator, Lead, Safety Officer, Venue Staff or Technical Support; false otherwise.
@@ -230,6 +231,16 @@ function visibleEvent(user, row) {
     registrationCapacity, registrationOpen };
 }
 
+/**
+ * Purpose: loads one event for a planning role, or refuses the caller.
+ * AC: SCRUM-39 AC1 — history and comments are planning details.
+ *     SCRUM-84 AC2 — a Coordinator who is not assigned is access denied here too,
+ *     because this calls getEvent.
+ * Inputs: the user and the event id.
+ * Output: the event visibleEvent returns.
+ * Failure: 403 when the caller is not a planning role. 403 access denied when a
+ * Coordinator is not assigned. 404 when the event is missing or hidden from an outsider.
+ */
 async function assertPlanningAccess(user, eventId) {
   if (!canViewPlanning(user)) throw httpError(403, 'Planning information is restricted', 'FORBIDDEN');
   return getEvent(user, eventId);
@@ -475,7 +486,8 @@ async function createEvent(user, payload) {
  *     SCRUM-40 2A — Confirmed (and terminal) statuses reject every direct field patch.
  *     SCRUM-40 3A — Organiser direct-edits only Draft and clarification ACTION_REQUIRED.
  *     SCRUM-40 4A — ordinary fields via this path; critical Confirmed changes use change requests.
- *     SCRUM-54 AC5, AC6, AC7 — a Coordinator who is not assigned is refused and the row is unchanged.
+ *     SCRUM-54 AC5, AC7 — a Coordinator who is not assigned is refused and the row is unchanged.
+ *     SCRUM-84 supersedes AC6: that Coordinator also cannot view the event.
  *     SCRUM-41 / SCRUM-42 — after a successful write, critical field changes flag affected
  *     venue/equipment rows for review (status unchanged).
  * Inputs: user, event id, payload of fields to change
