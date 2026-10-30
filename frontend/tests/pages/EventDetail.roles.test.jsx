@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { useAuth } from '../../src/auth';
 import { api } from '../../src/api';
@@ -49,6 +49,10 @@ describe('SCRUM-54 event page role limits', () => {
     api.mockReset();
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   /*
    * AC: SCRUM-84 AC2. Supersedes SCRUM-54 AC6.
    * Scenario: A Coordinator who is not assigned opens the event page.
@@ -73,6 +77,82 @@ describe('SCRUM-54 event page role limits', () => {
     expect(await screen.findByText('Access denied. You can only view events assigned to you.')).toBeInTheDocument();
     expect(screen.queryByText('Secret Workshop')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-84 AC2
+   * Scenario: The assigned Coordinator has the event open, then a later refresh is denied.
+   * Setup: The first load returns Secret Workshop. The next GET /api/events/3 is 403.
+   * Expected: The name is gone and only the access-denied message remains.
+   * Type: error
+   */
+  it('clears the event when a later load is access denied', async () => {
+    jest.useFakeTimers();
+    useAuth.mockReturnValue({
+      user: { id: 2, roles: ['EVENT_COORDINATOR'] },
+      hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
+    });
+    mockEvent({ status: 'PLANNING' });
+    renderEvent();
+    expect(await screen.findByText('Secret Workshop')).toBeInTheDocument();
+
+    api.mockImplementation(async (path) => {
+      if (path === '/api/events/3') {
+        const err = new Error('Access denied. You can only view events assigned to you.');
+        err.status = 403;
+        throw err;
+      }
+      if (path === '/api/events/3/history') return { history: [] };
+      if (path === '/api/comments/3') return { comments: [] };
+      if (path === '/api/venues') return { venues: [] };
+      if (path === '/api/events/3/venue-bookings') return { bookings: [] };
+      return {};
+    });
+    await act(async () => { jest.advanceTimersByTime(10000); });
+
+    expect(await screen.findByText('Access denied. You can only view events assigned to you.')).toBeInTheDocument();
+    expect(screen.queryByText('Secret Workshop')).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-84 AC2
+   * Scenario: Bookings fail on refresh while the event itself is still allowed.
+   * Setup: The event load keeps returning Secret Workshop. Venue bookings return 403.
+   * Expected: The event name stays. A bookings failure does not blank the page.
+   * Type: boundary
+   */
+  it('keeps the event on screen when a bookings refresh is denied', async () => {
+    jest.useFakeTimers();
+    useAuth.mockReturnValue({
+      user: { id: 2, roles: ['EVENT_COORDINATOR'] },
+      hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
+    });
+    mockEvent({ status: 'PLANNING' });
+    renderEvent();
+    expect(await screen.findByText('Secret Workshop')).toBeInTheDocument();
+
+    api.mockImplementation(async (path) => {
+      if (path === '/api/events/3') {
+        return {
+          event: {
+            id: 3, name: 'Secret Workshop', status: 'PLANNING', coordinatorId: 2, organiserId: 1,
+          },
+        };
+      }
+      if (path === '/api/events/3/venue-bookings') {
+        const err = new Error('Booking list failed');
+        err.status = 403;
+        throw err;
+      }
+      if (path === '/api/events/3/history') return { history: [] };
+      if (path === '/api/comments/3') return { comments: [] };
+      if (path === '/api/venues') return { venues: [] };
+      return {};
+    });
+    await act(async () => { jest.advanceTimersByTime(10000); });
+
+    expect(await screen.findByText('Booking list failed')).toBeInTheDocument();
+    expect(screen.getByText('Secret Workshop')).toBeInTheDocument();
   });
 
   /*
