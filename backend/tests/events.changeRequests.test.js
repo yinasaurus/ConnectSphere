@@ -14,7 +14,9 @@
  *   SCRUM-69 AC3  Reject still leaves the event unchanged.
  *   SCRUM-69 AC4  Approve audit records who, when, and previous/new per field.
  *   SCRUM-69 AC5  Approve flags affected venue/equipment rows for review (SCRUM-41/42).
- *   SCRUM-36 AC1  Organiser is notified on approve and on reject.
+ *   SCRUM-36 AC1  Organiser is notified on approve and on reject. Those tests keep their
+ *                 SCRUM-36 ids. SCRUM-69 AC6 is the same notice, so it is not labeled again.
+ *   A Date-to-ISO audit format check is not a SCRUM-69 criterion. It sits at the bottom.
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
@@ -513,6 +515,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    *           the patch so they are not blanked.
    * Type:     normal
    */
+  // SCRUM-69-TC01
   it('AC1: only the fields included in the request are written onto the event', async () => {
     const pending = pendingRequest({
       start_at: null,
@@ -541,6 +544,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: 400; event and request stay unwritten so the request remains PENDING.
    * Type:     boundary
    */
+  // SCRUM-69-TC02
   it('AC2: attendance of 0 cannot be approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -558,6 +562,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: 400; nothing is written.
    * Type:     error
    */
+  // SCRUM-69-TC03
   it('AC2: negative attendance cannot be approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -574,6 +579,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: 400; nothing is written.
    * Type:     error
    */
+  // SCRUM-69-TC04
   it('AC2: a fractional attendance cannot be approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -590,6 +596,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: 400; junk dates cannot be copied onto the event.
    * Type:     error
    */
+  // SCRUM-69-TC05
   it('AC2: an invalid start date cannot be approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -608,6 +615,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    *           (validateDateRange used to skip NaN and let the patch through).
    * Type:     error
    */
+  // SCRUM-69-TC06
   it('AC2: an invalid end date cannot be approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -625,6 +633,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: 400; request stays PENDING.
    * Type:     error
    */
+  // SCRUM-69-TC07
   it('AC2: a start date/time in the past cannot be approved', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-10-15T12:00:00.000Z'));
@@ -648,6 +657,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: Approve proceeds; start is written.
    * Type:     boundary
    */
+  // SCRUM-69-TC08
   it('AC2: a start equal to now can be approved', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-10-15T12:00:00.000Z'));
@@ -676,6 +686,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: Approve is allowed — AC2 checks requested values, not the current event.
    * Type:     boundary
    */
+  // SCRUM-69-TC09
   it('AC2: an existing past start does not block approve when start was not requested', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-11-20T12:00:00.000Z'));
@@ -706,6 +717,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: 400 from the merged-window check; event not written.
    * Type:     error
    */
+  // SCRUM-69-TC10
   it('AC2: an end before the start cannot be approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -726,6 +738,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: Request REJECTED; events table is not written (invalid values do not apply).
    * Type:     conflict
    */
+  // SCRUM-69-TC11
   it('AC3: reject leaves the event unchanged even when requested values would be invalid', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -752,6 +765,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    *           for each included field.
    * Type:     normal
    */
+  // SCRUM-69-TC12
   it('AC4: approve audit records who, when, and previous and new values per field', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -785,33 +799,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: Audit fields array has only expectedAttendance (omitted columns are not listed).
    * Type:     boundary
    */
-  /*
-   * AC:       SCRUM-69 AC4
-   * Scenario: Supabase returns Date objects for timestamps instead of ISO strings.
-   * Setup:    Event and request start/end are Date instances.
-   * Expected: Audit previous/next are ISO strings so the log is JSON-safe.
-   * Type:     boundary
-   */
-  it('AC4: Date values in the request are stored as ISO strings in the audit', async () => {
-    const start = new Date('2026-11-20T09:00:00.000Z');
-    const end = new Date('2026-11-20T17:00:00.000Z');
-    const existingStart = new Date('2026-11-10T09:00:00.000Z');
-    event = planningEvent({ start_at: existingStart, end_at: new Date('2026-11-10T17:00:00.000Z') });
-    db.fetchOne
-      .mockResolvedValueOnce(event)
-      .mockResolvedValueOnce(pendingRequest({ start_at: start, end_at: end }));
-
-    await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
-
-    const approved = audit.writeAudit.mock.calls.find((call) => call[1] === 'CHANGE_REQUEST_APPROVED');
-    const metadata = approved[4];
-    expect(metadata.fields.find((row) => row.field === 'startAt')).toEqual({
-      field: 'startAt',
-      previous: existingStart.toISOString(),
-      next: start.toISOString(),
-    });
-  });
-
+  // SCRUM-69-TC13
   it('AC4: audit lists only the fields included in the request', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -841,6 +829,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    *           true; their status is not in the patch (W4).
    * Type:     normal
    */
+  // SCRUM-69-TC14
   it('AC5: approve flags over-capacity venue booking and equipment for review', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -877,8 +866,11 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
     expect(equipmentPatch.status).toBeUndefined();
   });
 
+});
+
+describe('SCRUM-36 organiser notified on a change decision', () => {
   /*
-   * AC:       SCRUM-36 AC1
+   * AC:       SCRUM-36 AC1. SCRUM-69 AC6 is this same notice.
    * Scenario: Approve a valid request.
    * Expected: One CHANGE_REQUEST_DECIDED notice to the event organiser, after the writes.
    * Type:     normal
@@ -902,7 +894,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-36 AC1
+   * AC:       SCRUM-36 AC1. SCRUM-69 AC6 is this same notice.
    * Scenario: Reject with no reason.
    * Expected: Organiser is still notified; body has no reason line.
    * Type:     normal
@@ -1082,6 +1074,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 400; events table is not written.
    * Type:     error
    */
+  // SCRUM-69-TC15
   it('assigned coordinator cannot approve a past start through the API (400)', async () => {
     asUser(2, ROLES.EVENT_COORDINATOR);
     db.fetchOne
@@ -1174,5 +1167,34 @@ describe('SCRUM-34/35 HTTP routes', () => {
       .set('Cookie', `${env.sessionCookieName}=${otherToken}`);
 
     expect(res.status).toBe(403);
+  });
+});
+
+describe('Change request cases outside SCRUM-69', () => {
+  /*
+   * AC: none for SCRUM-69. AC4 records who approved, when, and each field's previous and new value.
+   * Scenario: The database returns Date objects for the timestamps.
+   * Setup: Event and request start/end are Date instances. The database is mocked.
+   * Expected: The audit stores those values as ISO strings.
+   * Type: boundary
+   */
+  it('Date values in the request are stored as ISO strings in the audit', async () => {
+    const start = new Date('2026-11-20T09:00:00.000Z');
+    const end = new Date('2026-11-20T17:00:00.000Z');
+    const existingStart = new Date('2026-11-10T09:00:00.000Z');
+    event = planningEvent({ start_at: existingStart, end_at: new Date('2026-11-10T17:00:00.000Z') });
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({ start_at: start, end_at: end }));
+
+    await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
+
+    const approved = audit.writeAudit.mock.calls.find((call) => call[1] === 'CHANGE_REQUEST_APPROVED');
+    const metadata = approved[4];
+    expect(metadata.fields.find((row) => row.field === 'startAt')).toEqual({
+      field: 'startAt',
+      previous: existingStart.toISOString(),
+      next: start.toISOString(),
+    });
   });
 });

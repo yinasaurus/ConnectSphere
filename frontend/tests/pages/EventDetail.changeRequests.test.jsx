@@ -2,6 +2,7 @@
  * SCRUM-34: organiser requests a change on the event page.
  * SCRUM-35: assigned coordinator approves or rejects it.
  * SCRUM-69 AC2: approve 400 (invalid requested values) is shown on the page.
+ * That test sits in its own describe at the bottom.
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -230,27 +231,6 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
   });
 
   /*
-   * AC:       SCRUM-69 AC2
-   * Scenario: Assigned coordinator approves, but the API refuses invalid requested values.
-   * Setup:    Decision POST throws VALIDATION_ERROR with the server message (start in the past).
-   * Expected: That message is shown in the page alert so the coordinator sees why approve failed.
-   * Type:     error
-   */
-  it('US36-F01 (AC2): approve error from the API is shown on the event page', async () => {
-    mockApi({
-      changeRequests: [PENDING],
-      decideError: 'A change request cannot be approved with a start date/time in the past',
-    });
-    renderAs({ id: 2, roles: ['EVENT_COORDINATOR'] });
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByRole('button', { name: 'Approve change' }));
-    expect(await screen.findByText(
-      'A change request cannot be approved with a start date/time in the past'
-    )).toBeInTheDocument();
-  });
-
-  /*
    * AC:       SCRUM-35 AC1
    * Scenario: Another coordinator opens the event.
    * Setup:    user 9; event assigned to 2. The page does not fetch CRs for them.
@@ -264,5 +244,29 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
     expect(await screen.findByText('Leadership Forum')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Approve change' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Change requests' })).not.toBeInTheDocument();
+  });
+});
+
+describe('SCRUM-69 approve error on the event page', () => {
+  /*
+   * AC:       SCRUM-69 AC2
+   * Scenario: Assigned coordinator approves, but the API refuses invalid requested values.
+   * Setup:    Decision POST throws with the server message (start in the past). The API is mocked.
+   * Expected: That message is shown on the page.
+   * Type:     error
+   */
+  // SCRUM-69-TC16
+  it('US69-F01 (AC2): approve error from the API is shown on the event page', async () => {
+    mockApi({
+      changeRequests: [PENDING],
+      decideError: 'A change request cannot be approved with a start date/time in the past',
+    });
+    renderAs({ id: 2, roles: ['EVENT_COORDINATOR'] });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Approve change' }));
+    expect(await screen.findByText(
+      'A change request cannot be approved with a start date/time in the past'
+    )).toBeInTheDocument();
   });
 });
