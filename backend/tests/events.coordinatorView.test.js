@@ -146,6 +146,29 @@ describe('SCRUM-84 coordinator view', () => {
   });
 
   /*
+   * AC: SCRUM-84 AC3
+   * Scenario: A Coordinator who is also an Organiser loads the event list.
+   * Setup: Caller id 4 holds both roles and belongs to organisation 10. The rows are
+   *        their event, another Coordinator's event in that organisation, and a queued one.
+   * Expected: All three are returned. The query keeps assignments and that organisation.
+   *           This records the current rule; it does not decide whether AC2 should deny
+   *           the Organiser path.
+   * Type: boundary
+   */
+  it('AC3: a Coordinator who is also an Organiser sees assignments and their organisation', async () => {
+    const both = {
+      id: 4,
+      organisationId: 10,
+      roles: [ROLES.EVENT_COORDINATOR, ROLES.EVENT_ORGANISER],
+    };
+
+    const listed = await service.listEvents(both);
+
+    expect(listed.map((event) => event.name)).toEqual(['Mine', 'Theirs', 'Queue']);
+    expect(query.or).toHaveBeenCalledWith('coordinator_id.eq.4,organisation_id.eq.10');
+  });
+
+  /*
    * AC: SCRUM-39 AC1
    * Scenario: An Organiser loads their organisation's events.
    * Setup: Caller is an Organiser of organisation 10, not a Coordinator.
