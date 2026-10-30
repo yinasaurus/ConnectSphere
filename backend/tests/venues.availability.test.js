@@ -10,9 +10,12 @@
  *
  * The database is mocked: fetchOne returns the venue, the first fetchMany returns
  * bookings/holds and the second returns unavailability periods.
+ *
+ * A hold with no expiry, a bad or missing range, and an unknown venue are not
+ * SCRUM-66 criteria. Those tests sit in their own describe at the bottom.
  */
 const request = require('supertest');
-const { ROLES } = require('../src/constants/roles');
+const { ROLES, INTERNAL_ROLES } = require('../src/constants/roles');
 
 let mockRoles = [];
 
@@ -98,6 +101,7 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
    *           and 12:45-14:00 stay available (AC5).
    * Type:     normal
    */
+  // SCRUM-66-TC01
   it('US66-B01 (AC1): a confirmed 10:00-12:00 booking with 30/45 min marks 09:30-12:45 unavailable', async () => {
     mockData({ bookings: [booking()] });
     const result = await venuesService.getVenueAvailability(7, RANGE, NOW);
@@ -120,6 +124,7 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
    *           only the advertised times were checked, the whole range would look free.
    * Type:     boundary
    */
+  // SCRUM-66-TC02
   it('US66-B02 (AC1): setup/turnaround padding alone can reach into the range', async () => {
     // Booking ends 07:30, +45 min turnaround -> occupied until 08:15.
     mockData({ bookings: [booking({ start_at: '2026-10-20T06:00:00Z', end_at: '2026-10-20T07:30:00Z' })] });
@@ -139,6 +144,7 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
    *           turnaround padding, because AC2 only names the held period.
    * Type:     normal
    */
+  // SCRUM-66-TC03
   it('US66-B03 (AC2): an active tentative hold marks exactly its held period unavailable', async () => {
     mockData({ bookings: [booking({ status: 'TENTATIVE', hold_expires_at: '2026-10-16T00:00:00Z' })] });
     const result = await venuesService.getVenueAvailability(7, RANGE, NOW);
@@ -152,21 +158,6 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
   });
 
   /*
-   * AC:       SCRUM-66 AC2 (team assumption, not stated in the AC)
-   * Scenario: A tentative hold with no expiry recorded (hold_expires_at is null).
-   * Setup:    TENTATIVE row 10:00-12:00, hold_expires_at null. Holds can't be created with
-   *           an expiry yet (SCRUM-75), so older rows have none.
-   * Expected: Treated as active and marked unavailable, so a hold without a date never
-   *           silently frees the venue. This rule is still waiting on a team decision.
-   * Type:     boundary
-   */
-  it('US66-B04 (AC2): a tentative hold with no expiry recorded is treated as active', async () => {
-    mockData({ bookings: [booking({ status: 'TENTATIVE', hold_expires_at: null })] });
-    const result = await venuesService.getVenueAvailability(7, RANGE, NOW);
-    expect(summary(result)[1]).toEqual(['10:00', '12:00', false, ['TENTATIVE_HOLD']]);
-  });
-
-  /*
    * AC:       SCRUM-66 AC3
    * Scenario: A tentative hold whose expiry has passed, or is exactly now.
    * Setup:    TENTATIVE row 10:00-12:00 with an expiry of (a) a day before "now" and (b)
@@ -175,6 +166,7 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
    *           expired hold must not reserve the venue (Week 7 change #4).
    * Type:     normal (a), boundary (b)
    */
+  // SCRUM-66-TC04
   it.each([
     ['expired yesterday', '2026-10-14T00:00:00Z'],
     ['expiring exactly now (boundary)', NOW.toISOString()],
@@ -193,6 +185,7 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
    *           block's full recorded times, so staff can see when it really ends.
    * Type:     normal
    */
+  // SCRUM-66-TC05
   it('US66-B06 (AC4): a maintenance period is marked unavailable for its recorded times', async () => {
     mockData({
       unavailability: [{ id: 4, reason: 'Lighting rig maintenance', start_at: '2026-10-20T13:00:00Z', end_at: '2026-10-21T09:00:00Z' }],
@@ -218,6 +211,7 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
    *           reasons. Also pins the full response shape the frontend relies on.
    * Type:     normal
    */
+  // SCRUM-66-TC06
   it('US66-B07 (AC5): with nothing recorded the whole range is one available period', async () => {
     mockData();
     const result = await venuesService.getVenueAvailability(7, RANGE, NOW);
@@ -238,6 +232,7 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
    *           times must stay available.
    * Type:     normal
    */
+  // SCRUM-66-TC07
   it('US66-B08 (AC5): only confirmed bookings and tentative holds are queried as blocking', async () => {
     mockData();
     await venuesService.getVenueAvailability(7, RANGE, NOW);
@@ -253,6 +248,7 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
    *           and holds, so it doesn't depend on the query filter in US66-B08.
    * Type:     error
    */
+  // SCRUM-66-TC08
   it('US66-B09 (AC5): a row with another status is not marked even if returned', async () => {
     mockData({ bookings: [booking({ status: 'PENDING' })] });
     const result = await venuesService.getVenueAvailability(7, RANGE, NOW);
@@ -268,6 +264,7 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
    *           so the user sees a single blocked stretch and everything causing it.
    * Type:     conflict
    */
+  // SCRUM-66-TC09
   it('US66-B10 (AC1+AC2+AC4): overlapping blocks merge into one unavailable period listing every reason', async () => {
     mockData({
       bookings: [
@@ -293,31 +290,12 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
    *           so a booking that only touches the range must not block any of it.
    * Type:     boundary
    */
+  // SCRUM-66-TC10
   it('US66-B11 (AC5): a block that only touches the range edge leaves the range available', async () => {
     // Occupied 06:00-08:00 exactly (no padding); touching windows don't overlap.
     mockData({ bookings: [booking({ start_at: '2026-10-20T06:00:00Z', end_at: '2026-10-20T08:00:00Z', setup_minutes: 0, teardown_minutes: 0 })] });
     const result = await venuesService.getVenueAvailability(7, RANGE, NOW);
     expect(summary(result)).toEqual([['08:00', '14:00', true, []]]);
-  });
-
-  /*
-   * AC:       SCRUM-66 (input validation; supports every AC's "for a date/time range")
-   * Scenario: The requested range is missing, unreadable, empty or backwards.
-   * Setup:    Five bad ranges: no from, no to, a non-date, from == to, from after to.
-   * Expected: 400 with a message saying what is wrong, and no database call. Without a
-   *           valid range there is nothing to mark available or unavailable.
-   * Type:     error (from == to is a boundary)
-   */
-  it.each([
-    ['from is missing', { to: RANGE.to }, 'from and to are required'],
-    ['to is missing', { from: RANGE.from }, 'from and to are required'],
-    ['a date is invalid', { from: 'not-a-date', to: RANGE.to }, 'from and to must be valid dates'],
-    ['from equals to', { from: RANGE.from, to: RANGE.from }, 'from must be before to'],
-    ['from is after to', { from: RANGE.to, to: RANGE.from }, 'from must be before to'],
-  ])('US66-B12: returns 400 when %s', async (_label, range, message) => {
-    await expect(venuesService.getVenueAvailability(7, range, NOW)).rejects.toMatchObject({ status: 400, message });
-    // Validation runs before the venue lookup, so a bad request never touches the DB.
-    expect(fetchOne).not.toHaveBeenCalled();
   });
 
   /*
@@ -328,6 +306,7 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
    *           "Tentative hold". A missing name must not hide the block or leave it unlabelled.
    * Type:     error
    */
+  // SCRUM-66-TC11
   it('US66-B14: blocks without a linked event name fall back to a generic label', async () => {
     mockData({
       bookings: [
@@ -349,35 +328,11 @@ describe('SCRUM-66 getVenueAvailability (service)', () => {
    *           current time when the view is opened.
    * Type:     normal
    */
+  // SCRUM-66-TC12
   it('US66-B15 (AC3): by default a hold is judged expired against the current time', async () => {
     mockData({ bookings: [booking({ status: 'TENTATIVE', hold_expires_at: '2000-01-01T00:00:00Z' })] });
     const result = await venuesService.getVenueAvailability(7, RANGE);
     expect(summary(result)).toEqual([['08:00', '14:00', true, []]]);
-  });
-
-  /*
-   * AC:       SCRUM-66 (input validation)
-   * Scenario: The service is called with no range argument at all, not just empty fields.
-   * Setup:    Only the venue id is passed. This differs from US66-B12, which always passes
-   *           an object.
-   * Expected: A clean 400 instead of a TypeError from reading `from` of undefined.
-   * Type:     error
-   */
-  it('US66-B16: calling without a range is a 400, not a crash', async () => {
-    await expect(venuesService.getVenueAvailability(7)).rejects.toMatchObject({ status: 400 });
-  });
-
-  /*
-   * AC:       SCRUM-66 (error handling; "for a venue")
-   * Scenario: The venue id doesn't exist.
-   * Setup:    The venue lookup returns null; the range is valid.
-   * Expected: 404 "Venue not found", and no booking or unavailability queries are run.
-   * Type:     error
-   */
-  it('US66-B13: returns 404 for an unknown venue', async () => {
-    fetchOne.mockResolvedValue(null);
-    await expect(venuesService.getVenueAvailability(99, RANGE, NOW)).rejects.toMatchObject({ status: 404 });
-    expect(fetchMany).not.toHaveBeenCalled();
   });
 });
 
@@ -398,11 +353,13 @@ describe('SCRUM-66 GET /api/venues/:id/availability (route)', () => {
    * Scenario: Each internal role opens the view through the real HTTP route.
    * Setup:    Signed-in user with only that role. The service is stubbed, because this
    *           test checks the route's role check and parameter passing, not the timeline.
-   * Expected: 200, with the venue id and from/to passed through unchanged. Technical
-   *           Support is included on the team's reading of the story's repeated role.
+   * Expected: 200, with the venue id and from/to passed through unchanged. Every
+   *           internal role is allowed: Coordinator, Lead, Safety Officer, Venue Staff,
+   *           and Technical Support.
    * Type:     normal
    */
-  it.each([ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT])(
+  // SCRUM-66-TC13
+  it.each(INTERNAL_ROLES)(
     'US66-R01: %s can view availability',
     async (role) => {
       mockRoles = [role];
@@ -421,10 +378,68 @@ describe('SCRUM-66 GET /api/venues/:id/availability (route)', () => {
    *           the API itself must refuse.
    * Type:     error
    */
+  // SCRUM-66-TC14
   it.each([ROLES.EVENT_ORGANISER, ROLES.ATTENDEE])('US66-R02 (AC6): %s is refused with 403', async (role) => {
     mockRoles = [role];
     const res = await request(app).get(url);
     expect(res.status).toBe(403);
     expect(venuesService.getVenueAvailability).not.toHaveBeenCalled();
+  });
+});
+
+describe('Availability cases outside SCRUM-66', () => {
+  /*
+   * AC: none for SCRUM-66. AC2 is an active hold. A blank expiry is not that case.
+   * Scenario: A tentative hold with no expiry recorded (hold_expires_at is null).
+   * Setup: TENTATIVE row 10:00-12:00, hold_expires_at null. The database is mocked.
+   * Expected: The current code still marks 10:00-12:00 unavailable.
+   * Type: boundary
+   */
+  it('US66-B04: a tentative hold with no expiry recorded is treated as active', async () => {
+    mockData({ bookings: [booking({ status: 'TENTATIVE', hold_expires_at: null })] });
+    const result = await venuesService.getVenueAvailability(7, RANGE, NOW);
+    expect(summary(result)[1]).toEqual(['10:00', '12:00', false, ['TENTATIVE_HOLD']]);
+  });
+
+  /*
+   * AC: none for SCRUM-66. The criteria start from a range that already exists.
+   * Scenario: The requested range is missing, unreadable, empty or backwards.
+   * Setup: Five bad ranges. The database is mocked.
+   * Expected: 400, and the venue is not looked up.
+   * Type: error
+   */
+  it.each([
+    ['from is missing', { to: RANGE.to }, 'from and to are required'],
+    ['to is missing', { from: RANGE.from }, 'from and to are required'],
+    ['a date is invalid', { from: 'not-a-date', to: RANGE.to }, 'from and to must be valid dates'],
+    ['from equals to', { from: RANGE.from, to: RANGE.from }, 'from must be before to'],
+    ['from is after to', { from: RANGE.to, to: RANGE.from }, 'from must be before to'],
+  ])('US66-B12: returns 400 when %s', async (_label, range, message) => {
+    await expect(venuesService.getVenueAvailability(7, range, NOW)).rejects.toMatchObject({ status: 400, message });
+    expect(fetchOne).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC: none for SCRUM-66. The criteria start from a venue that already exists.
+   * Scenario: The venue id doesn't exist.
+   * Setup: The venue lookup returns null. The range is valid. The database is mocked.
+   * Expected: 404, and bookings are not queried.
+   * Type: error
+   */
+  it('US66-B13: returns 404 for an unknown venue', async () => {
+    fetchOne.mockResolvedValue(null);
+    await expect(venuesService.getVenueAvailability(99, RANGE, NOW)).rejects.toMatchObject({ status: 404 });
+    expect(fetchMany).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC: none for SCRUM-66. US66-B12 always passes a range object. This passes none.
+   * Scenario: The service is called with no range argument at all.
+   * Setup: Only the venue id is passed. The database is mocked.
+   * Expected: 400, rather than a crash.
+   * Type: error
+   */
+  it('US66-B16: calling without a range is a 400, not a crash', async () => {
+    await expect(venuesService.getVenueAvailability(7)).rejects.toMatchObject({ status: 400 });
   });
 });

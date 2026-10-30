@@ -20,7 +20,7 @@ import Profile from './pages/Profile';
 import AssignmentOverview from './pages/AssignmentOverview';
 import SafetyCheck from './pages/SafetyCheck';
 import SafetyQueue from './pages/SafetyQueue';
-import { ROLES } from './constants';
+import { INTERNAL_ROLES, ROLES } from './constants';
 
 const requestRoles = [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR];
 
@@ -87,7 +87,7 @@ export default function App() {
             <Route
               path="venues/availability"
               element={
-                <ProtectedRoute allowedRoles={[ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT]}>
+                <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
                   <VenueAvailability />
                 </ProtectedRoute>
               }
