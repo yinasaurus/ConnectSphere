@@ -152,6 +152,70 @@ describe('SCRUM-84 coordinator view', () => {
    * Expected: The query is limited to that organisation, not to a coordinator id.
    * Type: boundary
    */
+  /*
+   * AC: SCRUM-84 AC2
+   * Scenario: A Coordinator saves a new draft, then opens it again.
+   * Setup: The caller is a Coordinator and not an Organiser. The saved row has no coordinator.
+   * Expected: The save response includes the draft. A later open is access denied,
+   *           because a draft is not an event assigned to them.
+   * Type: boundary
+   */
+  it('AC2: a Coordinator receives the draft they saved, then cannot open it', async () => {
+    const draftRow = {
+      id: 12,
+      name: 'Draft night',
+      status: 'DRAFT',
+      organiser_id: 4,
+      coordinator_id: null,
+      organisation_id: 10,
+    };
+    db.insertOne.mockResolvedValue(draftRow);
+
+    const created = await service.createEvent(coordinator, { name: 'Draft night' });
+
+    expect(created.name).toBe('Draft night');
+    expect(created.status).toBe('DRAFT');
+    expect(created.coordinatorId).toBeNull();
+
+    db.fetchOne.mockResolvedValueOnce(draftRow);
+    await expect(service.getEvent(coordinator, 12)).rejects.toMatchObject({
+      status: 403,
+      message: 'Access denied. You can only view events assigned to you.',
+    });
+  });
+
+  /*
+   * AC: SCRUM-84 AC2
+   * Scenario: The assigned Coordinator submits the event, then opens it again.
+   * Setup: The event is a complete Draft assigned to coordinator 4. Submit clears the coordinator.
+   * Expected: The submit response is Submitted with no coordinator. A later open is access
+   *           denied, because the event is now in the unassigned queue.
+   * Type: boundary
+   */
+  it('AC2: a Coordinator receives the event they submitted, then cannot open it', async () => {
+    const draft = {
+      ...mine,
+      status: 'DRAFT',
+      expected_attendance: 40,
+      venue_requirements: 'Lecture theatre',
+      accessibility_needs: 'Step-free access',
+    };
+    db.fetchOne.mockImplementation(async () => draft);
+    db.insertOne.mockResolvedValue({ id: 1 });
+    db.updateById.mockResolvedValue({ id: 3 });
+
+    const submitted = await service.submitEvent(coordinator, 3);
+
+    expect(submitted.status).toBe('SUBMITTED');
+    expect(submitted.coordinatorId).toBeNull();
+
+    db.fetchOne.mockResolvedValueOnce({ ...draft, status: 'SUBMITTED', coordinator_id: null });
+    await expect(service.getEvent(coordinator, 3)).rejects.toMatchObject({
+      status: 403,
+      message: 'Access denied. You can only view events assigned to you.',
+    });
+  });
+
   it('an organiser list stays inside their organisation', async () => {
     db.fetchMany.mockResolvedValue([mine]);
     const listed = await service.listEvents(organiser);
