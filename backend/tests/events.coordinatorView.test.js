@@ -81,10 +81,11 @@ describe('SCRUM-84 coordinator view', () => {
   });
 
   /*
-   * AC: SCRUM-84 AC2
+   * AC: SCRUM-39 AC1
    * Scenario: An Organiser from another organisation opens an event.
-   * Setup: Caller organisation is 20. The event belongs to organisation 10.
-   * Expected: 404, so an outsider is not told the event exists. Not the Coordinator message.
+   * Setup: Caller organisation is 20. The event belongs to organisation 10. The caller is not a Coordinator.
+   * Expected: 404, so an outsider is not told the event exists. This stays 404 after SCRUM-84;
+   *           the access-denied message is only for a Coordinator.
    * Type: boundary
    */
   it('AC2: an organiser outside the organisation still gets not found', async () => {
@@ -111,7 +112,7 @@ describe('SCRUM-84 coordinator view', () => {
    * AC: SCRUM-84 AC1
    * Scenario: Venue Staff open an event assigned to a Coordinator.
    * Setup: Caller is Venue Staff only. The event is assigned to coordinator 4.
-   * Expected: They can still open it.
+   * Expected: They can still open it. AC1 limits a Coordinator; Venue Staff are not limited.
    * Type: boundary
    */
   it('AC1: Venue Staff can still open an event', async () => {
