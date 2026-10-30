@@ -82,6 +82,7 @@ describe('SCRUM-65 Unassigned queue (Lead)', () => {
    * Expected: Both names appear, and each row shows organiser, date/time, attendance, venue and equipment.
    * Type: normal
    */
+  // SCRUM-65-TC11
   it('AC1/AC4: shows every queued request with name, organiser, date/time, attendance, venue and equipment', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/events/unassigned-queue') {
@@ -135,6 +136,7 @@ describe('SCRUM-65 Unassigned queue (Lead)', () => {
    * Expected: Town Hall is listed; names that belong to assigned or draft requests never appear.
    * Type: boundary
    */
+  // SCRUM-65-TC12
   it('AC2/AC3: assigned and draft requests are not shown in the queue', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/events/unassigned-queue') {
@@ -152,35 +154,20 @@ describe('SCRUM-65 Unassigned queue (Lead)', () => {
 
   /*
    * AC: SCRUM-65 AC1
-   * Scenario: The queue API succeeds but omits the events array.
-   * Setup: Response is `{}` so `data.events` is undefined.
-   * Expected: Same empty queue as `events: []` — the page must not crash.
-   * Type: boundary
-   */
-  it('AC1: treats a missing events array as an empty queue', async () => {
-    api.mockImplementation((path) => {
-      if (path === '/api/events/unassigned-queue') {
-        return Promise.resolve({});
-      }
-      return Promise.reject(new Error(`Unhandled api call: ${path}`));
-    });
-
-    renderQueue();
-
-    expect(await screen.findByText(/no submitted requests are waiting for a coordinator/i)).toBeInTheDocument();
-  });
-
-  /*
-   * AC: SCRUM-65 AC1
    * Scenario: The Lead opens the queue when nothing is waiting.
-   * Setup: API returns an empty events array.
-   * Expected: Empty-state copy, not a broken table.
+   * Setup: The API returns either {} (events omitted) or { events: [] }.
+   *        The page uses data.events || [], so both become an empty list.
+   * Expected: The empty-state sentence is shown and the page does not crash.
    * Type: boundary
    */
-  it('AC1: shows an empty state when no requests are waiting', async () => {
+  // SCRUM-65-TC13
+  it.each([
+    ['a missing events array', {}],
+    ['an empty events array', { events: [] }],
+  ])('AC1: shows an empty queue for %s', async (_label, body) => {
     api.mockImplementation((path) => {
       if (path === '/api/events/unassigned-queue') {
-        return Promise.resolve({ events: [] });
+        return Promise.resolve(body);
       }
       return Promise.reject(new Error(`Unhandled api call: ${path}`));
     });
@@ -188,27 +175,6 @@ describe('SCRUM-65 Unassigned queue (Lead)', () => {
     renderQueue();
 
     expect(await screen.findByText(/no submitted requests are waiting for a coordinator/i)).toBeInTheDocument();
-  });
-
-  /*
-   * AC: SCRUM-65 AC1
-   * Scenario: The queue API fails while the Lead is viewing it.
-   * Setup: GET /api/events/unassigned-queue rejects.
-   * Expected: The error message is shown instead of pretending the queue is empty.
-   * Type: error
-   */
-  it('AC1: shows an error when the queue cannot be loaded', async () => {
-    api.mockImplementation((path) => {
-      if (path === '/api/events/unassigned-queue') {
-        return Promise.reject(new Error('Queue unavailable'));
-      }
-      return Promise.reject(new Error(`Unhandled api call: ${path}`));
-    });
-
-    renderQueue();
-
-    expect(await screen.findByText('Queue unavailable')).toBeInTheDocument();
-    expect(screen.queryByText(/no submitted requests are waiting/i)).not.toBeInTheDocument();
   });
 
   /*
@@ -218,6 +184,7 @@ describe('SCRUM-65 Unassigned queue (Lead)', () => {
    * Expected: Those cells show an em dash so the columns still exist.
    * Type: boundary
    */
+  // SCRUM-65-TC14
   it('AC4: blank organiser or equipment needs still show the columns', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/events/unassigned-queue') {
@@ -251,6 +218,7 @@ describe('SCRUM-65 Unassigned queue (Lead)', () => {
    * Expected: The event name is a link to /app/events/11 and the detail page shows description, when, attendance, venue and equipment.
    * Type: normal
    */
+  // SCRUM-65-TC15
   it('AC5: opening a queued request shows its full details', async () => {
     const user = userEvent.setup();
     api.mockImplementation((path) => {
@@ -284,33 +252,13 @@ describe('SCRUM-65 Unassigned queue (Lead)', () => {
   });
 
   /*
-   * AC: SCRUM-65 AC1
-   * Scenario: The Lead looks at the sidebar.
-   * Setup: Layout is rendered for EVENT_COORDINATOR_LEAD.
-   * Expected: An Unassigned queue link to /app/events/unassigned is present so they can open the queue.
-   * Type: normal
-   */
-  it('AC1: the Lead nav includes Unassigned queue', async () => {
-    api.mockImplementation((path) => {
-      if (path === '/api/events/unassigned-queue') {
-        return Promise.resolve({ events: [] });
-      }
-      return Promise.reject(new Error(`Unhandled api call: ${path}`));
-    });
-
-    renderQueue();
-
-    const navLink = await screen.findByRole('link', { name: /unassigned queue/i });
-    expect(navLink).toHaveAttribute('href', '/app/events/unassigned');
-  });
-
-  /*
    * AC: SCRUM-65 AC4
    * Scenario: Date/time is shown when only a start exists (end missing).
    * Setup: startAt set, endAt null.
    * Expected: A formatted start is shown, not TBC, because a start time exists.
    * Type: boundary
    */
+  // SCRUM-65-TC16
   it('AC4: date/time shows the start when the end is missing', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/events/unassigned-queue') {
@@ -353,5 +301,61 @@ describe('SCRUM-54 blocked unassigned queue', () => {
     );
     expect(await screen.findByText('You do not have access to this action')).toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+});
+
+describe('Queue page when the load fails', () => {
+  beforeEach(() => {
+    api.mockReset();
+    asLead();
+  });
+
+  /*
+   * AC: none for SCRUM-65. A failed load is not one of the queue criteria.
+   * Scenario: The queue API fails while the Lead is viewing it.
+   * Setup: GET /api/events/unassigned-queue rejects.
+   * Expected: The error message is shown instead of pretending the queue is empty.
+   * Type: error
+   */
+  it('shows an error when the queue cannot be loaded', async () => {
+    api.mockImplementation((path) => {
+      if (path === '/api/events/unassigned-queue') {
+        return Promise.reject(new Error('Queue unavailable'));
+      }
+      return Promise.reject(new Error(`Unhandled api call: ${path}`));
+    });
+
+    renderQueue();
+
+    expect(await screen.findByText('Queue unavailable')).toBeInTheDocument();
+    expect(screen.queryByText(/no submitted requests are waiting/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('Lead nav link to the unassigned queue', () => {
+  beforeEach(() => {
+    api.mockReset();
+    asLead();
+  });
+
+  /*
+   * AC: none for SCRUM-65. The sidebar link is the Lead access check (SCRUM-54 AC3).
+   * Scenario: The Lead looks at the sidebar.
+   * Setup: Layout is rendered for EVENT_COORDINATOR_LEAD. The queue returns no events.
+   * Expected: An Unassigned queue link to /app/events/unassigned is present.
+   * Type: normal
+   */
+  it('the Lead nav includes Unassigned queue', async () => {
+    api.mockImplementation((path) => {
+      if (path === '/api/events/unassigned-queue') {
+        return Promise.resolve({ events: [] });
+      }
+      return Promise.reject(new Error(`Unhandled api call: ${path}`));
+    });
+
+    renderQueue();
+
+    const navLink = await screen.findByRole('link', { name: /unassigned queue/i });
+    expect(navLink).toHaveAttribute('href', '/app/events/unassigned');
   });
 });
