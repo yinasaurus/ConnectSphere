@@ -197,8 +197,8 @@ function canViewEvent(user, row) {
  * Purpose: whether a user's roles allow planning details (attendance, venue needs,
  * equipment, history, comments) rather than the public Attendee view.
  * AC: SCRUM-39 AC1 + AC2 (Attendees keep the public view, agreed decision).
- *     SCRUM-84 AC1 — a Coordinator is a planning reader only for an event they may open.
- *     SCRUM-54 AC6's view-all rule is superseded.
+ *     SCRUM-84 AC1 — a Coordinator remains a planning reader. Which event they may open
+ *     is canViewEvent, not this function. SCRUM-54 AC6's view-all rule is superseded.
  *     SCRUM-65 AC4, AC5 — the Lead needs those planning fields on the queue and the detail page.
  *     SCRUM-71 AC1 — Lead is a planning reader so they can assign from the event page.
  * Output: true for Organiser, Coordinator, Lead, Safety Officer, Venue Staff or Technical Support; false otherwise.
