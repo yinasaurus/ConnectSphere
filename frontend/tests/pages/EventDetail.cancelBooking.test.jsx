@@ -117,6 +117,19 @@ describe('SCRUM-61 cancel booking action', () => {
   });
 
   /*
+   * - AC: SCRUM-61 AC11.
+   * - Scenario: The assigned Coordinator views a booking for a Cancelled event.
+   * - Setup: The event is CANCELLED and its booking is APPROVED or PENDING.
+   * - Expected: The Cancel booking button is not rendered.
+   * - Type: boundary.
+   */
+  it.each(['APPROVED', 'PENDING'])('hides Cancel booking for %s bookings on Cancelled events', async (status) => {
+    renderBookingPage(status, true, 'CANCELLED');
+    await screen.findByText('Innovation Hall');
+    expect(screen.queryByRole('button', { name: /cancel booking/i })).not.toBeInTheDocument();
+  });
+
+  /*
    * - AC: SCRUM-61 AC9.
    * - Scenario: The assigned Coordinator views an approved booking for a Confirmed event.
    * - Setup: The event is CONFIRMED and the booking is APPROVED.
