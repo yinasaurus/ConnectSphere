@@ -133,15 +133,18 @@ function mapEvent(row) {
 }
 
 /**
- * Purpose: true for internal staff who may read every event, including ones they
- * are not assigned to. Coordinators may view (not change) other people's events.
- * AC: SCRUM-54 AC6 (Coordinator view of unassigned / other events);
- *     Lead and Safety Officer need the same read access to use AC3 and AC4.
- * Business rule: W4 — Coordinators can view other events but not edit them.
+ * Purpose: true for staff who may read every event, including ones they are not assigned to.
+ * A Coordinator is not in this list. Lead, Safety Officer, Venue Staff, and Technical Support are.
+ * AC: SCRUM-84 AC1 + AC3 — a Coordinator sees only assigned events.
+ *     SCRUM-65 AC1 — the Lead still sees the unassigned queue.
+ * Business rule: Week 9 Q&A — the Lead sees unassigned and assigned events; a Coordinator sees
+ *                only events assigned to them. Week 4 "view but not edit" is superseded by
+ *                SCRUM-84 (SCRUM-54 AC6).
+ * Inputs: the authenticated user. Output: true when any of those four roles is present,
+ * including when they also hold the Coordinator role.
  */
 function isInternalEventReader(user) {
   return [
-    ROLES.EVENT_COORDINATOR,
     ROLES.EVENT_COORDINATOR_LEAD,
     ROLES.SAFETY_OFFICER,
     ROLES.VENUE_STAFF,
@@ -150,20 +153,35 @@ function isInternalEventReader(user) {
 }
 
 /**
- * Purpose: decide whether this user may read this event row. Coordinators (and
- * other internal staff) may view events they are not assigned to.
- * AC: SCRUM-54 AC6. SCRUM-39 AC1 (who the "authorised users" are). SCRUM-65 AC5 —
- * the Lead can open a queued request to see its full details.
- * Business rule source: Week 4 Q&A, "Coordinator can view other events for planning
- * purpose"; Week 2 Q&A, Organisers can't view events of unrelated clients (requirements
- * document section 8b).
- * Rules: Coordinators, Lead, Safety Officer, Venue Staff and Technical Support see every
- * event; Organisers see their own organisation's (none if they have no organisation);
- * Attendees see only Confirmed events that take registrations; anyone else sees nothing.
- * Output: true or false. Never throws. getEvent treats false as 404 so we do not leak that the row exists.
+ * Purpose: says whether this Coordinator is the one assigned to the event.
+ * AC: SCRUM-84 AC1.
+ * Business rule: assignment is coordinator_id on the event. An unassigned event matches no one.
+ * Inputs: the user and the event row. Output: true only when both ids match.
+ */
+function isAssignedCoordinator(user, row) {
+  return hasRole(user, ROLES.EVENT_COORDINATOR)
+    && row.coordinator_id != null
+    && Number(row.coordinator_id) === Number(user.id);
+}
+
+/**
+ * Purpose: decide whether this user may read this event row.
+ * AC: SCRUM-84 AC1 — a Coordinator may open an event only when they are assigned to it.
+ *     SCRUM-84 AC2 — someone else's event, or an unassigned one, is not viewable.
+ *     SCRUM-39 AC1 — an Organiser still sees their organisation's events.
+ *     SCRUM-65 AC5 — the Lead can open a queued request.
+ * Business rule: Week 9 Q&A. A Coordinator who is also a Lead, Safety Officer, Venue Staff,
+ *                or Technical Support still sees every event through that other role.
+ *                An Organiser sees their organisation's events. An Attendee sees only
+ *                Confirmed events that take registrations. Anyone else sees nothing.
+ * Output: true or false. Never throws. getEvent turns false into 403 for a Coordinator
+ * and 404 for everyone else, so outsiders still cannot tell whether the row exists.
  */
 function canViewEvent(user, row) {
   if (isInternalEventReader(user)) {
+    return true;
+  }
+  if (isAssignedCoordinator(user, row)) {
     return true;
   }
   if (hasRole(user, ROLES.EVENT_ORGANISER) && user.organisationId) {
@@ -219,14 +237,23 @@ async function assertPlanningAccess(user, eventId) {
 
 /**
  * Purpose: constrain an events list query to rows this user is allowed to see.
- * AC: SCRUM-54 AC6 — internal staff (including Coordinators) are not filtered by assignment.
+ * AC: SCRUM-84 AC3 — a Coordinator's list is only events assigned to them.
  *     SCRUM-65 AC1 — the Lead's queue is not limited to one organiser's organisation.
- *     SCRUM-71 AC1 — Lead sees all events, same as other internal staff, so unassigned Submitted ones appear.
+ *     SCRUM-71 AC1 — Lead sees all events, so unassigned Submitted ones appear.
+ *     SCRUM-39 AC1 — an Organiser's list stays inside their organisation.
+ * Business rule: Week 9 Q&A. A Coordinator who is also an Organiser sees their assignments
+ *                plus their organisation's events.
  * Inputs: supabase query, session user. Output: the same query or a filter. Failure: unknown roles match no rows (id = -1).
  */
 function applyVisibility(query, user) {
   if (isInternalEventReader(user)) {
     return query;
+  }
+  if (hasRole(user, ROLES.EVENT_COORDINATOR) && hasRole(user, ROLES.EVENT_ORGANISER) && user.organisationId) {
+    return query.or(`coordinator_id.eq.${user.id},organisation_id.eq.${user.organisationId}`);
+  }
+  if (hasRole(user, ROLES.EVENT_COORDINATOR)) {
+    return query.eq('coordinator_id', user.id);
   }
   if (hasRole(user, ROLES.EVENT_ORGANISER) && user.organisationId) {
     return query.eq('organisation_id', user.organisationId);
@@ -240,7 +267,8 @@ function applyVisibility(query, user) {
 /**
  * Purpose: list events the caller may see, optionally narrowed to the Lead's
  * unassigned queue (Submitted + no Coordinator) without building a queue UI.
- * AC: SCRUM-28 AC3, AC4 (queue membership is Submitted and unassigned; drafts are excluded)
+ * AC: SCRUM-28 AC3, AC4 (queue membership is Submitted and unassigned; drafts are excluded).
+ *     SCRUM-84 AC3 — a Coordinator's rows are only those assigned to them (applyVisibility).
  * Business rule: W7 #5 — viewing the queue is SCRUM-65; this only exposes the data set.
  * Inputs: user, filters.status, filters.unassigned, filters.subState, filters.q
  * Outputs: mapped events the user can view
@@ -276,19 +304,20 @@ async function listEvents(user, filters = {}) {
  * details shown are the latest.
  * AC: SCRUM-39 AC1 + AC2. SCRUM-28 AC1, AC2 — after submit the organiser sees Submitted
  *     and no Coordinator.
- *     SCRUM-54 AC6 — Coordinators may view events they are not assigned to (view only).
+ *     SCRUM-84 AC1 + AC2 — a Coordinator opens only an event assigned to them. Another
+ *     Coordinator's event, or an unassigned one, is access denied.
  *     SCRUM-65 AC5 — the Lead can open any queued request's full details.
  *     SCRUM-29 AC1, AC3 — the Organiser (and other planning roles) see the assigned
  *     Coordinator; Attendees do not (visibleEvent drops it).
  * Inputs: the user and the event id. Output: the event as visibleEvent shapes it.
- * Failure: 404 "Event not found" both when it doesn't exist and when the user may not see
- * it, so outsiders can't tell the two apart.
+ * Failure: 404 "Event not found" when it does not exist, or when an outsider may not see it.
+ * A Coordinator who is not assigned gets 403 "Access denied. You can only view events
+ * assigned to you." and no event body (SCRUM-84 AC2).
  */
 async function getEvent(user, id) {
-  const row = await fetchOne(
+  const row = throwUnlessVisible(user, await fetchOne(
     supabase.from('events').select(EVENT_SELECT).eq('id', id)
-  );
-  if (!row || !canViewEvent(user, row)) throw httpError(404, 'Event not found', 'NOT_FOUND');
+  ));
   const event = visibleEvent(user, row);
   // SCRUM-56 AC8: only the owning Organiser and assigned Coordinator see the outcome.
   // Lazy require avoids a circular import (access.service does not import events.service).
@@ -429,7 +458,12 @@ async function createEvent(user, payload) {
   });
 
   await writeAudit(user.id, 'EVENT_CREATED', 'event', created.id, { name });
-  return getEvent(user, created.id);
+  // A Coordinator is not assigned to a new draft (SCRUM-28). They still receive the
+  // draft they just saved. A later open is SCRUM-84: only an assigned event.
+  if (hasRole(user, ROLES.EVENT_ORGANISER) || canViewEvent(user, created)) {
+    return getEvent(user, created.id);
+  }
+  return visibleEvent(user, created);
 }
 
 /**
@@ -699,7 +733,21 @@ async function submitEvent(user, id) {
   await writeStatusHistory(id, user.id, previousStatus, EVENT_STATUS.SUBMITTED, 'Submitted for review');
   await writeAudit(user.id, 'EVENT_SUBMITTED', 'event', id, { coordinatorId: null });
 
-  return getEvent(user, id);
+  // SCRUM-84 AC2: once submitted, the request is in the unassigned queue, so a
+  // Coordinator who is not also an Organiser cannot open it again. The submit
+  // response still returns the event they just sent.
+  const submitted = {
+    ...existing,
+    status: EVENT_STATUS.SUBMITTED,
+    sub_state: null,
+    review_remarks: null,
+    coordinator_id: null,
+    rejection_reason: null,
+  };
+  if (hasRole(user, ROLES.EVENT_ORGANISER) || canViewEvent(user, submitted)) {
+    return getEvent(user, id);
+  }
+  return visibleEvent(user, submitted);
 }
 
 // SCRUM-64: the assigned coordinator opens a Submitted request, moving it into
@@ -1672,16 +1720,31 @@ function mapChangeRequest(row) {
 }
 
 /**
+ * Purpose: stop a read when this user may not open the event.
+ * AC: SCRUM-84 AC2 — a Coordinator who is not assigned gets access denied.
+ *     Everyone else still gets 404, so an outsider cannot tell whether the row exists.
+ * Inputs: the user and the events row, or null when the id does not exist.
+ * Output: the same row when they may see it.
+ * Failure: 403 for a Coordinator who is not assigned; 404 otherwise.
+ */
+function throwUnlessVisible(user, row) {
+  if (!row) throw httpError(404, 'Event not found', 'NOT_FOUND');
+  if (canViewEvent(user, row)) return row;
+  if (hasRole(user, ROLES.EVENT_COORDINATOR) && !isInternalEventReader(user)) {
+    throw httpError(403, 'Access denied. You can only view events assigned to you.', 'FORBIDDEN');
+  }
+  throw httpError(404, 'Event not found', 'NOT_FOUND');
+}
+
+/**
  * Purpose: load the events row if this user may know it exists.
- * AC: SCRUM-34 AC1, SCRUM-35 AC1
- * Failure: 404 when missing or hidden (same as getEvent, so we do not leak other clients' events).
+ * AC: SCRUM-34 AC1, SCRUM-35 AC1. SCRUM-84 AC2 — another Coordinator is access denied.
+ * Failure: 403 for a Coordinator who is not assigned; 404 when missing or hidden from
+ * an outsider, so other clients' events are not revealed.
  */
 async function loadVisibleEventRow(user, id) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
-  if (!existing || !canViewEvent(user, existing)) {
-    throw httpError(404, 'Event not found', 'NOT_FOUND');
-  }
-  return existing;
+  return throwUnlessVisible(user, existing);
 }
 
 /**

@@ -50,23 +50,29 @@ describe('SCRUM-54 event page role limits', () => {
   });
 
   /*
-   * AC: SCRUM-54 AC6
+   * AC: SCRUM-84 AC2. Supersedes SCRUM-54 AC6.
    * Scenario: A Coordinator who is not assigned opens the event page.
-   * Setup: Event assigned to id 2; signed-in user is id 9 with EVENT_COORDINATOR.
-   * Expected: They can see the event name, but not approve, reject, or confirm.
-   * Type: normal
+   * Setup: The API refuses GET /api/events/3. Signed-in user is id 9 with EVENT_COORDINATOR.
+   * Expected: The access-denied message is shown. The event name is not.
+   * Type: error
    */
-  it('lets an unassigned Coordinator view an event but not change it', async () => {
+  it('shows an access-denied message when a Coordinator is not assigned', async () => {
     useAuth.mockReturnValue({
       user: { id: 9, roles: ['EVENT_COORDINATOR'] },
       hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
     });
-    mockEvent({ status: 'PLANNING' });
+    api.mockImplementation(async (path) => {
+      if (path === '/api/events/3') {
+        const err = new Error('Access denied. You can only view events assigned to you.');
+        err.status = 403;
+        throw err;
+      }
+      return {};
+    });
     renderEvent();
-    expect(await screen.findByText('Secret Workshop')).toBeInTheDocument();
+    expect(await screen.findByText('Access denied. You can only view events assigned to you.')).toBeInTheDocument();
+    expect(screen.queryByText('Secret Workshop')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Confirm event' })).not.toBeInTheDocument();
   });
 
   /*

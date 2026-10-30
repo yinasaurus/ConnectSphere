@@ -50,31 +50,34 @@ describe('SCRUM-54 coordinator assignment scope', () => {
   });
 
   /*
-   * AC: SCRUM-54 AC6
+   * AC: SCRUM-84 AC2. Supersedes SCRUM-54 AC6 (Week 9: a Coordinator no longer views other events).
    * Scenario: A Coordinator opens an event assigned to someone else.
    * Setup: Event 3 is assigned to coordinator 2; caller is coordinator 4.
-   * Expected: The event is returned for viewing (name included). Nothing is changed.
-   * Type: normal
+   * Expected: 403 access denied. The name is not returned. Nothing is changed.
+   * Type: error
    */
-  it('lets a Coordinator view an event that is not assigned to them', async () => {
-    const visible = await service.getEvent(otherCoordinator, 3);
-    expect(visible.id).toBe(3);
-    expect(visible.name).toBe('Secret Workshop');
+  it('rejects a Coordinator viewing an event that is not assigned to them', async () => {
+    await expect(service.getEvent(otherCoordinator, 3)).rejects.toMatchObject({
+      status: 403,
+      code: 'FORBIDDEN',
+      message: 'Access denied. You can only view events assigned to you.',
+    });
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
   /*
-   * AC: SCRUM-54 AC6
+   * AC: SCRUM-84 AC2. Supersedes SCRUM-54 AC6.
    * Scenario: A Coordinator opens an event that has no coordinator yet.
    * Setup: coordinator_id is null; caller is a Coordinator.
-   * Expected: They can still view it. The row is unchanged.
-   * Type: boundary
+   * Expected: 403 access denied. The name is not returned. The row is unchanged.
+   * Type: error
    */
-  it('lets a Coordinator view an unassigned event', async () => {
+  it('rejects a Coordinator viewing an unassigned event', async () => {
     event.coordinator_id = null;
-    const visible = await service.getEvent(otherCoordinator, 3);
-    expect(visible.id).toBe(3);
-    expect(visible.name).toBe('Secret Workshop');
+    await expect(service.getEvent(otherCoordinator, 3)).rejects.toMatchObject({
+      status: 403,
+      message: 'Access denied. You can only view events assigned to you.',
+    });
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
@@ -169,13 +172,13 @@ describe('SCRUM-54 coordinator assignment scope', () => {
   });
 
   /*
-   * AC: SCRUM-54 AC6
+   * AC: SCRUM-84 AC2. Supersedes SCRUM-54 AC6.
    * Scenario: A Coordinator GETs an event assigned to someone else over HTTP.
-   * Setup: Session user 4 is a Coordinator; event 3 is assigned to user 2.
-   * Expected: 200 with the event they are allowed to view. Nothing is changed.
-   * Type: normal
+   * Setup: Session user 4 is a Coordinator; event 3 is assigned to user 2 and named Secret Workshop.
+   * Expected: 403 with only error and message. The name and description must not appear.
+   * Type: error
    */
-  it('returns the event when an unassigned Coordinator views it over HTTP', async () => {
+  it('returns 403 without event details when an unassigned Coordinator views it over HTTP', async () => {
     db.fetchOne
       .mockResolvedValueOnce({ id: 4, is_active: true })
       .mockResolvedValueOnce(event);
@@ -183,9 +186,13 @@ describe('SCRUM-54 coordinator assignment scope', () => {
     const res = await request(app)
       .get('/api/events/3')
       .set('Cookie', `${env.sessionCookieName}=${token}`);
-    expect(res.status).toBe(200);
-    expect(res.body.event.id).toBe(3);
-    expect(res.body.event.name).toBe('Secret Workshop');
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({
+      error: 'FORBIDDEN',
+      message: 'Access denied. You can only view events assigned to you.',
+    });
+    expect(res.body).not.toHaveProperty('event');
+    expect(JSON.stringify(res.body)).not.toMatch(/Secret Workshop|Confidential purpose|Do not leak/i);
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
