@@ -193,8 +193,8 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
     expect(api).toHaveBeenCalledWith('/api/venues/bookings/10', {
       method: 'PATCH',
       body: {
-        startAt: '2026-10-21T10:00',
-        endAt: '2026-10-21T13:00',
+        startAt: new Date('2026-10-21T10:00').toISOString(),
+        endAt: new Date('2026-10-21T13:00').toISOString(),
       },
     });
   });
@@ -219,8 +219,8 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
     expect(api).toHaveBeenCalledWith('/api/venues/bookings/10', expect.objectContaining({
       method: 'PATCH',
       body: expect.objectContaining({
-        startAt: '2026-10-21T10:00',
-        endAt: '2026-10-21T13:00',
+        startAt: new Date('2026-10-21T10:00').toISOString(),
+        endAt: new Date('2026-10-21T13:00').toISOString(),
       }),
     }));
   });
