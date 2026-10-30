@@ -1018,17 +1018,63 @@ async function listUnavailability(venueId) {
   return fetchMany(query);
 }
 
+/**
+ * Purpose: Venue Staff record a venue as unavailable for a period, with a reason.
+ * AC: SCRUM-72 AC1 (start, end, reason required); AC2 (missing start/end/reason rejected);
+ *     AC3 (end must be after start); AC4 (saved even when bookings overlap - checked
+ *     elsewhere, at availability-check time, not here); AC5 (no existing event/booking is
+ *     touched); AC8 (non-Venue-Staff rejected, nothing saved).
+ * Inputs: user, payload { venueId, startAt, endAt, reason }.
+ * Output: the inserted venue_unavailability row.
+ * Failure: 403 if not Venue Staff; 400 if start/end/reason missing or end is not after start.
+ */
 async function blockVenue(user, payload) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can block venues', 'FORBIDDEN');
   }
+  if (!payload.startAt || !payload.endAt) {
+    throw httpError(400, 'startAt and endAt are required', 'VALIDATION_ERROR');
+  }
+  if (!payload.reason || !String(payload.reason).trim()) {
+    throw httpError(400, 'reason is required', 'VALIDATION_ERROR');
+  }
+  if (new Date(payload.endAt) <= new Date(payload.startAt)) {
+    throw httpError(400, 'endAt must be after startAt', 'VALIDATION_ERROR');
+  }
   return insertOne('venue_unavailability', {
     venue_id: payload.venueId,
-    reason: payload.reason || 'Maintenance',
+    reason: payload.reason,
     start_at: payload.startAt,
     end_at: payload.endAt,
     created_by: user.id,
   });
+}
+
+/**
+ * Purpose: an Event Coordinator (or Lead) ends a recorded unavailability period early.
+ * AC: SCRUM-72 (ending a block early is Coordinator-initiated, not a unilateral Venue Staff
+ *     action - Week 4 Q&A, NG AIK SHUAN KEENE: Venue Staff "cannot make changes... the
+ *     co-ordinator need to initiate the change"). Not scoped to a specific requesting
+ *     Coordinator - nothing in the story or the data model ties a period to one (AC1 frames
+ *     recording as Venue Staff's own initiative, not a Coordinator request).
+ * Inputs: user, unavailability period id.
+ * Output: the updated (shortened) row, end_at set to now.
+ * Failure: 403 if not a Coordinator/Lead; 404 if the period doesn't exist; 409 if it has
+ *     already ended.
+ */
+async function endUnavailabilityEarly(user, id) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR) && !hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)) {
+    throw httpError(403, 'Only an Event Coordinator can end an unavailability period early', 'FORBIDDEN');
+  }
+  const period = await fetchOne(supabase.from('venue_unavailability').select('*').eq('id', id));
+  if (!period) throw httpError(404, 'Unavailability period not found', 'NOT_FOUND');
+
+  const now = new Date();
+  if (new Date(period.end_at) <= now) {
+    throw httpError(409, 'This period has already ended', 'ALREADY_ENDED');
+  }
+
+  return updateById('venue_unavailability', id, { end_at: now.toISOString() });
 }
 
 module.exports = {
@@ -1045,6 +1091,7 @@ module.exports = {
   buildBookingDecisionNotice,
   listUnavailability,
   blockVenue,
+  endUnavailabilityEarly,
   computeOccupiedWindow,
   windowsOverlap,
   findConflict,

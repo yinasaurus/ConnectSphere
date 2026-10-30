@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import ConflictModal from '../components/ConflictModal';
+import BlockVenueCard from '../components/BlockVenueCard';
+import UnavailabilityList from '../components/UnavailabilityList';
 import { LAYOUTS, ROLES } from '../constants';
 
 const emptyForm = {
@@ -264,6 +266,7 @@ function BookingRow({ booking, onApprove }) {
 export default function Venues() {
   const { hasRole } = useAuth();
   const [venues, setVenues] = useState([]);
+  const [unavailabilityRefresh, setUnavailabilityRefresh] = useState(0);
   const [bookings, setBookings] = useState([]);
   const [form, setForm] = useState({
     name: '',
@@ -293,6 +296,8 @@ export default function Venues() {
   const latestSearchId = useRef(0);
 
   const isVenueStaff = hasRole(ROLES.VENUE_STAFF);
+  // SCRUM-72: ending a block early is Coordinator-initiated, not a Venue Staff action.
+  const canEndUnavailabilityEarly = hasRole(ROLES.EVENT_COORDINATOR) || hasRole(ROLES.EVENT_COORDINATOR_LEAD);
   const pendingBookings = bookings.filter((b) => b.status === 'PENDING');
   const decidedBookings = bookings.filter((b) => b.status !== 'PENDING');
 
@@ -655,6 +660,25 @@ export default function Venues() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* SCRUM-72: Venue Staff record a venue as unavailable for a period, with a reason. */}
+      {isVenueStaff && (
+        <BlockVenueCard
+          venues={venues}
+          onRecorded={async () => {
+            await reload();
+            setUnavailabilityRefresh((n) => n + 1);
+          }}
+        />
+      )}
+      {/* SCRUM-72: shows recorded periods; "End early" is Coordinator/Lead-only. */}
+      {(isVenueStaff || canEndUnavailabilityEarly) && (
+        <UnavailabilityList
+          venues={venues}
+          canEndEarly={canEndUnavailabilityEarly}
+          refreshKey={unavailabilityRefresh}
+        />
       )}
 
       {/*
