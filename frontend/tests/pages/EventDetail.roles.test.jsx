@@ -60,6 +60,7 @@ describe('SCRUM-54 event page role limits', () => {
    * Expected: The access-denied message is shown. The event name is not.
    * Type: error
    */
+  // SCRUM-54-TC41. Expected result updated by SCRUM-84: access denied, name hidden.
   it('shows an access-denied message when a Coordinator is not assigned', async () => {
     useAuth.mockReturnValue({
       user: { id: 9, roles: ['EVENT_COORDINATOR'] },
@@ -86,6 +87,7 @@ describe('SCRUM-54 event page role limits', () => {
    * Expected: The name is gone and only the access-denied message remains.
    * Type: error
    */
+  // SCRUM-84-TC10
   it('clears the event when a later load is access denied', async () => {
     jest.useFakeTimers();
     useAuth.mockReturnValue({
@@ -121,6 +123,7 @@ describe('SCRUM-54 event page role limits', () => {
    * Expected: The event name stays. A bookings failure does not blank the page.
    * Type: boundary
    */
+  // SCRUM-84-TC11
   it('keeps the event on screen when a bookings refresh is denied', async () => {
     jest.useFakeTimers();
     useAuth.mockReturnValue({

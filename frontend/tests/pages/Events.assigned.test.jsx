@@ -48,6 +48,7 @@ describe('SCRUM-84 coordinator event list', () => {
    * Expected: Only their event is listed. There is no Assigned to me checkbox.
    * Type: normal
    */
+  // SCRUM-84-TC12
   it('AC3: shows only events assigned to the Coordinator', async () => {
     renderEvents(chloe, '/app/events');
 
@@ -63,6 +64,7 @@ describe('SCRUM-84 coordinator event list', () => {
    * Expected: Only the event assigned to them is listed.
    * Type: normal
    */
+  // SCRUM-84-TC13
   it('AC3: View all still lists only assigned events', async () => {
     renderEvents(chloe, '/app/events?assigned=me');
 
@@ -77,6 +79,7 @@ describe('SCRUM-84 coordinator event list', () => {
    * Expected: Both events are listed. Assigned to me is available and off.
    * Type: boundary
    */
+  // SCRUM-84-TC14
   it('AC3: a Lead who is also a Coordinator still sees the full list', async () => {
     renderEvents(jordan, '/app/events');
 
@@ -92,6 +95,7 @@ describe('SCRUM-84 coordinator event list', () => {
    * Expected: Only the event assigned to them remains.
    * Type: normal
    */
+  // SCRUM-84-TC15
   it('AC3: a Lead can still narrow the list to events assigned to them', async () => {
     renderEvents(jordan, '/app/events');
     await screen.findByRole('heading', { name: 'Theirs' });
@@ -109,6 +113,7 @@ describe('SCRUM-84 coordinator event list', () => {
    * Expected: The other event disappears while the filter is on, then comes back when it is off.
    * Type: boundary
    */
+  // SCRUM-84-TC16
   it('AC3: a Lead sees the full list again after clearing Assigned to me', async () => {
     renderEvents(jordan, '/app/events');
     await screen.findByRole('heading', { name: 'Theirs' });

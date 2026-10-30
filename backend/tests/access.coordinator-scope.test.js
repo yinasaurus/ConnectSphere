@@ -56,6 +56,7 @@ describe('SCRUM-54 coordinator assignment scope', () => {
    * Expected: 403 access denied. The name is not returned. Nothing is changed.
    * Type: error
    */
+  // SCRUM-54-TC15. Expected result updated by SCRUM-84: 403, not the event.
   it('rejects a Coordinator viewing an event that is not assigned to them', async () => {
     await expect(service.getEvent(otherCoordinator, 3)).rejects.toMatchObject({
       status: 403,
@@ -72,6 +73,7 @@ describe('SCRUM-54 coordinator assignment scope', () => {
    * Expected: 403 access denied. The name is not returned. The row is unchanged.
    * Type: error
    */
+  // SCRUM-54-TC16. Expected result updated by SCRUM-84: 403, not the event.
   it('rejects a Coordinator viewing an unassigned event', async () => {
     event.coordinator_id = null;
     await expect(service.getEvent(otherCoordinator, 3)).rejects.toMatchObject({
@@ -178,6 +180,7 @@ describe('SCRUM-54 coordinator assignment scope', () => {
    * Expected: 403 with only error and message. The name and description must not appear.
    * Type: error
    */
+  // SCRUM-54-TC22. Expected result updated by SCRUM-84: 403, not 200.
   it('returns 403 without event details when an unassigned Coordinator views it over HTTP', async () => {
     db.fetchOne
       .mockResolvedValueOnce({ id: 4, is_active: true })

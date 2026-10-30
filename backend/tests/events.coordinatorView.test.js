@@ -58,6 +58,7 @@ describe('SCRUM-84 coordinator view', () => {
    * Expected: The event name is returned.
    * Type: normal
    */
+  // SCRUM-84-TC01
   it('AC1: lets the assigned Coordinator open the event', async () => {
     const visible = await service.getEvent(coordinator, 3);
     expect(visible.name).toBe('Mine');
@@ -71,6 +72,7 @@ describe('SCRUM-84 coordinator view', () => {
    * Expected: 404 Event not found. This is not the access-denied message.
    * Type: error
    */
+  // SCRUM-84-TC02
   it('AC2: a missing event is still not found', async () => {
     db.fetchOne.mockResolvedValueOnce(null);
     await expect(service.getEvent(coordinator, 99)).rejects.toMatchObject({
@@ -102,6 +104,7 @@ describe('SCRUM-84 coordinator view', () => {
    * Expected: The event is returned. Week 9 keeps the full list for the Lead.
    * Type: boundary
    */
+  // SCRUM-84-TC03
   it('AC1: a Coordinator who is also a Lead can open an unassigned event', async () => {
     db.fetchOne.mockResolvedValueOnce(queued);
     const visible = await service.getEvent(lead, 11);
@@ -115,6 +118,7 @@ describe('SCRUM-84 coordinator view', () => {
    * Expected: They can still open it. AC1 limits a Coordinator; Venue Staff are not limited.
    * Type: boundary
    */
+  // SCRUM-84-TC04
   it('AC1: Venue Staff can still open an event', async () => {
     const visible = await service.getEvent(venueStaff, 3);
     expect(visible.name).toBe('Mine');
@@ -127,6 +131,7 @@ describe('SCRUM-84 coordinator view', () => {
    * Expected: Only their event is returned, and the query is limited to their coordinator id.
    * Type: normal
    */
+  // SCRUM-84-TC05
   it('AC3: the Coordinator list is only events assigned to them', async () => {
     const listed = await service.listEvents(coordinator);
     expect(listed.map((event) => event.name)).toEqual(['Mine']);
@@ -140,6 +145,7 @@ describe('SCRUM-84 coordinator view', () => {
    * Expected: All three stay. The query is not limited to one coordinator id.
    * Type: boundary
    */
+  // SCRUM-84-TC06
   it('AC3: a Lead still receives every event in the list', async () => {
     const listed = await service.listEvents(lead);
     expect(listed.map((event) => event.name)).toEqual(['Mine', 'Theirs', 'Queue']);
@@ -156,6 +162,7 @@ describe('SCRUM-84 coordinator view', () => {
    *           the Organiser path.
    * Type: boundary
    */
+  // SCRUM-84-TC07
   it('AC3: a Coordinator who is also an Organiser sees assignments and their organisation', async () => {
     const both = {
       id: 4,
@@ -184,6 +191,7 @@ describe('SCRUM-84 coordinator view', () => {
    *           because a draft is not an event assigned to them.
    * Type: boundary
    */
+  // SCRUM-84-TC08
   it('AC2: a Coordinator receives the draft they saved, then cannot open it', async () => {
     const draftRow = {
       id: 12,
@@ -216,6 +224,7 @@ describe('SCRUM-84 coordinator view', () => {
    *           denied, because the event is now in the unassigned queue.
    * Type: boundary
    */
+  // SCRUM-84-TC09
   it('AC2: a Coordinator receives the event they submitted, then cannot open it', async () => {
     const draft = {
       ...mine,
