@@ -53,8 +53,15 @@ describe('SCRUM-60 AffectedBookingsCard', () => {
     api.mockReset();
   });
 
+  /*
+   * AC:       SCRUM-60 (empty-state guard)
+   * Scenario: Venue Staff opens the Venues page before any unavailability period exists.
+   * Setup:    api() mocked to return an empty unavailability list.
+   * Expected: the card renders nothing (no "affected-bookings-card" test id in the DOM).
+   * Type:     boundary
+   */
   // SCRUM-60-TC18
-  it('US60-F01: shows nothing when there are no recorded periods', async () => {
+  it('shows nothing when there are no recorded periods', async () => {
     mockApi({ periods: [] });
     const { container } = render(<AffectedBookingsCard venues={venues} />);
 
@@ -62,8 +69,19 @@ describe('SCRUM-60 AffectedBookingsCard', () => {
     expect(container.querySelector('[data-testid="affected-bookings-card"]')).not.toBeInTheDocument();
   });
 
+  /*
+   * AC:       SCRUM-60 (AC8: Venue Staff can view the bookings a period affects, with
+   *           event, venue, date and time)
+   * Scenario: Venue Staff picks a recorded period from the dropdown and views its affected
+   *           bookings.
+   * Setup:    api() mocked to return one period and one affected booking (Tech Symposium
+   *           at Helix Hall) for that period's id.
+   * Expected: selecting the period and clicking "View affected bookings" shows the
+   *           booking's event and venue.
+   * Type:     normal
+   */
   // SCRUM-60-TC19
-  it('US60-F02: lets Venue Staff pick a recorded period and view its affected bookings', async () => {
+  it('lets Venue Staff pick a recorded period and view its affected bookings', async () => {
     mockApi();
     render(<AffectedBookingsCard venues={venues} />);
 
@@ -75,8 +93,16 @@ describe('SCRUM-60 AffectedBookingsCard', () => {
     expect(screen.getByText('Helix Hall')).toBeInTheDocument();
   });
 
+  /*
+   * AC:       SCRUM-60 (AC8: the list reflects whatever the API returns, including when
+   *           nothing is affected)
+   * Scenario: Venue Staff views a period that currently affects no bookings.
+   * Setup:    api() mocked to return an empty bookings array for the selected period.
+   * Expected: "No bookings are affected by this period." is shown instead of a table.
+   * Type:     boundary
+   */
   // SCRUM-60-TC20
-  it('US60-F03: shows a message when no bookings are affected', async () => {
+  it('shows a message when no bookings are affected', async () => {
     mockApi({ bookings: [] });
     render(<AffectedBookingsCard venues={venues} />);
 
@@ -87,8 +113,15 @@ describe('SCRUM-60 AffectedBookingsCard', () => {
     expect(await screen.findByText('No bookings are affected by this period.')).toBeInTheDocument();
   });
 
+  /*
+   * AC:       SCRUM-60 (AC8: a non-Venue-Staff refusal is surfaced to the user)
+   * Scenario: The affected-bookings lookup is refused by the server.
+   * Setup:    api() mocked to throw a FORBIDDEN error with the service's exact message.
+   * Expected: that message is shown on the card.
+   * Type:     error
+   */
   // SCRUM-60-TC21
-  it('US60-F04: shows the server\'s message when the lookup is refused', async () => {
+  it('shows the server\'s message when the lookup is refused', async () => {
     mockApi({ affectedError: { message: 'Only venue staff can view affected bookings', code: 'FORBIDDEN' } });
     render(<AffectedBookingsCard venues={venues} />);
 
