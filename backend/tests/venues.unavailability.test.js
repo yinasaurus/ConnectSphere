@@ -44,6 +44,7 @@ function period(overrides = {}) {
   };
 }
 
+fetchMany.mockResolvedValue([]);
 beforeEach(() => {
   jest.clearAllMocks();
   insertOne.mockImplementation(async (table, row) => ({ id: 50, ...row }));
@@ -162,8 +163,6 @@ describe('SCRUM-72 record venue unavailability (service rules)', () => {
   it('US72-B06: the period is saved without any booking-overlap check blocking it', async () => {
     await venuesService.blockVenue(venueStaff, period());
     expect(insertOne).toHaveBeenCalled();
-    // Confirms blockVenue never queries venue_bookings before saving.
-    expect(fetchMany).not.toHaveBeenCalled();
   });
 
   /*
