@@ -48,12 +48,5 @@ router.get(
 
 router.get('/unavailability', controller.unavailability);
 router.post('/unavailability', requireRole(ROLES.VENUE_STAFF), controller.block);
-// SCRUM-72: ending a block early is Coordinator-initiated, not a Venue Staff action
-// (Week 4 Q&A) - Venue Staff who recorded it cannot end it early themselves.
-router.post(
-  '/unavailability/:id/end',
-  requireRole(ROLES.EVENT_COORDINATOR, ROLES.EVENT_COORDINATOR_LEAD),
-  controller.endUnavailabilityEarly
-);
 
 module.exports = router;

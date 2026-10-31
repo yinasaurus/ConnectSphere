@@ -11,12 +11,8 @@
  *   AC7  An occupied window that only touches the period's edge does not overlap it.
  *   AC8  A user who is not Venue Staff cannot record a period; nothing is saved.
  *
- * Ending a block early (Week 4 Q&A, NG AIK SHUAN KEENE): Venue Staff "cannot make
- * changes... the co-ordinator need to initiate the change" - so ending a period early is a
- * Coordinator/Lead action, not something Venue Staff (who recorded it) can do themselves.
- *
  * Labels:
- *   US72-B..  service rules (venuesService.blockVenue / endUnavailabilityEarly)
+ *   US72-B..  service rules (venuesService.blockVenue)
  *   US72-R..  HTTP route (auth cookie + service)
  */
 const request = require('supertest');
@@ -37,8 +33,6 @@ const { env } = require('../src/config/env');
 
 const venueStaff = { id: 5, roles: [ROLES.VENUE_STAFF] };
 const organiser = { id: 1, roles: [ROLES.EVENT_ORGANISER] };
-const coordinator = { id: 2, roles: [ROLES.EVENT_COORDINATOR] };
-const lead = { id: 3, roles: [ROLES.EVENT_COORDINATOR_LEAD] };
 
 function period(overrides = {}) {
   return {
@@ -46,18 +40,6 @@ function period(overrides = {}) {
     startAt: '2026-11-01T09:00:00Z',
     endAt: '2026-11-01T17:00:00Z',
     reason: 'Maintenance',
-    ...overrides,
-  };
-}
-
-function unavailabilityRow(overrides = {}) {
-  return {
-    id: 40,
-    venue_id: 7,
-    start_at: '2026-11-01T09:00:00Z',
-    end_at: '2026-11-01T17:00:00Z',
-    reason: 'Maintenance',
-    created_by: 5,
     ...overrides,
   };
 }
@@ -260,100 +242,6 @@ describe('SCRUM-72 record venue unavailability (service rules)', () => {
   });
 });
 
-describe('SCRUM-72 end a block early (service rules)', () => {
-  /*
-   * AC:       SCRUM-72 (ending a block early is Coordinator-initiated — Week 4 Q&A)
-   * Scenario: A Coordinator ends a recorded period before its scheduled end.
-   * Setup:    An unavailability row exists with end_at in the future.
-   * Expected: updateById is called with end_at set to "now"; the shortened row is returned.
-   * Type:     normal
-   */
-  // SCRUM-72-TC17
-  it('US72-B10: a Coordinator can end an unavailability period early', async () => {
-    fetchOne.mockResolvedValueOnce(unavailabilityRow());
-    const result = await venuesService.endUnavailabilityEarly(coordinator, 40);
-
-    expect(updateById).toHaveBeenCalledWith('venue_unavailability', 40, expect.objectContaining({
-      end_at: expect.any(String),
-    }));
-    expect(result.id).toBe(40);
-  });
-
-  /*
-   * AC:       SCRUM-72 (ending a block early is Coordinator-initiated — Lead included)
-   * Scenario: An Event Coordinator Lead ends a recorded period early.
-   * Setup:    An unavailability row exists with end_at in the future.
-   * Expected: updateById is called; the shortened row is returned.
-   * Type:     normal
-   */
-  // SCRUM-72-TC18
-  it('US72-B11: an Event Coordinator Lead can also end a period early', async () => {
-    fetchOne.mockResolvedValueOnce(unavailabilityRow());
-    await venuesService.endUnavailabilityEarly(lead, 40);
-    expect(updateById).toHaveBeenCalled();
-  });
-
-  /*
-   * AC:       SCRUM-72 (Venue Staff cannot end a block early themselves — Week 4 Q&A:
-   *           "cannot make changes")
-   * Scenario: The Venue Staff member who recorded the period tries to end it early.
-   * Setup:    Caller holds only the VENUE_STAFF role.
-   * Expected: Rejected with 403 FORBIDDEN; updateById is never called.
-   * Type:     error
-   */
-  // SCRUM-72-TC19
-  it('US72-B12: Venue Staff cannot end a block early, even the one they recorded', async () => {
-    await expect(venuesService.endUnavailabilityEarly(venueStaff, 40))
-      .rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
-    expect(fetchOne).not.toHaveBeenCalled();
-    expect(updateById).not.toHaveBeenCalled();
-  });
-
-  /*
-   * AC:       SCRUM-72 (not tied to a numbered AC — general role guard)
-   * Scenario: An Organiser (neither Venue Staff nor Coordinator) tries to end a period.
-   * Setup:    Caller holds only the EVENT_ORGANISER role.
-   * Expected: Rejected with 403 FORBIDDEN; updateById is never called.
-   * Type:     error
-   */
-  // SCRUM-72-TC20
-  it('US72-B13: an unrelated role cannot end a block early', async () => {
-    await expect(venuesService.endUnavailabilityEarly(organiser, 40))
-      .rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
-    expect(updateById).not.toHaveBeenCalled();
-  });
-
-  /*
-   * AC:       SCRUM-72 (not tied to a numbered AC — general 404 guard)
-   * Scenario: A Coordinator tries to end a period that does not exist.
-   * Setup:    fetchOne resolves null for the given id.
-   * Expected: Rejected with 404; updateById is never called.
-   * Type:     error
-   */
-  // SCRUM-72-TC21
-  it('US72-B14: ending a period that does not exist is 404', async () => {
-    fetchOne.mockResolvedValueOnce(null);
-    await expect(venuesService.endUnavailabilityEarly(coordinator, 999))
-      .rejects.toMatchObject({ status: 404 });
-    expect(updateById).not.toHaveBeenCalled();
-  });
-
-  /*
-   * AC:       SCRUM-72 (not tied to a numbered AC — idempotency guard)
-   * Scenario: A Coordinator tries to end a period whose end_at is already in the past.
-   * Setup:    An unavailability row exists with end_at already before "now".
-   * Expected: Rejected with 409; updateById is never called.
-   * Type:     boundary
-   */
-  // SCRUM-72-TC22
-  it('US72-B15: ending a period that has already ended is rejected, not re-applied', async () => {
-    fetchOne.mockResolvedValueOnce(unavailabilityRow({ end_at: '2020-01-01T00:00:00Z' }));
-    await expect(venuesService.endUnavailabilityEarly(coordinator, 40))
-      .rejects.toMatchObject({ status: 409 });
-    expect(updateById).not.toHaveBeenCalled();
-  });
-});
-
 describe('SCRUM-72 record venue unavailability route', () => {
   const { createApp } = require('../src/app');
   const app = createApp();
@@ -408,53 +296,6 @@ describe('SCRUM-72 record venue unavailability route', () => {
   // SCRUM-72-TC12
   it('US72-R03: the route needs a signed-in user', async () => {
     const res = await request(app).post('/api/venues/unavailability').send(period());
-    expect(res.status).toBe(401);
-  });
-
-  /*
-   * AC:       SCRUM-72 (ending a block early works through the real HTTP route)
-   * Scenario: A Coordinator ends a period early through the real route.
-   * Setup:    Coordinator is signed in; the period exists with end_at in the future.
-   * Expected: 200 with the shortened unavailability row in the body.
-   * Type:     normal
-   */
-  // SCRUM-72-TC23
-  it('US72-R04: a Coordinator can end a block early through the API', async () => {
-    fetchOne.mockResolvedValueOnce({ id: 2, is_active: true }); // auth: the signed-in user
-    fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_COORDINATOR }]); // auth: their roles
-    fetchOne.mockResolvedValueOnce(unavailabilityRow()); // service: the period
-
-    const res = await request(app)
-      .post('/api/venues/unavailability/40/end')
-      .set('Cookie', cookieFor(2));
-
-    expect(res.status).toBe(200);
-    expect(String(res.body.unavailability.id)).toBe('40');
-  });
-
-  /*
-   * AC:       SCRUM-72 (Venue Staff rejected — route level)
-   * Scenario: Venue Staff hits the real end-early route.
-   * Setup:    Signed in as Venue Staff.
-   * Expected: 403, through the real role middleware; nothing updated.
-   * Type:     error
-   */
-  // SCRUM-72-TC24
-  it('US72-R05: Venue Staff gets 403 through the API when trying to end a block early', async () => {
-    fetchOne.mockResolvedValueOnce({ id: 5, is_active: true });
-    fetchMany.mockResolvedValueOnce([{ role: ROLES.VENUE_STAFF }]);
-
-    const res = await request(app)
-      .post('/api/venues/unavailability/40/end')
-      .set('Cookie', cookieFor(5));
-
-    expect(res.status).toBe(403);
-    expect(updateById).not.toHaveBeenCalled();
-  });
-
-  // SCRUM-72-TC25
-  it('US72-R06: the end-early route needs a signed-in user', async () => {
-    const res = await request(app).post('/api/venues/unavailability/40/end');
     expect(res.status).toBe(401);
   });
 });

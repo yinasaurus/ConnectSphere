@@ -296,8 +296,6 @@ export default function Venues() {
   const latestSearchId = useRef(0);
 
   const isVenueStaff = hasRole(ROLES.VENUE_STAFF);
-  // SCRUM-72: ending a block early is Coordinator-initiated, not a Venue Staff action.
-  const canEndUnavailabilityEarly = hasRole(ROLES.EVENT_COORDINATOR) || hasRole(ROLES.EVENT_COORDINATOR_LEAD);
   const pendingBookings = bookings.filter((b) => b.status === 'PENDING');
   const decidedBookings = bookings.filter((b) => b.status !== 'PENDING');
 
@@ -672,11 +670,10 @@ export default function Venues() {
           }}
         />
       )}
-      {/* SCRUM-72: shows recorded periods; "End early" is Coordinator/Lead-only. */}
-      {(isVenueStaff || canEndUnavailabilityEarly) && (
+      {/* SCRUM-72: shows recorded venue unavailability periods. */}
+      {isVenueStaff && (
         <UnavailabilityList
           venues={venues}
-          canEndEarly={canEndUnavailabilityEarly}
           refreshKey={unavailabilityRefresh}
         />
       )}

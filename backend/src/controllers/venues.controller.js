@@ -92,11 +92,6 @@ const block = asyncHandler(async (req, res) => {
   res.status(201).json({ unavailability: blockRow });
 });
 
-const endUnavailabilityEarly = asyncHandler(async (req, res) => {
-  const updated = await venuesService.endUnavailabilityEarly(req.user, req.params.id);
-  res.json({ unavailability: updated });
-});
-
 module.exports = {
   list,
   search,
@@ -110,5 +105,4 @@ module.exports = {
   cancelBooking,
   unavailability,
   block,
-  endUnavailabilityEarly,
 };
