@@ -73,12 +73,17 @@ beforeEach(() => {
 
 describe('SCRUM-74 list registrations (service rules)', () => {
   /*
-   * AC: SCRUM-74 AC1, AC3
-   * Scenario: The event's own Organiser lists registrations; 2 active, 1 withdrawn, capacity 50.
-   * Expected: every row returned with the attendee's name/email, activeCount 2 (withdrawn not
-   *   counted), capacity 50.
-   * Type: normal
-   */
+  * AC:       SCRUM-74 (AC1: The Organiser of an event can view its registrations, including each
+  *           attendee and their registration status.) (AC3: The view shows the number of active
+  *           registrations against the event's maximum capacity. Withdrawn registrations are listed
+  *           with their status but not counted.)
+  * Scenario: The event's own Organiser lists registrations; 2 active, 1 withdrawn, capacity 50.
+  * Setup:    organiser (id 1, matches event.organiser_id) calls listForEvent; fetchMany resolves
+  *           2 REGISTERED rows + 1 WITHDRAWN row, fetchCount resolves 2.
+  * Expected: every row returned with the attendee's name/email, activeCount 2 (withdrawn not
+  *           counted), capacity 50.
+  * Type:     normal
+  */
   // SCRUM-74-TC01
   it('US74-B01: the Organiser sees every registration plus the active count against capacity', async () => {
     db.fetchMany.mockResolvedValueOnce([
@@ -97,11 +102,13 @@ describe('SCRUM-74 list registrations (service rules)', () => {
   });
 
   /*
-   * AC: SCRUM-74 AC2
-   * Scenario: The event's assigned Coordinator (not its Organiser) lists registrations.
-   * Expected: same view as the Organiser gets.
-   * Type: normal
-   */
+  * AC:       SCRUM-74 (AC2: The event's assigned Coordinator can view the same registrations.)
+  * Scenario: The event's assigned Coordinator (not its Organiser) lists registrations.
+  * Setup:    coordinator (id 2, matches event.coordinator_id) calls listForEvent; fetchMany
+  *           resolves 1 registration, fetchCount resolves 1.
+  * Expected: same view as the Organiser gets.
+  * Type:     normal
+  */
   // SCRUM-74-TC02
   it('US74-B02: the assigned Coordinator sees the same registrations as the Organiser', async () => {
     db.fetchMany.mockResolvedValueOnce([registrationRow()]);
@@ -114,11 +121,12 @@ describe('SCRUM-74 list registrations (service rules)', () => {
   });
 
   /*
-   * AC: SCRUM-74 AC4
-   * Scenario: A Confirmed event with no registrations at all.
-   * Expected: an empty list and activeCount 0, not an error.
-   * Type: boundary
-   */
+  * AC:       SCRUM-74 (AC4: An event with no registrations shows a count of zero.)
+  * Scenario: A Confirmed event with no registrations at all.
+  * Setup:    organiser calls listForEvent; fetchMany resolves [], fetchCount resolves 0.
+  * Expected: an empty list and activeCount 0, not an error.
+  * Type:     boundary
+  */
   // SCRUM-74-TC03
   it('US74-B03: an event with no registrations shows a count of zero', async () => {
     db.fetchMany.mockResolvedValueOnce([]);
@@ -131,11 +139,14 @@ describe('SCRUM-74 list registrations (service rules)', () => {
   });
 
   /*
-   * Scenario: registration was never enabled for this event (SCRUM-63), so
-   *   registration_capacity is null in the database.
-   * Expected: capacity comes back null, not 0 — "no cap set" is not the same as "cap is zero".
-   * Type: boundary
-   */
+  * AC:       SCRUM-74 (defensive boundary for the SCRUM-63 interaction)
+  * Scenario: registration was never enabled for this event (SCRUM-63), so
+  *           registration_capacity is null in the database.
+  * Setup:    event overridden with registration_capacity: null; fetchMany resolves [],
+  *           fetchCount resolves 0.
+  * Expected: capacity comes back null, not 0 — "no cap set" is not the same as "cap is zero".
+  * Type:     boundary
+  */
   // SCRUM-74-TC04
   it('US74-B03b: capacity is null, not zero, when registration was never enabled', async () => {
     event = withEvent({ registration_capacity: null });
@@ -148,11 +159,13 @@ describe('SCRUM-74 list registrations (service rules)', () => {
   });
 
   /*
-   * AC: SCRUM-74 AC5
-   * Scenario: An Organiser who does not own this event tries to list its registrations.
-   * Expected: rejected with 403; no registration rows are fetched at all.
-   * Type: error
-   */
+  * AC:       SCRUM-74 (AC5: An Organiser or Coordinator cannot view registrations for events they
+  *           do not manage. The attempt is rejected and no registration details are shown.)
+  * Scenario: An Organiser who does not own this event tries to list its registrations.
+  * Setup:    otherOrganiser (id 99, doesn't match event.organiser_id 1) calls listForEvent.
+  * Expected: rejected with 403; no registration rows are fetched at all.
+  * Type:     error
+  */
   // SCRUM-74-TC05
   it('US74-B04: an Organiser who does not manage this event is rejected', async () => {
     await expect(service.listForEvent(otherOrganiser, 3)).rejects.toMatchObject({ status: 403 });
@@ -160,23 +173,27 @@ describe('SCRUM-74 list registrations (service rules)', () => {
   });
 
   /*
-   * AC: SCRUM-74 AC5
-   * Scenario: A Coordinator who is not this event's assigned Coordinator tries to list it.
-   * Expected: rejected with 403, same as an unrelated Organiser.
-   * Type: error
-   */
+  * AC:       SCRUM-74 (AC5: An Organiser or Coordinator cannot view registrations for events
+  *           they do not manage. The attempt is rejected and no registration details are shown.)
+  * Scenario: A Coordinator who is not this event's assigned Coordinator tries to list it.
+  * Setup:    otherCoordinator (id 98, doesn't match event.coordinator_id 2) calls listForEvent.
+  * Expected: rejected with 403, same as an unrelated Organiser.
+  * Type:     error
+  */
   // SCRUM-74-TC06
   it('US74-B05: a Coordinator who is not assigned to this event is rejected', async () => {
     await expect(service.listForEvent(otherCoordinator, 3)).rejects.toMatchObject({ status: 403 });
   });
 
   /*
-   * AC: SCRUM-74 AC6
-   * Scenario: An Attendee lists "registrations" for an event they registered for.
-   * Expected: only their own registration comes back, scoped by attendee_id, with no
-   *   activeCount/capacity summary (that belongs to the event's manager only).
-   * Type: normal
-   */
+  * AC:       SCRUM-74 (AC6: An Attendee cannot view other attendees' registrations.)
+  * Scenario: An Attendee lists "registrations" for an event they registered for.
+  * Setup:    attendee (id 30) calls listForEvent; fetchMany resolves a single registration row
+  *           for attendee_id 30.
+  * Expected: only their own registration comes back, scoped by attendee_id, with no
+  *           activeCount/capacity summary (that belongs to the event's manager only).
+  * Type:     normal
+  */
   // SCRUM-74-TC07
   it('US74-B06: an Attendee only ever sees their own registration, never a summary', async () => {
     db.fetchMany.mockResolvedValueOnce([registrationRow({ attendee: undefined })]);
@@ -189,6 +206,13 @@ describe('SCRUM-74 list registrations (service rules)', () => {
     expect(call).toEqual(['attendee_id', 30]);
   });
 
+  /*
+  * AC:       SCRUM-74 (general not-found guard)
+  * Scenario: Looking up registrations for an event id that doesn't exist.
+  * Setup:    fetchOne resolves null for the event lookup.
+  * Expected: rejected with 404, not a crash or an empty list.
+  * Type:     error
+  */
   // SCRUM-74-TC08
   it('US74-B07: a missing event is 404', async () => {
     db.fetchOne.mockResolvedValueOnce(null);
@@ -206,11 +230,14 @@ describe('SCRUM-74 list registrations route', () => {
   }
 
   /*
-   * AC: SCRUM-74 AC1
-   * Scenario: The Organiser asks for registrations through the real HTTP route.
-   * Expected: 200 with registrations, activeCount and capacity in the body.
-   * Type: normal
-   */
+  * AC:       SCRUM-74 (AC1: The Organiser of an event can view its registrations, including
+  *           each attendee and their registration status.)
+  * Scenario: The Organiser asks for registrations through the real HTTP route.
+  * Setup:    signed-in user is organiser id 1 via cookie; auth + service fetchOne/fetchMany/
+  *           fetchCount mocked for the event and 1 registration.
+  * Expected: 200 with registrations, activeCount and capacity in the body.
+  * Type:     normal
+  */
   // SCRUM-74-TC09
   it('US74-R01: the Organiser reads registrations through the API', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 1, is_active: true }); // auth: the signed-in user
@@ -229,11 +256,13 @@ describe('SCRUM-74 list registrations route', () => {
   });
 
   /*
-   * AC: SCRUM-74 AC5
-   * Scenario: An unrelated Organiser hits the real route for an event they don't own.
-   * Expected: 403, through the real middleware and service.
-   * Type: error
-   */
+  * AC:       SCRUM-74 (AC5: An Organiser or Coordinator cannot view registrations for events they
+  *           do not manage. The attempt is rejected and no registration details are shown.)
+  * Scenario: An unrelated Organiser hits the real route for an event they don't own.
+  * Setup:    signed-in user is organiser id 99 (not event.organiser_id 1) via cookie.
+  * Expected: 403, through the real middleware and service.
+  * Type:     error
+  */
   // SCRUM-74-TC10
   it('US74-R02: an unrelated Organiser gets 403 through the API', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 99, is_active: true }); // auth: the signed-in user
@@ -247,19 +276,26 @@ describe('SCRUM-74 list registrations route', () => {
     expect(res.status).toBe(403);
   });
 
+  /*
+  * AC:       SCRUM-74 (standard auth guard)
+  * Scenario: An unauthenticated request hits the registrations route with no session cookie.
+  * Setup:    request sent with no Cookie header.
+  * Expected: rejected with 401, before the service or event lookup runs.
+  * Type:     error
+  */
   // SCRUM-74-TC11
   it('US74-R03: the route needs a signed-in user', async () => {
     const res = await request(app).get('/api/events/3/registrations');
     expect(res.status).toBe(401);
   });
 
-    /*
-   * AC: SCRUM-74 (AC2: The event's assigned Coordinator can view the same registrations.)
-   * Scenario: The event's assigned Coordinator (not its Organiser) reads registrations through the real HTTP route.
-   * Setup: signed-in user is coordinator id 2; service returns the same registrations the Organiser route test gets.
-   * Expected: 200 with registrations, activeCount and capacity in the body, same as the Organiser.
-   * Type: normal
-   */
+  /*
+  * AC:       SCRUM-74 (AC2: The event's assigned Coordinator can view the same registrations.)
+  * Scenario: The event's assigned Coordinator (not its Organiser) reads registrations through the real HTTP route.
+  * Setup:    signed-in user is coordinator id 2; service returns the same registrations the Organiser route test gets.
+  * Expected: 200 with registrations, activeCount and capacity in the body, same as the Organiser.
+  * Type:     normal
+  */
   // SCRUM-74-TC12
   it('US74-R04: the assigned Coordinator reads registrations through the API', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 2, is_active: true }); // auth: the signed-in user
@@ -278,12 +314,13 @@ describe('SCRUM-74 list registrations route', () => {
   });
 
   /*
-   * AC: SCRUM-74 (AC5: An Organiser or Coordinator cannot view registrations for events they do not manage. The attempt is rejected and no registration details are shown.)
-   * Scenario: A Coordinator who is not assigned to this event hits the real route.
-   * Setup: signed-in user is coordinator id 98; event.coordinator_id is 2.
-   * Expected: 403, through the real middleware and service, same as an unrelated Organiser.
-   * Type: error
-   */
+  * AC:       SCRUM-74 (AC5: An Organiser or Coordinator cannot view registrations for events they
+  *           do not manage. The attempt is rejected and no registration details are shown.)
+  * Scenario: A Coordinator who is not assigned to this event hits the real route.
+  * Setup:    signed-in user is coordinator id 98; event.coordinator_id is 2.
+  * Expected: 403, through the real middleware and service, same as an unrelated Organiser.
+  * Type:     error
+  */
   // SCRUM-74-TC13
   it('US74-R05: an unassigned Coordinator gets 403 through the API', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 98, is_active: true }); // auth: the signed-in user
