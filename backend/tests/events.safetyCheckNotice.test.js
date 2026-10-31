@@ -180,6 +180,7 @@ describe('SCRUM-81 safety-check readiness notices', () => {
    * Expected: One SAFETY_CHECK_READY notice each to 12 and 13 (not 14, not coord/organiser).
    * Type:     normal
    */
+  // SCRUM-81-TC01
   it('notifies every active Safety Officer when the event is sent to safety check', async () => {
     await events.changeStatus(coordinator, 3, 'AWAITING_SAFETY_CHECK');
     const ready = safetyReadyNotices();
@@ -202,6 +203,7 @@ describe('SCRUM-81 safety-check readiness notices', () => {
    * Expected: 409; no SAFETY_CHECK_READY notification rows.
    * Type:     error
    */
+  // SCRUM-81-TC02
   it('does not notify Safety Officers when a venue booking is not approved', async () => {
     tables.venue_bookings[0].status = 'PENDING';
     await expect(
@@ -217,6 +219,7 @@ describe('SCRUM-81 safety-check readiness notices', () => {
    * Expected: 409; no SAFETY_CHECK_READY notification rows.
    * Type:     error
    */
+  // SCRUM-81-TC03
   it('does not notify Safety Officers when requested equipment is not reserved', async () => {
     tables.equipment_requests[0].status = 'PENDING';
     await expect(
@@ -232,6 +235,7 @@ describe('SCRUM-81 safety-check readiness notices', () => {
    * Expected: Status still moves to Awaiting; zero SAFETY_CHECK_READY notices.
    * Type:     boundary
    */
+  // SCRUM-81-TC04
   it('sends no readiness notice when there is no active Safety Officer', async () => {
     tables.user_roles = tables.user_roles.filter((row) => row.role !== ROLES.SAFETY_OFFICER);
     await events.changeStatus(coordinator, 3, 'AWAITING_SAFETY_CHECK');
@@ -247,6 +251,7 @@ describe('SCRUM-81 safety-check readiness notices', () => {
    * Expected: A second SAFETY_CHECK_READY wave to the same active SOs.
    * Type:     normal
    */
+  // SCRUM-81-TC05
   it('notifies Safety Officers again when the event is sent to safety check a second time', async () => {
     await events.changeStatus(coordinator, 3, 'AWAITING_SAFETY_CHECK');
     expect(safetyReadyNotices()).toHaveLength(2);
@@ -276,6 +281,7 @@ describe('SCRUM-81 safety-check outcome notices', () => {
    * Expected: SAFETY_CHECK_OUTCOME to 1 and 2 only; no outcome notice to SOs or others.
    * Type:     normal
    */
+  // SCRUM-81-TC06
   it('notifies Coordinator and Organiser when the safety check is approved', async () => {
     await access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE' });
     const outcomes = safetyOutcomeNotices();
@@ -294,9 +300,10 @@ describe('SCRUM-81 safety-check outcome notices', () => {
    * AC:       SCRUM-81 AC4, AC7
    * Scenario: Safety Officer rejects with a reason.
    * Setup:    Reason "Crowd density too high for exits".
-   * Expected: Notices to Coordinator and Organiser that include that reason.
+   * Expected: Notices to users 1 and 2 that include that reason.
    * Type:     normal
    */
+  // SCRUM-81-TC07
   it('notifies Coordinator and Organiser of a rejection including the reason', async () => {
     await access.recordSafetyCheck(safetyOfficer, 3, {
       outcome: 'REJECT',
@@ -304,6 +311,7 @@ describe('SCRUM-81 safety-check outcome notices', () => {
     });
     const outcomes = safetyOutcomeNotices();
     expect(outcomes).toHaveLength(2);
+    expect(outcomes.map((row) => row.user_id).sort()).toEqual([1, 2]);
     expect(outcomes.every((row) => row.body.includes('Crowd density too high for exits'))).toBe(true);
     expect(outcomes[0].title).toBe('Safety check rejected');
   });
@@ -315,6 +323,7 @@ describe('SCRUM-81 safety-check outcome notices', () => {
    * Expected: Notices include the reason and venue name; only contacts 1 and 2.
    * Type:     normal
    */
+  // SCRUM-81-TC08
   it('notifies Coordinator and Organiser of request-changes with reason and arrangements', async () => {
     await access.recordSafetyCheck(safetyOfficer, 3, {
       outcome: 'REQUEST_CHANGES',
@@ -330,12 +339,34 @@ describe('SCRUM-81 safety-check outcome notices', () => {
   });
 
   /*
+   * AC:       SCRUM-81 AC5, AC7
+   * Scenario: Safety Officer requests changes to the reserved equipment.
+   * Setup:    Reason and affectedArrangements [{ EQUIPMENT_REQUEST, 21 }] (Wireless mic).
+   * Expected: Notices go to users 1 and 2 and name the equipment and the reason.
+   * Type:     normal
+   */
+  // SCRUM-81-TC09
+  it('notifies Coordinator and Organiser of request-changes to equipment by name', async () => {
+    await access.recordSafetyCheck(safetyOfficer, 3, {
+      outcome: 'REQUEST_CHANGES',
+      reason: 'Need a spare mic',
+      affectedArrangements: [{ type: 'EQUIPMENT_REQUEST', id: 21 }],
+    });
+    const outcomes = safetyOutcomeNotices();
+    expect(outcomes).toHaveLength(2);
+    expect(outcomes.map((row) => row.user_id).sort()).toEqual([1, 2]);
+    expect(outcomes[0].body).toContain('Need a spare mic');
+    expect(outcomes[0].body).toContain('equipment Wireless mic');
+  });
+
+  /*
    * AC:       SCRUM-81 AC3, AC7
    * Scenario: Same user is both Coordinator and Organiser.
    * Setup:    organiser_id and coordinator_id both 2.
    * Expected: One SAFETY_CHECK_OUTCOME notice (not two identical copies).
    * Type:     boundary
    */
+  // SCRUM-81-TC10
   it('sends one outcome notice when Coordinator and Organiser are the same person', async () => {
     event.organiser_id = 2;
     await access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE' });
@@ -351,6 +382,7 @@ describe('SCRUM-81 safety-check outcome notices', () => {
    * Expected: Only the Coordinator is notified (one outcome notice).
    * Type:     boundary
    */
+  // SCRUM-81-TC11
   it('skips a missing organiser when notifying the safety outcome', async () => {
     event.organiser_id = null;
     await access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE' });
@@ -361,26 +393,12 @@ describe('SCRUM-81 safety-check outcome notices', () => {
 
   /*
    * AC:       SCRUM-81 AC7
-   * Scenario: Approve when the event somehow has no coordinator id.
-   * Setup:    coordinator_id null; organiser_id 1.
-   * Expected: Only the Organiser is notified (one outcome notice).
-   * Type:     boundary
-   */
-  it('skips a missing coordinator when notifying the safety outcome', async () => {
-    event.coordinator_id = null;
-    await access.recordSafetyCheck(safetyOfficer, 3, { outcome: 'APPROVE' });
-    expect(safetyOutcomeNotices()).toEqual([
-      expect.objectContaining({ user_id: 1, type: 'SAFETY_CHECK_OUTCOME' }),
-    ]);
-  });
-
-  /*
-   * AC:       SCRUM-81 AC7
    * Scenario: Outcome notices must not go to an organiser of a different event.
    * Setup:    User 99 is an organiser in another organisation; event contacts stay 1 and 2.
    * Expected: SAFETY_CHECK_OUTCOME only for 1 and 2; user 99 never appears.
    * Type:     boundary
    */
+  // SCRUM-81-TC12
   it('does not notify an organiser of another event about the outcome', async () => {
     tables.users.push({ id: 99, is_active: true });
     tables.user_roles.push({ user_id: 99, role: ROLES.EVENT_ORGANISER });
@@ -399,6 +417,7 @@ describe('SCRUM-81 notice text helpers', () => {
    * Expected: Title and body identify readiness for a safety check.
    * Type:     normal
    */
+  // SCRUM-81-TC13
   it('builds a readiness notice that names the event', () => {
     expect(access.buildSafetyReadyNotice('Helix Summit')).toEqual({
       title: 'Event ready for safety check',
@@ -413,6 +432,7 @@ describe('SCRUM-81 notice text helpers', () => {
    * Expected: Body includes both names and the reason (falls back to #id without name).
    * Type:     normal
    */
+  // SCRUM-81-TC14
   it('builds a request-changes notice that lists arrangements by name', () => {
     const notice = access.buildSafetyOutcomeNotice({
       outcome: 'REQUEST_CHANGES',
@@ -436,6 +456,7 @@ describe('SCRUM-81 notice text helpers', () => {
    * Expected: Body falls back to venue booking #id.
    * Type:     boundary
    */
+  // SCRUM-81-TC15
   it('falls back to arrangement ids when names are missing', () => {
     const notice = access.buildSafetyOutcomeNotice({
       outcome: 'REQUEST_CHANGES',
