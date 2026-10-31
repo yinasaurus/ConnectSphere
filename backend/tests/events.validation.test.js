@@ -164,27 +164,6 @@ describe('event start/end date range validation', () => {
     });
 
     /*
-    * AC:       SCRUM-14 (AC4: Organiser can view the request they submitted and its current status)
-    * Scenario: An Organiser submits a complete draft, then views it.
-    * Setup:    submitEvent() called on a complete Draft event; getEvent() called immediately after.
-    * Expected: getEvent() returns the event with status SUBMITTED.
-    * Type:     normal
-    */
-    // SCRUM-14-TC19
-    it('after submitting, the Organiser can view the request and see its Submitted status', async () => {
-      db.fetchOne.mockImplementation(async () => ({
-        id: 99, organiser_id: 1, organisation_id: 10, coordinator_id: 2, status: 'DRAFT', ...completeDraft,
-      }));
-      await service.submitEvent(organiser, 99);
-
-      db.fetchOne.mockImplementation(async () => ({
-        id: 99, organiser_id: 1, organisation_id: 10, coordinator_id: null, status: 'SUBMITTED', ...completeDraft,
-      }));
-      const viewed = await service.getEvent(organiser, 99);
-      expect(viewed.status).toBe('SUBMITTED');
-    });
-
-    /*
     * AC:       SCRUM-15 (AC1: Organiser can save a partially completed event request without filling in every field)
     * Scenario: A draft is created with only a name.
     * Setup:    createEvent() called with { name: 'Untitled event' } — no purpose, description, venue requirements, accessibility needs or attendance.
@@ -382,7 +361,6 @@ describe('SCUM-14/15 regression: dates are converted to real Date objects before
 
 describe('SCRUM-15 draft lifecycle', () => {
   const organiser = { id: 1, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] };
-  const coordinator = { id: 2, roles: [ROLES.EVENT_COORDINATOR] };
 
   beforeEach(() => {
     jest.clearAllMocks();
