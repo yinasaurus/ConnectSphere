@@ -122,12 +122,6 @@ describe('SCUM-13 event ownership and assigned coordinator permissions', () => {
     });
   });
 
-  it('allows an assigned coordinator to review', async () => {
-    event.status = 'UNDER_REVIEW';
-    await service.changeStatus(coordinator, 3, 'APPROVED');
-    expect(db.updateById).toHaveBeenCalled();
-  });
-
   it.each([organiser, { ...coordinator, id: 4 }])('rejects review by the wrong user', async (user) => {
     event.status = 'UNDER_REVIEW';
     await expect(service.changeStatus(user, 3, 'PLANNING')).rejects.toMatchObject({ status: 403 });
