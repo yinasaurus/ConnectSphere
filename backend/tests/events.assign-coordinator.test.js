@@ -65,6 +65,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
    *   Status moves to UNDER_REVIEW. Assignment notices are SCRUM-45 / SCRUM-29 (asserted there).
    * Type: normal
    */
+  // SCRUM-71-TC01
   it('US71-B01: a Lead assigns an active Coordinator to a Submitted unassigned event', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -95,15 +96,18 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
   /*
    * AC: SCRUM-71 AC2
    * Scenario: The Lead picks a Coordinator whose account is inactive.
-   * Setup: Event is Submitted and unassigned. User 9 exists but is_active is false.
-   *   The Coordinator role is not loaded; inactive accounts are refused before the role check.
+   * Setup: Event is Submitted and unassigned. User 9 exists, is_active is false, and holds
+   *   the Coordinator role. The role is what would let the assignment through if the
+   *   inactive check were skipped.
    * Expected: 409 INVALID_COORDINATOR. updateById is not called so the event stays unassigned.
    * Type: error
    */
+  // SCRUM-71-TC02
   it('US71-B02: assigning an inactive Coordinator is rejected and the event is unchanged', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
       .mockResolvedValueOnce({ id: 9, full_name: 'Inactive', is_active: false });
+    db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }]);
 
     await expect(service.assignPrimaryCoordinator(lead, 3, 9)).rejects.toMatchObject({
       status: 409,
@@ -120,6 +124,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
    * Expected: 409. The event is not written.
    * Type: error
    */
+  // SCRUM-71-TC03
   it('US71-B03: assigning a user who is not a Coordinator is rejected and the event is unchanged', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -141,6 +146,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
    * Expected: 409. The event is not written.
    * Type: error
    */
+  // SCRUM-71-TC04
   it('US71-B04: assigning a missing user is rejected and the event is unchanged', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -161,6 +167,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
    * Expected: 409 ALREADY_ASSIGNED. Original coordinator_id 2 is kept. This is reassignment (SCRUM-31).
    * Type: conflict
    */
+  // SCRUM-71-TC05
   it('US71-B05: an event that already has a Coordinator cannot be assigned through this action', async () => {
     event.coordinator_id = 2;
     event.status = 'SUBMITTED';
@@ -180,6 +187,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
    * Expected: 409 INVALID_STATUS. The event is not written.
    * Type: error
    */
+  // SCRUM-71-TC06
   it.each(['DRAFT', 'UNDER_REVIEW', 'PLANNING'])(
     'US71-B06: a Lead cannot assign a Coordinator while the event is %s',
     async (status) => {
@@ -201,6 +209,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
    * Expected: Assignment succeeds because they hold Lead, not because they are a Coordinator.
    * Type: normal
    */
+  // SCRUM-71-TC07
   it('US71-B08: a hybrid Lead and Coordinator can assign', async () => {
     const hybrid = { id: 13, roles: [ROLES.EVENT_COORDINATOR, ROLES.EVENT_COORDINATOR_LEAD] };
     db.fetchOne
@@ -220,6 +229,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
    * Expected: Second call is ALREADY_ASSIGNED; coordinator_id stays 2. The event is not unassigned.
    * Type: conflict
    */
+  // SCRUM-71-TC08
   it('US71-B09: after assignment the event is no longer treated as unassigned', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -243,6 +253,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
    * Expected: Only the active Coordinator is returned.
    * Type: boundary
    */
+  // SCRUM-71-TC09
   it('US71-B10: the assignable list omits inactive Coordinators', async () => {
     db.fetchMany
       .mockResolvedValueOnce([{ user_id: 2 }, { user_id: 9 }])
@@ -262,6 +273,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
    * Expected: 403. No list is returned.
    * Type: error
    */
+  // SCRUM-71-TC10
   it('US71-B11: a non-Lead cannot list assignable Coordinators', async () => {
     await expect(service.listAssignableCoordinators(coordinator)).rejects.toMatchObject({
       status: 403,
@@ -276,6 +288,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
    * Expected: 404. Nothing is written.
    * Type: error
    */
+  // SCRUM-71-TC11
   it('US71-B12: assigning to a missing event returns 404 and writes nothing', async () => {
     db.fetchOne.mockResolvedValueOnce(null);
 
@@ -293,6 +306,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
    * Expected: An empty list, not an error.
    * Type: boundary
    */
+  // SCRUM-71-TC12
   it('US71-B13: the assignable list is empty when no Coordinators exist', async () => {
     db.fetchMany.mockResolvedValueOnce([]);
     await expect(service.listAssignableCoordinators(lead)).resolves.toEqual([]);
@@ -319,6 +333,7 @@ describe('SCRUM-71 POST /api/events/:id/assign-coordinator (route)', () => {
    * Expected: 200 and the event is written with coordinator_id 2.
    * Type: normal
    */
+  // SCRUM-71-TC13
   it('US71-R01: a Lead can assign a Coordinator through the API', async () => {
     db.fetchOne
       .mockResolvedValueOnce({ id: 11, is_active: true })
@@ -341,16 +356,20 @@ describe('SCRUM-71 POST /api/events/:id/assign-coordinator (route)', () => {
   /*
    * AC: SCRUM-71 AC2
    * Scenario: Lead assigns through HTTP but the chosen Coordinator account is inactive.
-   * Setup: Session is Lead. Event 3 is Submitted and unassigned. Candidate 9 exists with is_active false.
+   * Setup: Session is Lead. Event 3 is Submitted and unassigned. Candidate 9 exists with
+   *   is_active false and the Coordinator role.
    * Expected: 409. updateById is not called, so the event stays unassigned.
    * Type: error
    */
+  // SCRUM-71-TC14
   it('US71-R07: assigning an inactive Coordinator through the API leaves the event unchanged', async () => {
     db.fetchOne
       .mockResolvedValueOnce({ id: 11, is_active: true })
       .mockResolvedValueOnce(event)
       .mockResolvedValueOnce({ id: 9, full_name: 'Inactive', is_active: false });
-    db.fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_COORDINATOR_LEAD }]);
+    db.fetchMany
+      .mockResolvedValueOnce([{ role: ROLES.EVENT_COORDINATOR_LEAD }])
+      .mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }]);
 
     const res = await request(app)
       .post('/api/events/3/assign-coordinator')
@@ -369,6 +388,7 @@ describe('SCRUM-71 POST /api/events/:id/assign-coordinator (route)', () => {
    * Expected: 403 before the service writes anything.
    * Type: error
    */
+  // SCRUM-71-TC15
   it.each([
     ROLES.EVENT_COORDINATOR,
     ROLES.EVENT_ORGANISER,
@@ -388,6 +408,7 @@ describe('SCRUM-71 POST /api/events/:id/assign-coordinator (route)', () => {
    * Expected: 400 from the validator. The event is not written.
    * Type: error
    */
+  // SCRUM-71-TC16
   it('US71-R03: a missing coordinatorId returns 400', async () => {
     const res = await asRole(ROLES.EVENT_COORDINATOR_LEAD).send({});
     expect(res.status).toBe(400);
@@ -395,12 +416,14 @@ describe('SCRUM-71 POST /api/events/:id/assign-coordinator (route)', () => {
   });
 
   /*
-   * AC: none (authentication, not AC6 — AC6 is a signed-in user without the Lead role)
-   * Scenario: No session cookie.
+   * AC: SCRUM-71 AC6
+   * Scenario: No session cookie. The caller has no Lead role. SCRUM-71-TC15 is the
+   *   signed-in user who holds some other role.
    * Setup: Anonymous POST to the assign path.
    * Expected: 401. The event is not written.
    * Type: error
    */
+  // SCRUM-71-TC17
   it('US71-R04: a request without a session is rejected with 401', async () => {
     const res = await request(app).post('/api/events/3/assign-coordinator').send({ coordinatorId: 2 });
     expect(res.status).toBe(401);
@@ -414,6 +437,7 @@ describe('SCRUM-71 POST /api/events/:id/assign-coordinator (route)', () => {
    * Expected: 200 and the JSON list (inactive accounts would already be filtered in the service).
    * Type: normal
    */
+  // SCRUM-71-TC18
   it('US71-R05: a Lead can list assignable Coordinators through the API', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 11, is_active: true });
     db.fetchMany
@@ -436,6 +460,7 @@ describe('SCRUM-71 POST /api/events/:id/assign-coordinator (route)', () => {
    * Expected: 403.
    * Type: error
    */
+  // SCRUM-71-TC19
   it('US71-R06: a Coordinator cannot list assignable Coordinators (403)', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 11, is_active: true });
     db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }]);

@@ -104,6 +104,7 @@ describe('SCRUM-71 assign coordinator (event page)', () => {
    * Expected: The assign card is shown and both Coordinators are in the dropdown.
    * Type: normal
    */
+  // SCRUM-71-TC20
   it('US71-F01: a Lead sees active Coordinators to assign on a Submitted unassigned event', async () => {
     mockAuth(leadUser);
     stubApi(leadUser, submittedUnassigned());
@@ -121,6 +122,7 @@ describe('SCRUM-71 assign coordinator (event page)', () => {
    * Expected: POST /api/events/3/assign-coordinator with coordinatorId 2.
    * Type: normal
    */
+  // SCRUM-71-TC21
   it('US71-F02: a Lead assigns the chosen Coordinator', async () => {
     const user = userEvent.setup();
     const extras = {};
@@ -144,6 +146,7 @@ describe('SCRUM-71 assign coordinator (event page)', () => {
    * Expected: No assign card. They cannot assign.
    * Type: error
    */
+  // SCRUM-71-TC22
   it('US71-F03: a Coordinator does not see the assign action', async () => {
     mockAuth(coordinatorUser);
     stubApi(coordinatorUser, submittedUnassigned());
@@ -160,6 +163,7 @@ describe('SCRUM-71 assign coordinator (event page)', () => {
    * Expected: The assign card is hidden. Changing the Coordinator is reassignment, not this action.
    * Type: conflict
    */
+  // SCRUM-71-TC23
   it('US71-F04: a Lead cannot assign through this action when the event already has a Coordinator', async () => {
     mockAuth(leadUser);
     stubApi(leadUser, { ...submittedUnassigned(), status: 'SUBMITTED', coordinatorId: 2 });
@@ -176,6 +180,7 @@ describe('SCRUM-71 assign coordinator (event page)', () => {
    * Expected: The assign card is hidden. Only Submitted unassigned events can be assigned.
    * Type: error
    */
+  // SCRUM-71-TC24
   it('US71-F05: a Lead cannot assign a Coordinator on a Draft', async () => {
     mockAuth(leadUser);
     stubApi(leadUser, { ...submittedUnassigned(), status: 'DRAFT' });
