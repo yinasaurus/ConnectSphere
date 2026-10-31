@@ -1,6 +1,6 @@
 /**
- * A Coordinator can list every event assigned to them. The Events page stays the full list
- * until Assigned to me is on.
+ * SCRUM-84 AC3: a Coordinator's event list is only the events assigned to them.
+ * A Lead who is also a Coordinator still sees the full list.
  */
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -37,17 +37,51 @@ function renderEvents(user, entry) {
 }
 
 const chloe = { id: 2, fullName: 'Chloe Lim', roles: ['EVENT_COORDINATOR'] };
+const jordan = { id: 2, fullName: 'Jordan Ng', roles: ['EVENT_COORDINATOR', 'EVENT_COORDINATOR_LEAD'] };
 const organiser = { id: 1, fullName: 'Aisha Rahman', roles: ['EVENT_ORGANISER'] };
 
-describe('Assigned to me on the events list', () => {
+describe('SCRUM-84 coordinator event list', () => {
   /*
+   * AC: SCRUM-84 AC3
    * Scenario: A Coordinator opens Events from the left menu.
-   * Setup: One event assigned to them, one with no Coordinator.
-   * Expected: Both are listed. Assigned to me is available and off.
+   * Setup: One event assigned to them, one with no Coordinator. Address is /app/events.
+   * Expected: Only their event is listed. There is no Assigned to me checkbox.
    * Type: normal
    */
-  it('shows the full list when Assigned to me is off', async () => {
+  // SCRUM-84-TC12
+  it('AC3: shows only events assigned to the Coordinator', async () => {
     renderEvents(chloe, '/app/events');
+
+    expect(await screen.findByRole('heading', { name: 'Mine' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Theirs' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Assigned to me' })).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-84 AC3
+   * Scenario: The Coordinator opens View all from the home page.
+   * Setup: The address is /app/events?assigned=me. Same two events.
+   * Expected: Only the event assigned to them is listed.
+   * Type: normal
+   */
+  // SCRUM-84-TC13
+  it('AC3: View all still lists only assigned events', async () => {
+    renderEvents(chloe, '/app/events?assigned=me');
+
+    expect(await screen.findByRole('heading', { name: 'Mine' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Theirs' })).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-84 AC3
+   * Scenario: A Lead who is also a Coordinator opens Events.
+   * Setup: Same two events. The signed-in user holds both roles.
+   * Expected: Both events are listed. Assigned to me is available and off.
+   * Type: boundary
+   */
+  // SCRUM-84-TC14
+  it('AC3: a Lead who is also a Coordinator still sees the full list', async () => {
+    renderEvents(jordan, '/app/events');
 
     expect(await screen.findByRole('heading', { name: 'Mine' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Theirs' })).toBeInTheDocument();
@@ -55,28 +89,37 @@ describe('Assigned to me on the events list', () => {
   });
 
   /*
-   * Scenario: The Coordinator opens View all from the home page.
-   * Setup: The address is /app/events?assigned=me. Same two events.
-   * Expected: Only the event assigned to them is listed. The checkbox is on.
+   * AC: SCRUM-84 AC3
+   * Scenario: That Lead turns Assigned to me on.
+   * Setup: The full list is showing.
+   * Expected: Only the event assigned to them remains.
    * Type: normal
    */
-  it('shows only events assigned to the Coordinator when the filter is on', async () => {
-    renderEvents(chloe, '/app/events?assigned=me');
+  // SCRUM-84-TC15
+  it('AC3: a Lead can still narrow the list to events assigned to them', async () => {
+    renderEvents(jordan, '/app/events');
+    await screen.findByRole('heading', { name: 'Theirs' });
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Assigned to me' }));
 
     expect(await screen.findByRole('heading', { name: 'Mine' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Theirs' })).not.toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Assigned to me' })).toBeChecked();
   });
 
   /*
-   * Scenario: The Coordinator turns the filter off again.
-   * Setup: The page opened with ?assigned=me.
-   * Expected: The other event comes back. The full list is still there.
-   * Type: normal
+   * AC: SCRUM-84 AC3
+   * Scenario: A Lead turns Assigned to me on, then off.
+   * Setup: Same two events. The signed-in user is a Lead and a Coordinator.
+   * Expected: The other event disappears while the filter is on, then comes back when it is off.
+   * Type: boundary
    */
-  it('returns to the full list when Assigned to me is cleared', async () => {
-    renderEvents(chloe, '/app/events?assigned=me');
-    await screen.findByRole('heading', { name: 'Mine' });
+  // SCRUM-84-TC16
+  it('AC3: a Lead sees the full list again after clearing Assigned to me', async () => {
+    renderEvents(jordan, '/app/events');
+    await screen.findByRole('heading', { name: 'Theirs' });
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Assigned to me' }));
+    expect(screen.queryByRole('heading', { name: 'Theirs' })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Assigned to me' }));
 
@@ -85,6 +128,7 @@ describe('Assigned to me on the events list', () => {
   });
 
   /*
+   * AC: SCRUM-39 AC1
    * Scenario: An Organiser opens Events, including with ?assigned=me in the address.
    * Setup: Organiser is not a Coordinator.
    * Expected: No Assigned to me checkbox. Both events stay listed.

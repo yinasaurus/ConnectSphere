@@ -113,10 +113,10 @@ describe('SCRUM-30 Unassigned flag on the dashboard', () => {
   });
 
   /*
-   * AC: SCRUM-30 AC2
+   * AC: SCRUM-30 AC2. SCRUM-84 AC3 — the visible count is assigned events only.
    * Scenario: A Coordinator who is not a Lead opens the dashboard.
    * Setup: Town Hall is SUBMITTED and coordinatorId is null, so it is not assigned to user 2.
-   * Expected: It is not in Upcoming. The Coordinator list stays limited to their own events.
+   * Expected: It is not in Upcoming. Visible events is 0.
    * Type: boundary
    */
   it('US30-F09: a Coordinator who is not a Lead does not see an unassigned event', async () => {
@@ -128,7 +128,7 @@ describe('SCRUM-30 Unassigned flag on the dashboard', () => {
 
     await waitFor(() => {
       const count = screen.getByText('Visible events').closest('.card').querySelector('h2');
-      expect(count.textContent).toBe('1');
+      expect(count.textContent).toBe('0');
     });
     expect(screen.queryByRole('link', { name: 'Town Hall' })).not.toBeInTheDocument();
     expect(screen.getByText('Nothing to show for this role yet.')).toBeInTheDocument();

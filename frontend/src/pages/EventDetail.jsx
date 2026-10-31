@@ -151,8 +151,14 @@ export default function EventDetail() {
   // allowed to see. A Lead also loads the active-Coordinator list to assign an unassigned
   // Submitted request, or to reassign an event that already has a Coordinator.
   const reload = useCallback(async () => {
+    // SCRUM-84 AC2: only a denied event request clears the page. A 403 from history
+    // or bookings must leave an event the caller can still see on screen.
+    const eventPromise = api(`/api/events/${id}`).catch((err) => {
+      if (err.status === 403) setEvent(null);
+      throw err;
+    });
     const [eventRes, historyRes, commentRes, venueRes, bookingRes, equipmentRes, statusRes] = await Promise.all([
-      api(`/api/events/${id}`),
+      eventPromise,
       canViewPlanning ? api(`/api/events/${id}/history`) : Promise.resolve({ history: [] }),
       canViewPlanning ? api(`/api/comments/${id}`) : Promise.resolve({ comments: [] }),
       canViewPlanning ? api('/api/venues') : Promise.resolve({ venues: [] }),
