@@ -56,6 +56,7 @@ describe('SCRUM-54 assignment overview page', () => {
    *   and it shows Chloe with Workshop.
    * Type: normal
    */
+  // SCRUM-57-TC14
   it('US57-F01: the page lists the Coordinators and events this Lead assigned', async () => {
     api.mockResolvedValue({
       assignments: [{ eventId: 3, eventName: 'Workshop', coordinatorName: 'Chloe Lim', status: 'PLANNING' }],

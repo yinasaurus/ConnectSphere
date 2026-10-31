@@ -73,6 +73,7 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
    * Expected: Chloe's two events are listed with her, then Daniel's event with him.
    * Type: normal
    */
+  // SCRUM-57-TC01
   it('US57-B01: lists the Coordinators this Lead assigned, with their events', async () => {
     const assignments = await openOverview(
       [
@@ -112,6 +113,7 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
    *   Lead 12's overview includes event 3, held by Daniel.
    * Type: conflict
    */
+  // SCRUM-57-TC02
   it('US57-B02: an event assigned by another Lead is left out', async () => {
     const heldByDaniel = [eventRow({ coordinator_id: 4, coordinator: { full_name: 'Daniel Ong' } })];
     const audits = [
@@ -147,6 +149,7 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
    * Expected: Event 9 is not in the overview. Event 3 is.
    * Type: boundary
    */
+  // SCRUM-57-TC03
   it('US57-B03: an unassigned event is not in this overview', async () => {
     const assignments = await openOverview(
       [
@@ -168,6 +171,7 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
    * Expected: One row, coordinator Daniel (id 4). Chloe is not listed for this event.
    * Type: normal
    */
+  // SCRUM-57-TC04
   it('US57-B04: after this Lead reassigns, the next open shows the new Coordinator', async () => {
     const assignments = await openOverview(
       [eventRow({ coordinator_id: 4, coordinator: { full_name: 'Daniel Ong' } })],
@@ -196,6 +200,10 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
    * Expected: The four closed or unsent events are absent. The Planning event remains.
    * Type: boundary
    */
+  // SCRUM-57-TC05 COMPLETED
+  // SCRUM-57-TC06 CANCELLED
+  // SCRUM-57-TC07 REJECTED
+  // SCRUM-57-TC08 DRAFT
   it.each(['COMPLETED', 'CANCELLED', 'REJECTED', 'DRAFT'])(
     'US57-B05: a %s event does not appear',
     async (status) => {
@@ -224,6 +232,7 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
    * Expected: The overview shows Daniel, the Coordinator after the reassignment.
    * Type: boundary
    */
+  // SCRUM-57-TC09
   it('US57-B06: the newer reassignment wins when the audit time is still the database default', async () => {
     const assignments = await openOverview(
       [eventRow({ coordinator_id: 4, coordinator: { full_name: 'Daniel Ong' } })],
@@ -246,6 +255,7 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
    * Expected: The event stays on Lead 11's overview, held by Chloe.
    * Type: boundary
    */
+  // SCRUM-57-TC10
   it('US57-B07: a later audit that is not an allocation leaves this Lead\'s assignment in place', async () => {
     const assignments = await openOverview(
       [eventRow()],
@@ -274,6 +284,7 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
    * Expected: Lead 11's overview is empty. Lead 12's overview shows event 3 held by Daniel.
    * Type: boundary
    */
+  // SCRUM-57-TC11
   it('US57-B08: the later reassignment wins even when its audit id is lower', async () => {
     const heldByDaniel = [eventRow({ coordinator_id: 4, coordinator: { full_name: 'Daniel Ong' } })];
     const audits = [
@@ -310,6 +321,7 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
    * Expected: The event is on this Lead's overview, held by Chloe.
    * Type: boundary
    */
+  // SCRUM-57-TC12
   it('US57-B09: a string event id and actor id still match this Lead', async () => {
     const assignments = await openOverview(
       [eventRow()],
@@ -332,6 +344,7 @@ describe('SCRUM-57 this Lead\'s assignment overview', () => {
    * Expected: The Confirmed event is listed. The Completed event is absent.
    * Type: boundary
    */
+  // SCRUM-57-TC13
   it('US57-B10: a Confirmed event this Lead allocated stays on the overview', async () => {
     const assignments = await openOverview(
       [
