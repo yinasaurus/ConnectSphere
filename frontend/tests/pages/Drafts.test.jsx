@@ -244,7 +244,7 @@ describe('TC-DRAFT-04 (Draft Saving & Resuming)', () => {
 
 describe('Drafts list page (client-side filtering)', () => {
   /*
-   * AC:       SCRUM-15 (AC1/AC4: Draft requests exist as a distinct, Organiser-owned set; also guards the client-side organiserId filter in Drafts.jsx)
+   * AC:       SCRUM-15 (AC5: Draft requests are only visible to the Event Organiser who created them, not to Event Coordinators — empty-state case)
    * Scenario: The signed-in Organiser's drafts list is rendered alongside another Organiser's draft.
    * Setup:    /api/events?status=DRAFT returns two drafts — one owned by the caller (organiserId: 1), one owned by someone else (organiserId: 99).
    * Expected: Only the caller's own draft is shown; the other Organiser's is filtered out.
@@ -278,7 +278,7 @@ describe('Drafts list page (client-side filtering)', () => {
   });
 
   /*
-   * AC:       SCRUM-15 (AC1/AC4: Draft requests exist as a distinct set — empty-state case)
+   * AC:       SCRUM-15 (AC5: Draft requests are only visible to the Event Organiser who created them, not to Event Coordinators)
    * Scenario: The Organiser has no saved drafts.
    * Setup:    /api/events?status=DRAFT returns an empty list.
    * Expected: The "No drafts yet..." empty-state message is shown.
