@@ -51,6 +51,9 @@ const BOOKING_STATUS = {
   APPROVED: 'APPROVED',
   REJECTED: 'REJECTED',
   CANCELLED: 'CANCELLED',
+  // SCRUM-76: a Held (TENTATIVE) booking whose hold_expires_at was reached. Never confirmed,
+  // never blocks the venue, and cannot be approved.
+  EXPIRED: 'EXPIRED',
 };
 
 const EQUIPMENT_STATUS = {

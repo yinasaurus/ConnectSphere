@@ -939,6 +939,44 @@ async function placeHold(user, payload = {}, now = new Date()) {
   return { ...created, coordinator_id: event.coordinator_id ?? null };
 }
 
+/**
+ * Purpose: release the venue from every hold whose expiry has been reached by changing it from
+ * TENTATIVE (Held) to EXPIRED. Run on a timer by jobs/holdExpiry.job.js, so no user action is
+ * needed. The read paths (findConflict, search, availability) already ignore a hold once its
+ * expiry has passed, so the venue is free even between two runs.
+ * AC: SCRUM-76 AC1 (Held + expiry reached -> Expired, automatically), AC2 (a confirmed booking
+ *     is not touched), AC3 (not before the expiry), AC4 (a cancelled hold is not touched),
+ *     AC7 (re-running changes nothing: an EXPIRED row no longer matches status = TENTATIVE).
+ * Business rule: W7 #4, a tentative hold has a mandatory expiry.
+ * Inputs: now (a parameter so tests can fix the time).
+ * Output: the rows that were expired by this run (empty when there were none).
+ * Failure: a database error is passed on; nothing is half-applied because it is one UPDATE.
+ */
+async function expireHolds(now = new Date()) {
+  const nowIso = new Date(now).toISOString();
+  // One conditional UPDATE: only rows that are still Held and whose expiry is at or before now.
+  // A hold with no expiry (rows from before SCRUM-75) is left alone, as the read paths do.
+  const expired = await fetchMany(
+    supabase
+      .from('venue_bookings')
+      .update({ status: BOOKING_STATUS.EXPIRED, updated_at: nowIso })
+      .eq('status', BOOKING_STATUS.TENTATIVE)
+      .not('hold_expires_at', 'is', null)
+      .lte('hold_expires_at', nowIso)
+      .select()
+  );
+
+  // actor_id null: the system did this, not a user.
+  for (const row of expired) {
+    await writeAudit(null, 'HOLD_EXPIRED', 'venue_booking', row.id, {
+      eventId: row.event_id,
+      venueId: row.venue_id,
+      holdExpiresAt: row.hold_expires_at,
+    });
+  }
+  return expired;
+}
+
 /*
  * Purpose: cancel one venue booking and move its Confirmed event back to Planning when needed.
  * AC: SCRUM-61 AC1–AC10 — assigned Coordinators may cancel eligible bookings except for Completed events.
@@ -1173,6 +1211,7 @@ module.exports = {
   requestBooking,
   decideBooking,
   placeHold,
+  expireHolds,
   cancelBooking,
   buildBookingDecisionNotice,
   listUnavailability,
