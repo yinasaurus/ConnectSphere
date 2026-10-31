@@ -17,6 +17,8 @@ function formatSubmittedDate(value) {
 
 // Keep database status constants readable while retaining their status-specific CSS class.
 function formatStatus(status) {
+  // SCRUM-75 AC1: a hold is stored as TENTATIVE and shown as Held.
+  if (status === 'TENTATIVE') return 'Held';
   return status ? `${status[0]}${status.slice(1).toLowerCase()}` : 'Unknown';
 }
 

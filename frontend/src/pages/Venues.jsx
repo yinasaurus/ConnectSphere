@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import ConflictModal from '../components/ConflictModal';
+import PlaceHoldCard from '../components/PlaceHoldCard';
 import { LAYOUTS, ROLES } from '../constants';
 
 const emptyForm = {
@@ -45,6 +46,9 @@ const EMPTY_SEARCH = {
   facilities: '',
 };
 
+// SCRUM-75 AC1: a hold is stored as TENTATIVE and shown to users as Held.
+const STATUS_LABELS = { TENTATIVE: 'HELD' };
+
 /** SCRUM-18: per-booking status badge with colour-coded pill. */
 function BookingStatusBadge({ status }) {
   const colours = {
@@ -66,7 +70,7 @@ function BookingStatusBadge({ status }) {
         color: '#fff',
       }}
     >
-      {status}
+      {STATUS_LABELS[status] || status}
     </span>
   );
 }
@@ -207,6 +211,7 @@ function BookingRow({ booking, onApprove }) {
   const [deciding, setDeciding] = useState(false);
   const [localError, setLocalError] = useState('');
   const isRejected = booking.status === 'REJECTED';
+  const isHeld = booking.status === 'TENTATIVE';
   const needsClear = booking.status === 'APPROVED' && booking.needs_review;
 
   async function approveAgain() {
@@ -244,6 +249,11 @@ function BookingRow({ booking, onApprove }) {
             Alt: {booking.alternative_suggestion}
           </span>
         )}
+        {isHeld && booking.hold_expires_at && (
+          <span style={{ fontSize: '0.85rem' }} data-testid={`hold-expiry-${booking.id}`}>
+            Hold expires {new Date(booking.hold_expires_at).toLocaleString()}
+          </span>
+        )}
         {needsClear && onApprove && (
           <button
             className="btn"
@@ -255,7 +265,7 @@ function BookingRow({ booking, onApprove }) {
           </button>
         )}
         {localError && <div className="alert">{localError}</div>}
-        {!isRejected && !(needsClear && onApprove) && <span className="muted">—</span>}
+        {!isRejected && !isHeld && !(needsClear && onApprove) && <span className="muted">—</span>}
       </td>
     </tr>
   );
@@ -656,6 +666,9 @@ export default function Venues() {
           </div>
         </div>
       )}
+
+      {/* SCRUM-75: Venue Staff place a tentative hold with an expiry. */}
+      {isVenueStaff && <PlaceHoldCard venues={venues} onPlaced={reload} />}
 
       {/*
         SCRUM-18 AC1/AC2/AC3: Booking requests section.

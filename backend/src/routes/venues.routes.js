@@ -25,6 +25,9 @@ router.post('/bookings', requireRole(ROLES.EVENT_COORDINATOR), controller.reques
 // (SCRUM-78). Anyone else gets 403 here, before anything is saved or sent.
 router.post('/bookings/:id/decision', requireRole(ROLES.VENUE_STAFF), controller.decideBooking);
 
+// SCRUM-75 AC9: only Venue Staff place a hold. Anyone else gets 403 before anything is saved.
+router.post('/holds', requireRole(ROLES.VENUE_STAFF), controller.placeHold);
+
 /*
  * Purpose: restrict the booking-cancellation handler to Event Coordinators.
  * AC: SCRUM-61 AC7 — other roles are rejected before the service reads or writes data.
