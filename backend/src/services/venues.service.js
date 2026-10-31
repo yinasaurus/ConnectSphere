@@ -525,7 +525,7 @@ async function createVenue(user, payload) {
  * Purpose: after Venue Staff save a venue's setup or turnaround time, mark the bookings at
  *   that venue that now clash with another booking, so the clash is caught and resolved
  *   instead of going unnoticed. Only marks them: nothing is cancelled, edited or removed.
- * AC: SCRUM-58 AC1 (each booking occupies start - setup to end + turnaround, and every
+ * AC: SCRUM-77 AC1 (each booking occupies start - setup to end + turnaround, and every
  *     booking that overlaps another is flagged, both sides of the pair), AC2 (windows that
  *     only touch are not a clash), AC3 (no overlap means nothing is flagged), AC4 (only
  *     this venue's bookings are looked at), AC6 (flag only; venue, date, time and status stay).
@@ -609,7 +609,7 @@ async function flagBookingsClashingUnderVenueTimes(user, venue, now = new Date()
  * Purpose: Venue Staff edit a venue (details, hours, setup/turnaround minutes, active flag and
  *   layouts) and, when a setup or turnaround time changes, flag the bookings it now puts in a
  *   clash.
- * AC / rule: SCRUM-58 AC1 (check runs after the new times are saved), SCRUM-23 (setup and
+ * AC / rule: SCRUM-77 AC1 (check runs after the new times are saved), SCRUM-23 (setup and
  *   turnaround times), SCRUM-59 (times must be valid; checked by the route's schema).
  * Inputs: the Venue Staff user, the venue id, and a partial payload (any of name, location,
  *   capacity, facilities, accessibility, operatingHours, setupMinutes, teardownMinutes, isActive,
@@ -651,7 +651,7 @@ async function updateVenue(user, id, payload) {
   });
   // Venue staff can deactivate a venue without removing it from the database.
   if (payload.isActive !== undefined) patch.is_active = Boolean(payload.isActive);
-  // SCRUM-58 AC1: decide before saving whether a time is changing, while `existing` still holds
+  // SCRUM-77 AC1: decide before saving whether a time is changing, while `existing` still holds
   // the saved values. Only a submitted value that differs from the saved one counts: the Update
   // venue form sends both values on every save, and an edit to the name or capacity must not
   // flag older overlaps it did not cause.
@@ -662,7 +662,7 @@ async function updateVenue(user, id, payload) {
     || timeChanged(payload.teardownMinutes, savedTeardown);
   await updateById('venues', id, patch);
 
-  // SCRUM-58 AC1: new or changed setup/turnaround times can make existing bookings clash, so
+  // SCRUM-77 AC1: new or changed setup/turnaround times can make existing bookings clash, so
   // check them straight after the times are saved.
   let flaggedBookingIds;
   if (timesChanged) {
@@ -709,14 +709,14 @@ async function updateVenue(user, id, payload) {
   }
 
   const updatedVenue = (await listVenues()).find((venue) => venue.id === Number(id));
-  // SCRUM-58: tell the caller which bookings the new times put in a clash (only when checked).
+  // SCRUM-77: tell the caller which bookings the new times put in a clash (only when checked).
   return flaggedBookingIds === undefined ? updatedVenue : { ...updatedVenue, flaggedBookingIds };
 }
 
 /**
  * Purpose: List venue bookings, in start order, for the Venue Staff booking list, marking pending
  *   requests that clash with a confirmed booking or active hold.
- * AC / rule: SCRUM-19 (conflict warning on pending requests), SCRUM-58 AC5 (`needs_review` shows
+ * AC / rule: SCRUM-19 (conflict warning on pending requests), SCRUM-77 AC5 (`needs_review` shows
  *   which bookings are flagged for review).
  * Inputs: optional filters `venueId` and `status`.
  * Output: one entry per booking with its venue and event names, `has_conflict` and
@@ -791,7 +791,7 @@ async function listBookings(filters = {}) {
       alternative_suggestion: row.alternative_suggestion,
       decided_at: row.decided_at,
       created_at: row.created_at,
-      // SCRUM-58 AC5: Venue Staff see which bookings are flagged for review (same mark as SCRUM-42).
+      // SCRUM-77 AC5: Venue Staff see which bookings are flagged for review (same mark as SCRUM-42).
       needs_review: Boolean(row.needs_review),
       venue_name: row.venues?.name,
       event_name: row.events?.name,

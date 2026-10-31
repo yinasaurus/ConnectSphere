@@ -201,7 +201,7 @@ function PendingBookingCard({ booking, onDecide }) {
 /**
  * SCRUM-18 AC7/AC8: read-only row in the decided bookings table.
  * Shows status, booking window, and (for rejected bookings) the reason and alternative.
- * SCRUM-58 AC5: a booking flagged for review shows "Requires review" beside its status;
+ * SCRUM-77 AC5: a booking flagged for review shows "Requires review" beside its status;
  * the status itself is unchanged.
  */
 function BookingRow({ booking }) {
@@ -238,7 +238,7 @@ function BookingRow({ booking }) {
 /*
  * Purpose: The venues page. Everyone can search for available venues and browse the catalogue;
  *   Venue Staff can also add and update venues and handle booking requests.
- * AC / rule: SCRUM-58 AC5 (Venue Staff see the bookings flagged for review, and are told when
+ * AC / rule: SCRUM-77 AC5 (Venue Staff see the bookings flagged for review, and are told when
  *   a save flags some), SCRUM-19 (booking requests), SCRUM-23 (venue search).
  * Inputs: none; the role comes from the signed-in user, data from /api/venues and
  *   /api/venues/bookings.
@@ -279,7 +279,7 @@ export default function Venues() {
   const isVenueStaff = hasRole(ROLES.VENUE_STAFF);
   const pendingBookings = bookings.filter((b) => b.status === 'PENDING');
   const decidedBookings = bookings.filter((b) => b.status !== 'PENDING');
-  // SCRUM-58 AC5: bookings the backend marked as clashing under the venue's setup/turnaround times.
+  // SCRUM-77 AC5: bookings the backend marked as clashing under the venue's setup/turnaround times.
   const flaggedBookings = bookings.filter((b) => b.needs_review);
 
   async function reload() {
@@ -364,7 +364,7 @@ export default function Venues() {
       await reload();
       const refreshed = (await api('/api/venues')).venues?.find((venue) => venue.id === selectedId);
       if (refreshed) setUpdateForm(venueForm(refreshed));
-      // SCRUM-58 AC1: tell Venue Staff straight away when the new times put bookings in a clash.
+      // SCRUM-77 AC1: tell Venue Staff straight away when the new times put bookings in a clash.
       const flaggedCount = saved?.venue?.flaggedBookingIds?.length || 0;
       const flaggedNote = flaggedCount === 1
         ? '1 booking now overlaps another and is flagged for review.'
@@ -691,7 +691,7 @@ export default function Venues() {
         )}
 
         {/*
-          SCRUM-58 AC5: bookings flagged for review, listed for Venue Staff. A booking is flagged
+          SCRUM-77 AC5: bookings flagged for review, listed for Venue Staff. A booking is flagged
           when a change to a venue's setup or turnaround time makes it overlap another booking.
           Nothing is cancelled or changed; staff resolve each one with the Coordinator.
         */}
