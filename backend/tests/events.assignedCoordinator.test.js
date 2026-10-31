@@ -3,9 +3,10 @@
  *
  * What this suite covers (and what it deliberately does not repeat):
  *   AC1  Assigned Coordinator shown on the event record  -> display tests below (US29-D*)
- *   AC3  After a reassign the Organiser sees the new one  -> display + accept tests (US29-D04, US29-N03)
+ *   AC3  After a reassign the Organiser sees the new one  -> display + Lead reassign (US29-D04, US29-N03)
  *   AC4  Notified on every assign/reassign, not only first -> repeat tests (US29-N01, US29-N02)
- *   AC5  Previous Coordinator told they are unassigned     -> helper tests (US29-H*)
+ *   AC5  Previous Coordinator told they are unassigned     -> helper tests (US29-H*) and a Lead accept (US29-N04)
+ *   SCRUM-33: a Coordinator request or accept is rejected. These notice tests use the Lead reassign.
  *   AC2  Coordinator notified immediately on assignment    -> tested end to end ONCE in
  *        events.assignmentNotice.test.js (US45-B01, US45-R01). Not duplicated here (story note).
  *
@@ -36,7 +37,6 @@ const lead = { id: 11, roles: [ROLES.EVENT_COORDINATOR_LEAD] };
 const organiser = { id: 1, roles: [ROLES.EVENT_ORGANISER], organisationId: 10 };
 const otherOrganiser = { id: 9, roles: [ROLES.EVENT_ORGANISER], organisationId: 99 };
 const attendee = { id: 50, roles: [ROLES.ATTENDEE] };
-const coordinator = { id: 2, roles: [ROLES.EVENT_COORDINATOR], fullName: 'Chloe Lim' };
 const otherCoordinator = { id: 4, roles: [ROLES.EVENT_COORDINATOR], fullName: 'Dan Ong' };
 
 let event;
@@ -124,26 +124,22 @@ describe('SCRUM-29 AC1 + AC3: the event record shows the assigned Coordinator', 
   /*
    * AC:       SCRUM-29 AC3
    * Scenario: The Coordinator changes from Chloe (2) to Dan (4); the Organiser reloads.
-   * Setup:    Pending 2 -> 4; Dan accepts; the stored row then joins "Dan Ong".
+   * Setup:    Lead 11 reassigns event 3 from Coordinator 2 to active Coordinator 4.
+   *           A Coordinator accept is rejected by SCRUM-33, so this uses the Lead action.
+   *           The stored row then joins "Dan Ong".
    * Expected: The event the Organiser loads next shows coordinatorId 4 / "Dan Ong",
    *           and no longer shows Chloe.
    * Type:     normal
    * Limit:    the database is mocked, so the test itself sets the joined name when
-   *           coordinator_id changes. It proves accept writes the new id and the next read
-   *           maps it; it cannot prove the real database join.
+   *           coordinator_id changes. It proves the Lead reassign writes the new id and
+   *           the next read maps it; it cannot prove the real database join.
    */
   it('US29-D04: after a reassignment the Organiser sees the new Coordinator', async () => {
-    const pending = {
-      id: 9,
-      event_id: 3,
-      from_coordinator_id: 2,
-      to_coordinator_id: 4,
-      status: 'PENDING',
-    };
     db.fetchOne
-      .mockResolvedValueOnce(pending)
       .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce({ id: 4, full_name: 'Dan Ong', is_active: true })
       .mockResolvedValue(event);
+    db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }]);
     db.updateById.mockImplementation(async (table, _id, patch) => {
       Object.assign(event, patch);
       // The real database re-joins the new Coordinator on the next read.
@@ -151,7 +147,7 @@ describe('SCRUM-29 AC1 + AC3: the event record shows the assigned Coordinator', 
       return event;
     });
 
-    await events.acceptCoordinatorChange(otherCoordinator, 3);
+    await events.reassignEventCoordinator(lead, 3, 4);
     const seenByOrganiser = await events.getEvent(organiser, 3);
 
     expect(seenByOrganiser.coordinatorId).toBe(4);
@@ -200,8 +196,9 @@ describe('SCRUM-29 AC1 over HTTP and AC5 guard', () => {
 
   /*
    * AC:       SCRUM-29 AC4 (a notice is only sent for a real, permitted request)
-   * Scenario: Dan (4), who does not hold the event, tries to ask Eve (5) to take over.
-   * Setup:    Event assigned to Chloe (2).
+   *           SCRUM-33 AC2 — Dan is not a Lead, so the request is rejected before any row.
+   * Scenario: Dan (4), who does not hold the event and is not a Lead, tries to ask Eve (5).
+   * Setup:    Event assigned to Chloe (2). Dan's only role is Event Coordinator.
    * Expected: 403 FORBIDDEN; no reassignment row is written and nobody is notified.
    * Type:     error
    */
@@ -248,52 +245,51 @@ describe('SCRUM-29 AC4: notified each time, not only the first time', () => {
 
   /*
    * AC:       SCRUM-29 AC4
-   * Scenario: Chloe asks Dan to take over the same event twice.
-   * Setup:    Event assigned to Chloe (2); two reassignment requests to Dan (4). The service
-   *           does not de-duplicate (decision: the request notice counts for AC4). Whether a
-   *           second pending request should replace the first is an open product question.
-   * Expected: Dan gets COORDINATOR_REASSIGN twice.
+   * Scenario: The Lead reassigns the same event twice, to two different Coordinators.
+   * Setup:    Event starts with Chloe (2). First replacement is Dan (4), then Eve (5).
+   *           Both are active Coordinators. SCRUM-33 rejects Chloe's own request, so the
+   *           repeat notice is the Lead action. Nothing de-duplicates by event or user.
+   * Expected: Two COORDINATOR_ASSIGNED notices, first to Dan and then to Eve.
    * Type:     boundary
    */
-  it('US29-N02: a repeat reassignment request notifies the same Coordinator again', async () => {
-    db.fetchOne.mockResolvedValue(event);
+  it('US29-N02: reassigning again notifies the incoming Coordinator again', async () => {
+    const reassignTo = async (nextId, nextName) => {
+      db.fetchOne
+        .mockResolvedValueOnce(event)
+        .mockResolvedValueOnce({ id: nextId, full_name: nextName, is_active: true })
+        .mockResolvedValue(event);
+      await events.reassignEventCoordinator(lead, 3, nextId);
+    };
 
-    await events.requestCoordinatorChange(coordinator, 3, 4);
-    await events.requestCoordinatorChange(coordinator, 3, 4);
+    await reassignTo(4, 'Dan Ong');
+    await reassignTo(5, 'Eve Tan');
 
-    const toDan = audit.notifyUser.mock.calls.filter(
-      ([userId, type]) => userId === 4 && type === 'COORDINATOR_REASSIGN'
-    );
-    expect(toDan).toHaveLength(2);
+    const assigned = audit.notifyUser.mock.calls.filter(([, type]) => type === 'COORDINATOR_ASSIGNED');
+    expect(assigned).toHaveLength(2);
+    expect(assigned[0][0]).toBe(4);
+    expect(assigned[1][0]).toBe(5);
   });
 
   /*
    * AC:       SCRUM-29 AC3, AC4, AC5
-   * Scenario: Full change of Coordinator through the request/accept path.
-   * Setup:    Chloe (2) assigned; Chloe asks Dan (4); Dan accepts.
-   * Expected: Dan was told on the request; on accept the Organiser (1) and Chloe (2) are
-   *           told; Dan is not told twice for the same change.
+   * Scenario: The Lead changes the Coordinator in one action.
+   * Setup:    Chloe (2) holds the event. Lead 11 reassigns it to active Coordinator Dan (4).
+   *           There is no separate request, because a Coordinator request is rejected (SCRUM-33).
+   * Expected: Dan, the Organiser (1), and Chloe (2) are each told once. Chloe's notice
+   *           says she is no longer assigned.
    * Type:     normal
    */
-  it('US29-N03: one reassignment tells Dan once, the Organiser once and Chloe once', async () => {
-    db.fetchOne.mockResolvedValue(event);
-    await events.requestCoordinatorChange(coordinator, 3, 4);
-
-    const pending = {
-      id: 9,
-      event_id: 3,
-      from_coordinator_id: 2,
-      to_coordinator_id: 4,
-      status: 'PENDING',
-    };
+  it('US29-N03: one Lead reassignment tells Dan once, the Organiser once and Chloe once', async () => {
     db.fetchOne
-      .mockResolvedValueOnce(pending)
       .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce({ id: 4, full_name: 'Dan Ong', is_active: true })
       .mockResolvedValue(event);
-    await events.acceptCoordinatorChange(otherCoordinator, 3);
+
+    await events.reassignEventCoordinator(lead, 3, 4);
 
     const byUser = (id) => audit.notifyUser.mock.calls.filter(([userId]) => userId === id);
     expect(byUser(4)).toHaveLength(1);
+    expect(byUser(4)[0][1]).toBe('COORDINATOR_ASSIGNED');
     expect(byUser(1)).toHaveLength(1);
     expect(byUser(2)).toHaveLength(1);
     expect(byUser(2)[0][1]).toBe('COORDINATOR_UNASSIGNED');
@@ -304,8 +300,9 @@ describe('SCRUM-29 AC5: the previous Coordinator is whoever held the event', () 
   /*
    * AC:       SCRUM-29 AC5
    * Scenario: An older request from Chloe (2) to Eve (5) is still pending, but the event
-   *           has since moved to Dan (4). Eve accepts.
-   * Setup:    Event coordinator_id 4; pending request from 2 to 5.
+   *           has since moved to Dan (4). Eve accepts. Eve holds the Lead role, because
+   *           SCRUM-33 rejects a Coordinator who is not a Lead before this rule runs.
+   * Setup:    Event coordinator_id 4; pending request from 2 to 5. Caller 5 is a Lead.
    * Expected: Dan (the real previous Coordinator) gets COORDINATOR_UNASSIGNED; Chloe, who
    *           no longer held the event, is not told she lost it.
    * Type:     conflict
@@ -324,14 +321,14 @@ describe('SCRUM-29 AC5: the previous Coordinator is whoever held the event', () 
       .mockResolvedValueOnce(event)
       .mockResolvedValue(event);
 
-    await events.acceptCoordinatorChange({ id: 5, roles: [ROLES.EVENT_COORDINATOR] }, 3);
+    await events.acceptCoordinatorChange({ id: 5, roles: [ROLES.EVENT_COORDINATOR_LEAD] }, 3);
 
     const unassigned = audit.notifyUser.mock.calls.filter(([, type]) => type === 'COORDINATOR_UNASSIGNED');
     expect(unassigned.map(([userId]) => userId)).toEqual([4]);
   });
 });
 
-describe('SCRUM-29 AC3 + AC5: notifyCoordinatorReassigned (shared by accept now, SCRUM-31 later)', () => {
+describe('SCRUM-29 AC3 + AC5: notifyCoordinatorReassigned (shared by a Lead accept and SCRUM-31)', () => {
   const row = () => ({ id: 3, name: 'Leadership Forum', organiser_id: 1 });
 
   /*

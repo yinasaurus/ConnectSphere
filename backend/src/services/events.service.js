@@ -1072,7 +1072,7 @@ async function isReadyForSafetyCheck(eventId) {
 
 /**
  * Purpose: load a user and refuse anyone who is not an active Event Coordinator.
- * AC: SCRUM-71 AC2
+ * AC: SCRUM-71 AC2. SCRUM-31 AC1 — the same check applies when the Lead reassigns.
  * Business rule: W7 #5 — the Lead picks from Coordinators; inactive accounts cannot be assigned.
  * Inputs: coordinatorId. Output: the user row. Failure: 409 INVALID_COORDINATOR; caller must not write the event.
  */
@@ -1096,7 +1096,7 @@ async function requireActiveCoordinator(coordinatorId) {
 
 /**
  * Purpose: list Coordinators the Lead may choose from (active accounts only).
- * AC: SCRUM-71 AC1, AC2
+ * AC: SCRUM-71 AC1, AC2. SCRUM-31 AC1 — reassignment uses this same list.
  * Business rule: W4 — the Lead chooses the Coordinator manually.
  * Inputs: authenticated user. Output: { id, fullName }[]. Failure: 403 if the user is not a Lead.
  */
@@ -1123,10 +1123,14 @@ async function listAssignableCoordinators(user) {
 /**
  * Purpose: let a Lead set the one primary Coordinator on a Submitted event that has none,
  *   then tell that Coordinator and the event's Organiser (assignment notice).
- * AC: SCRUM-71 AC1–AC6 (assignment itself); SCRUM-45 AC2, AC3, AC5 — Coordinator notified
- *     when the Lead assigns them; Organiser notified that a Coordinator was assigned;
- *     only those two relevant users. SCRUM-29 refers to this same notice (tested once here).
+ * AC: SCRUM-71 AC1–AC6 (assignment itself). SCRUM-33 AC1–AC3 — the Lead check below
+ *     is what rejects every other role, including the assigned Coordinator and an Organiser,
+ *     before the event is written and before the COORDINATOR_ASSIGNED audit.
+ *     SCRUM-45 AC2, AC3, AC5 — Coordinator notified when the Lead assigns them; Organiser
+ *     notified that a Coordinator was assigned; only those two relevant users.
+ *     SCRUM-29 refers to this same notice (tested once here).
  * Business rule: W7 #5 (Lead assigns; relevant users notified of assignments).
+ *   Week 7 change #5 (3 Oct 2026): only the Lead may assign.
  * Inputs: Lead user, event id, coordinatorId to assign.
  * Output: the updated event. Failure: 403 if not Lead; 404 if the event is missing;
  *   409 if the event is not Submitted, already has a Coordinator, or the chosen user is
@@ -1195,6 +1199,71 @@ async function assignPrimaryCoordinator(user, eventId, coordinatorId) {
   return getEvent(user, eventId);
 }
 
+/**
+ * Purpose: the Lead replaces the Coordinator on an event that already has one, so the
+ *   event still has a single point of contact.
+ * AC: SCRUM-31 AC1 (the replacement must be an active Coordinator), AC2 (the previous
+ *     Coordinator is no longer on the event; edit checks that read coordinator_id then
+ *     refuse them), AC3 (the event record stores the new Coordinator and the status
+ *     is left as it was), AC4 (choosing the Coordinator who already holds the event
+ *     is refused and nothing is written).
+ *     SCRUM-33 AC1–AC3 — the Lead check below rejects everyone else, including the
+ *     assigned Coordinator and an Organiser, before the event is read. A rejected
+ *     call does not write the event and does not write the SCRUM-32 audit entry.
+ * Business rule: W7 #5 — the Lead assigns and reassigns. Week 7 change #5 (3 Oct 2026):
+ *   the assigned Coordinator is blocked too. Shiyin, 24 Oct 2026: reassignment is
+ *   allowed in any status. An event with no Coordinator is first assignment (SCRUM-71),
+ *   not this action. Notices are sent by notifyCoordinatorReassigned (SCRUM-29).
+ *   SCRUM-32 writes the audit entry only after the Coordinator on the event has actually changed.
+ * Inputs: Lead user, event id, coordinatorId of the replacement.
+ * Output: the updated event. Failure: 403 if the caller is not a Lead; 404 if the event
+ *   is missing; 409 NOT_ASSIGNED if it has no Coordinator; 409 ALREADY_ASSIGNED if this
+ *   Coordinator already holds it; 409 INVALID_COORDINATOR if the chosen user is missing,
+ *   inactive, or not a Coordinator. On failure the event row is not written.
+ */
+async function reassignEventCoordinator(user, eventId, coordinatorId) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)) {
+    throw httpError(403, 'Only an Event Coordinator Lead can reassign a coordinator', 'FORBIDDEN');
+  }
+
+  const existing = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
+  if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
+
+  // First assignment is SCRUM-71. Reassignment needs someone to replace.
+  if (!existing.coordinator_id) {
+    throw httpError(409, 'This event has no coordinator to reassign', 'NOT_ASSIGNED');
+  }
+
+  const nextCoordinatorId = Number(coordinatorId);
+  // AC4: the same person is not a change. Compare numerically so "2" and 2 match.
+  if (Number(existing.coordinator_id) === nextCoordinatorId) {
+    throw httpError(409, 'This Coordinator is already assigned to the event', 'ALREADY_ASSIGNED');
+  }
+
+  await requireActiveCoordinator(nextCoordinatorId);
+
+  const previousCoordinatorId = existing.coordinator_id;
+  await updateById('events', eventId, {
+    coordinator_id: nextCoordinatorId,
+    updated_at: new Date().toISOString(),
+  });
+
+  // SCRUM-32 AC1, AC2: one audit row per confirmed change. actor_id is who did it.
+  // created_at on audit_logs is when. The metadata is the old and new Coordinator.
+  // A refused reassignment returns before this, so it leaves no row.
+  await writeAudit(user.id, 'COORDINATOR_REASSIGNED', 'event', eventId, {
+    fromCoordinatorId: previousCoordinatorId,
+    toCoordinatorId: nextCoordinatorId,
+  });
+
+  // No earlier request told the incoming Coordinator. SCRUM-29 sends that notice here.
+  await notifyCoordinatorReassigned(existing, previousCoordinatorId, nextCoordinatorId, {
+    notifyIncoming: true,
+  });
+
+  return getEvent(user, eventId);
+}
+
 /*
  * Purpose: confirm an event once its essential arrangements are in place.
  * AC: SCRUM-73 AC1–AC8 — only the assigned Coordinator can confirm a Preparation event
@@ -1257,16 +1326,28 @@ async function confirmEvent(user, id) {
 }
 
 /**
- * Purpose: current Coordinator asks another Coordinator to take over the event.
- * AC: SCRUM-45 AC2 — the incoming Coordinator is notified of the reassignment request.
- *     SCRUM-29 AC4 — this notice is sent on every request, with no de-duplication, so a
- *     Coordinator asked again is told again.
- * Business rule: Week 4 Q&A — reassignment is agreed offline; original Coordinator requests,
- *   new Coordinator accepts.
- * Inputs: current assigned Coordinator, event id, newCoordinatorId.
- * Output: { ok: true }. Failure: 404 no event; 403 if caller is not the current Coordinator.
+ * Purpose: record a pending handover. Week 4 let the assigned Coordinator do this.
+ *   Week 7 gives that action to the Lead, so anyone else is rejected before a row is written.
+ * AC: SCRUM-33 AC1, AC2, AC3 — only a Lead gets past the role check. A Coordinator,
+ *     including the one assigned to the event, and an Organiser are rejected. Nothing
+ *     is written and no audit entry is created.
+ *     SCRUM-32 AC1 — a request is not a confirmed reassignment, so even a Lead request
+ *     does not write an audit entry.
+ *     SCRUM-45 AC2 / SCRUM-29 AC4 — when a Lead request is stored, the incoming
+ *     Coordinator is notified. A rejected request sends no notice.
+ * Business rule: W7 #5 — the Lead assigns and reassigns. Week 7 change #5 (3 Oct 2026):
+ *   the assigned Coordinator is blocked too. Week 4 Q&A is the old offline agreement.
+ * Inputs: user, event id, newCoordinatorId.
+ * Output: { ok: true } for a Lead who currently holds the event.
+ * Failure: 403 if the caller is not a Lead, before the event is read; 404 if the event
+ *   is missing; 403 if a Lead does not currently hold the event. No row, no notice, no audit.
  */
 async function requestCoordinatorChange(user, eventId, newCoordinatorId) {
+  // Checked first so a Coordinator cannot insert a pending handover or send a notice.
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)) {
+    throw httpError(403, 'Only an Event Coordinator Lead can assign or reassign an event', 'FORBIDDEN');
+  }
+
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', eventId));
   if (!existing) throw httpError(404, 'Event not found', 'NOT_FOUND');
   if (existing.coordinator_id !== user.id) {
@@ -1339,16 +1420,27 @@ async function notifyCoordinatorReassigned(event, outgoingCoordinatorId, incomin
 }
 
 /**
- * Purpose: incoming Coordinator accepts a pending reassignment; Organiser and outgoing
- *   Coordinator are told the assignment changed.
- * AC: SCRUM-45 AC2 (reassign to/from — outgoing notified here; incoming was notified on
- *     request), AC3 (only those parties), AC5 (Organiser notified when assigned Coordinator changes).
- *     SCRUM-29 AC3 (event record now shows the new Coordinator), AC5 (previous Coordinator told).
- * Business rule: W7 #5 — relevant users notified of reassignments.
- * Inputs: accepting Coordinator (must be to_coordinator_id), event id.
- * Output: updated event. Failure: 404 if no pending reassignment or event missing.
+ * Purpose: apply a pending handover. Week 4 let the incoming Coordinator accept.
+ *   Week 7 gives reassignment to the Lead, so anyone else is rejected before the event changes.
+ * AC: SCRUM-33 AC1, AC2, AC3 — only a Lead gets past the role check. The assigned
+ *     Coordinator, another Coordinator, and an Organiser are rejected. The event row
+ *     is not written and no audit entry is created.
+ *     SCRUM-32 AC1, AC2 — when a Lead does accept, that save is a confirmed reassignment
+ *     and writes the audit entry.
+ *     SCRUM-45 AC2, AC3, AC5 and SCRUM-29 AC3, AC5 — the notices below run only after
+ *     that save. A rejected accept sends none.
+ * Business rule: W7 #5 — the Lead reassigns, and relevant users are notified when it happens.
+ *   Week 7 change #5 (3 Oct 2026): the assigned Coordinator is blocked too.
+ * Inputs: user (must be a Lead, and must be the pending to_coordinator_id), event id.
+ * Output: updated event. Failure: 403 if the caller is not a Lead, before any read;
+ *   404 if no pending reassignment or the event is missing.
  */
 async function acceptCoordinatorChange(user, eventId) {
+  // Checked first so a Coordinator cannot change coordinator_id or write an audit row.
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR_LEAD)) {
+    throw httpError(403, 'Only an Event Coordinator Lead can assign or reassign an event', 'FORBIDDEN');
+  }
+
   const request = await fetchOne(
     supabase
       .from('coordinator_reassignments')
@@ -1374,6 +1466,13 @@ async function acceptCoordinatorChange(user, eventId) {
   await updateById('coordinator_reassignments', request.id, {
     status: 'ACCEPTED',
     resolved_at: new Date().toISOString(),
+  });
+
+  // SCRUM-32 AC1, AC2: the Lead who accepted confirmed the change. Who is their id.
+  // When is audit_logs.created_at. Old and new Coordinator are the metadata.
+  await writeAudit(user.id, 'COORDINATOR_REASSIGNED', 'event', eventId, {
+    fromCoordinatorId: previousCoordinatorId,
+    toCoordinatorId: user.id,
   });
 
   // Incoming Coordinator already received COORDINATOR_REASSIGN on request — do not notify them again.
@@ -2008,6 +2107,7 @@ module.exports = {
   acceptCoordinatorChange,
   notifyCoordinatorReassigned,
   assignPrimaryCoordinator,
+  reassignEventCoordinator,
   listAssignableCoordinators,
   listHistory,
   findMissingSubmissionFields,

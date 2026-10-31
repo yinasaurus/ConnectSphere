@@ -71,6 +71,28 @@ const decideBooking = asyncHandler(async (req, res) => {
   res.json({ booking });
 });
 
+/**
+ * Purpose: POST /api/venues/holds. Passes the signed-in Venue Staff member and the JSON body
+ * { eventId, venueId, expiresAt } to the service.
+ * AC: SCRUM-75 AC1-AC5, AC9.
+ * Output: 201 { booking } (status TENTATIVE, with hold_expires_at and coordinator_id).
+ */
+const placeHold = asyncHandler(async (req, res) => {
+  const booking = await venuesService.placeHold(req.user, req.body);
+  res.status(201).json({ booking });
+});
+
+/*
+ * Purpose: pass the authenticated Coordinator and booking id to the cancellation service.
+ * AC: SCRUM-61 AC1–AC7.
+ * Inputs: req.user and req.params.id. Output: 200 { booking }; service errors go to the error handler.
+ * Failure: propagates authorization, not-found, and invalid-status errors to the error handler.
+ */
+const cancelBooking = asyncHandler(async (req, res) => {
+  const booking = await venuesService.cancelBooking(req.user, req.params.id);
+  res.json({ booking });
+});
+
 const unavailability = asyncHandler(async (req, res) => {
   const rows = await venuesService.listUnavailability(req.query.venueId);
   res.json({ unavailability: rows });
@@ -91,6 +113,8 @@ module.exports = {
   bookings,
   requestBooking,
   decideBooking,
+  placeHold,
+  cancelBooking,
   unavailability,
   block,
 };

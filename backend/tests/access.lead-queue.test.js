@@ -94,32 +94,49 @@ describe('SCRUM-54 Lead-only unassigned queue and assignment overview', () => {
   /*
    * AC: SCRUM-54 AC3
    * Scenario: A Lead opens the overview for an assigned event whose coordinator name join is missing.
-   * Setup: coordinator_id is set but the joined user row is null.
+   * Setup: coordinator_id is set but the joined user row is null. The newest allocation
+   *   audit for event 3 is by this Lead (11). SCRUM-57 leaves the row out otherwise.
    * Expected: The assignment is still listed; coordinatorName is null rather than crashing.
    * Type: boundary
    */
   it('lists an assignment when the coordinator name join is missing', async () => {
-    db.fetchMany.mockResolvedValue([
-      { id: 3, name: 'Workshop', status: 'UNDER_REVIEW', coordinator_id: 2, coordinator: null },
-    ]);
+    db.fetchMany
+      .mockResolvedValueOnce([
+        { id: 3, name: 'Workshop', status: 'UNDER_REVIEW', coordinator_id: 2, coordinator: null },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 1, entity_id: 3, actor_id: 11, action: 'COORDINATOR_ASSIGNED',
+          created_at: '2026-10-01T00:00:00Z',
+        },
+      ]);
     const assignments = await access.listAssignmentOverview(lead);
     expect(assignments[0].coordinatorName).toBeNull();
   });
 
   /*
    * AC: SCRUM-54 AC3
-   * Scenario: A Lead opens the overview of all coordinator assignments.
-   * Setup: One assigned event.
+   * Scenario: A Lead opens the overview and one event is their allocation.
+   * Setup: One assigned event. The newest allocation audit is by this Lead (11).
+   *   SCRUM-57 is what limits the list to that Lead. This test still checks that a
+   *   Lead can open the overview and receive the row.
    * Expected: The assignment row is returned.
    * Type: normal
    */
   it('lets a Lead open the coordinator assignment overview', async () => {
-    db.fetchMany.mockResolvedValue([
-      {
-        id: 3, name: 'Workshop', status: 'UNDER_REVIEW', coordinator_id: 2,
-        coordinator: { full_name: 'Chloe Lim' },
-      },
-    ]);
+    db.fetchMany
+      .mockResolvedValueOnce([
+        {
+          id: 3, name: 'Workshop', status: 'UNDER_REVIEW', coordinator_id: 2,
+          coordinator: { full_name: 'Chloe Lim' },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 1, entity_id: 3, actor_id: 11, action: 'COORDINATOR_ASSIGNED',
+          created_at: '2026-10-01T00:00:00Z',
+        },
+      ]);
     const assignments = await access.listAssignmentOverview(lead);
     expect(assignments).toEqual([
       {
