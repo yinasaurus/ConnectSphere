@@ -973,6 +973,16 @@ async function cancelBooking(user, bookingId) {
     throw httpError(409, 'Cannot cancel bookings for completed events', 'EVENT_COMPLETED');
   }
 
+  /*
+   * Purpose: block changes to bookings that belong to a cancelled event.
+   * AC: SCRUM-61 AC11 — cancelled events cannot have their bookings modified.
+   * Inputs: the assigned event row. Output: throws 409 before any database writes.
+   * Failure: the request is rejected with EVENT_CANCELLED and the booking remains unchanged.
+   */
+  if (event.status === EVENT_STATUS.CANCELLED) {
+    throw httpError(409, 'Cannot cancel bookings for cancelled events', 'EVENT_CANCELLED');
+  }
+
   if (booking.status === BOOKING_STATUS.CANCELLED) {
     throw httpError(409, 'This booking has already been cancelled', 'ALREADY_CANCELLED');
   }

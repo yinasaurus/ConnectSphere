@@ -295,6 +295,50 @@ describe('SCRUM-61 cancel one venue booking', () => {
   });
 
   /*
+   * - AC: SCRUM-61 AC11.
+   * - Scenario: Cancellation of a booking for a Cancelled event is rejected.
+   * - Setup: The assigned Coordinator attempts to cancel an approved or pending booking belonging to a CANCELLED event.
+   * - Expected: The service returns 409 with the cancelled-event message and changes neither the booking nor audit records.
+   * - Type: error.
+   */
+  it.each([
+    ['APPROVED', APPROVED_BOOKING],
+    ['PENDING', PENDING_BOOKING],
+  ])('rejects cancellation of %s bookings for Cancelled events', async (_status, booking) => {
+    setupCancellation(booking, { ...EVENT_ROW, status: 'CANCELLED' });
+
+    await expect(
+      venuesService.cancelBooking(COORDINATOR, booking.id)
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'Cannot cancel bookings for cancelled events',
+      code: 'EVENT_CANCELLED',
+    });
+    expect(updateById).not.toHaveBeenCalled();
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  /*
+   * - AC: SCRUM-61 AC11 boundary.
+   * - Scenario: Cancelled-event validation takes precedence over duplicate cancellation validation.
+   * - Setup: The event is CANCELLED and its selected booking is already CANCELLED.
+   * - Expected: The service returns the cancelled-event 409 message, not ALREADY_CANCELLED.
+   * - Type: boundary.
+   */
+  it('prioritizes Cancelled event validation over duplicate cancellation check', async () => {
+    setupCancellation(CANCELLED_BOOKING, { ...EVENT_ROW, status: 'CANCELLED' });
+
+    await expect(
+      venuesService.cancelBooking(COORDINATOR, CANCELLED_BOOKING.id)
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'Cannot cancel bookings for cancelled events',
+      code: 'EVENT_CANCELLED',
+    });
+    expect(updateById).not.toHaveBeenCalled();
+  });
+
+  /*
    * - AC: SCRUM-61 AC8 partial-success handling.
    * - Scenario: The event status update fails after a venue booking is cancelled.
    * - Setup: The event is CONFIRMED and the event update helper rejects with a database error.

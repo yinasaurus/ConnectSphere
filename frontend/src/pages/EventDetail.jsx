@@ -910,6 +910,7 @@ export default function EventDetail() {
                  */}
                 {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR)
                   && event.status !== 'COMPLETED'
+                  && event.status !== 'CANCELLED'
                   && ['PENDING', 'TENTATIVE', 'APPROVED'].includes(booking.status) && (
                   <button
                     className="btn ghost"
