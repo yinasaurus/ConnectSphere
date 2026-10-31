@@ -16,9 +16,9 @@
  * returns the booking rows. In the route tests, the first fetchOne/fetchMany calls are
  * the real auth middleware loading the user and their roles.
  *
- * A hold with no expiry, a string venue id, a bad period, an unknown venue, and a
- * request with no session are not SCRUM-67 criteria. Those tests sit in their own
- * describe at the bottom.
+ * A hold with no expiry (AC2, AC3), a string venue id (AC4), a bad period and an unknown
+ * venue (AC1), and a request with no session (AC5) check ways those criteria cannot fail.
+ * Those tests sit in their own describes at the bottom.
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
@@ -384,15 +384,17 @@ describe('SCRUM-67 GET /api/venues/:id/bookings (route, real session cookie)', (
 
 });
 
-describe('Bookings cases outside SCRUM-67', () => {
+describe('SCRUM-67 guards: blank expiry, string id, bad period, unknown venue', () => {
   /*
-   * AC: none for SCRUM-67. AC2 is an active hold, and a hold must have an expiry.
+   * AC: SCRUM-67 AC2, AC3 (cannot fail this way: a hold with a blank expiry is dropped as if
+   *     it had expired).
    * Scenario: A hold with no expiry recorded.
    * Setup: TENTATIVE row with hold_expires_at null. Holds cannot be saved without an
    *        expiry yet (SCRUM-75). The database is mocked.
    * Expected: Returned as an active hold, with holdExpiresAt null.
    * Type: boundary
    */
+  // SCRUM-67-TC21
   it('US67-B06: a hold with no expiry is treated as active', async () => {
     mockRows([row({ status: 'TENTATIVE', hold_expires_at: null })]);
     const result = await venuesService.listVenueBookingsForPeriod(7, PERIOD, NOW);
@@ -400,12 +402,14 @@ describe('Bookings cases outside SCRUM-67', () => {
   });
 
   /*
-   * AC: none for SCRUM-67. AC4 is that one event's booking is listed under its own venue.
+   * AC: SCRUM-67 AC4 (cannot fail this way: a booking goes missing from its own venue because
+   *     the venue id from the URL is text).
    * Scenario: The venue id comes from the URL as a string ("7") while the row stores a number.
    * Setup: venueId "7", row venue_id 7. The database is mocked.
    * Expected: The booking is still returned.
    * Type: boundary
    */
+  // SCRUM-67-TC22
   it('US67-B10: a string venue id from the URL still matches the venue', async () => {
     mockRows([row()]);
     const result = await venuesService.listVenueBookingsForPeriod('7', PERIOD, NOW);
@@ -413,13 +417,15 @@ describe('Bookings cases outside SCRUM-67', () => {
   });
 
   /*
-   * AC: none for SCRUM-67. The criteria start from a period that already exists.
+   * AC: SCRUM-67 AC1 (cannot fail this way: a missing, unreadable, empty or backwards period
+   *     returns a booking list).
    * Scenario: The period is missing, unreadable, empty, or backwards.
    * Setup: Six bad inputs: no from, no to, a non-date, from equal to to, from after to,
    *        and no range argument at all. The database is mocked.
    * Expected: 400 with a message saying what is wrong, and no database call.
    * Type: error
    */
+  // SCRUM-67-TC23
   it.each([
     ['from is missing', { to: PERIOD.to }, 'from and to are required'],
     ['to is missing', { from: PERIOD.from }, 'from and to are required'],
@@ -433,12 +439,14 @@ describe('Bookings cases outside SCRUM-67', () => {
   });
 
   /*
-   * AC: none for SCRUM-67. The criteria are about bookings at a venue that exists.
+   * AC: SCRUM-67 AC1 (cannot fail this way: a venue that does not exist returns an empty
+   *     list that reads as no bookings).
    * Scenario: The venue does not exist.
    * Setup: The venue lookup returns null. The period is valid. The database is mocked.
    * Expected: 404, and the bookings query is never run.
    * Type: error
    */
+  // SCRUM-67-TC24
   it('US67-B16: returns 404 for an unknown venue', async () => {
     fetchOne.mockResolvedValue(null);
     await expect(venuesService.listVenueBookingsForPeriod(99, PERIOD, NOW)).rejects.toMatchObject({ status: 404 });
@@ -451,12 +459,14 @@ describe('Bookings route with no session', () => {
   const url = `/api/venues/7/bookings?from=${PERIOD.from}&to=${PERIOD.to}`;
 
   /*
-   * AC: none for SCRUM-67. AC5 names which signed-in roles may open the list.
+   * AC: SCRUM-67 AC5 (cannot fail this way: someone who is not signed in sees the list).
+   *     The role refusals are SCRUM-67-TC14.
    * Scenario: Nobody is signed in.
    * Setup: No session cookie. The database is mocked.
    * Expected: 401, before any database query.
    * Type: error
    */
+  // SCRUM-67-TC25
   it('US67-R04: a request without a session is rejected with 401', async () => {
     const res = await request(app).get(url);
     expect(res.status).toBe(401);

@@ -11,8 +11,8 @@
  * The database is mocked: fetchOne returns the venue, the first fetchMany returns
  * bookings/holds and the second returns unavailability periods.
  *
- * A hold with no expiry, a bad or missing range, and an unknown venue are not
- * SCRUM-66 criteria. Those tests sit in their own describe at the bottom.
+ * A hold with no expiry (AC2, AC3), a bad or missing range and an unknown venue (AC5) check
+ * ways those criteria cannot fail. Those tests sit in their own describe at the bottom.
  */
 const request = require('supertest');
 const { ROLES, INTERNAL_ROLES } = require('../src/constants/roles');
@@ -387,14 +387,16 @@ describe('SCRUM-66 GET /api/venues/:id/availability (route)', () => {
   });
 });
 
-describe('Availability cases outside SCRUM-66', () => {
+describe('SCRUM-66 guards: blank expiry, bad range, unknown venue', () => {
   /*
-   * AC: none for SCRUM-66. AC2 is an active hold. A blank expiry is not that case.
+   * AC: SCRUM-66 AC2, AC3 (cannot fail this way: a hold with a blank expiry is treated as
+   *     expired and the venue shows as free). Every hold should have an expiry (SCRUM-75).
    * Scenario: A tentative hold with no expiry recorded (hold_expires_at is null).
    * Setup: TENTATIVE row 10:00-12:00, hold_expires_at null. The database is mocked.
    * Expected: The current code still marks 10:00-12:00 unavailable.
    * Type: boundary
    */
+  // SCRUM-66-TC18
   it('US66-B04: a tentative hold with no expiry recorded is treated as active', async () => {
     mockData({ bookings: [booking({ status: 'TENTATIVE', hold_expires_at: null })] });
     const result = await venuesService.getVenueAvailability(7, RANGE, NOW);
@@ -402,12 +404,14 @@ describe('Availability cases outside SCRUM-66', () => {
   });
 
   /*
-   * AC: none for SCRUM-66. The criteria start from a range that already exists.
+   * AC: SCRUM-66 AC5 (cannot fail this way: a missing, unreadable, empty or backwards range
+   *     comes back as available).
    * Scenario: The requested range is missing, unreadable, empty or backwards.
    * Setup: Five bad ranges. The database is mocked.
    * Expected: 400, and the venue is not looked up.
    * Type: error
    */
+  // SCRUM-66-TC19
   it.each([
     ['from is missing', { to: RANGE.to }, 'from and to are required'],
     ['to is missing', { from: RANGE.from }, 'from and to are required'],
@@ -420,12 +424,14 @@ describe('Availability cases outside SCRUM-66', () => {
   });
 
   /*
-   * AC: none for SCRUM-66. The criteria start from a venue that already exists.
+   * AC: SCRUM-66 AC5 (cannot fail this way: a venue that does not exist comes back as
+   *     available).
    * Scenario: The venue id doesn't exist.
    * Setup: The venue lookup returns null. The range is valid. The database is mocked.
    * Expected: 404, and bookings are not queried.
    * Type: error
    */
+  // SCRUM-66-TC20
   it('US66-B13: returns 404 for an unknown venue', async () => {
     fetchOne.mockResolvedValue(null);
     await expect(venuesService.getVenueAvailability(99, RANGE, NOW)).rejects.toMatchObject({ status: 404 });
@@ -433,12 +439,14 @@ describe('Availability cases outside SCRUM-66', () => {
   });
 
   /*
-   * AC: none for SCRUM-66. US66-B12 always passes a range object. This passes none.
+   * AC: SCRUM-66 AC5 (cannot fail this way: a call with no range crashes or comes back as
+   *     available). US66-B12 always passes a range object. This passes none.
    * Scenario: The service is called with no range argument at all.
    * Setup: Only the venue id is passed. The database is mocked.
    * Expected: 400, rather than a crash.
    * Type: error
    */
+  // SCRUM-66-TC21
   it('US66-B16: calling without a range is a 400, not a crash', async () => {
     await expect(venuesService.getVenueAvailability(7)).rejects.toMatchObject({ status: 400 });
   });

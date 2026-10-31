@@ -5,9 +5,9 @@
  * asks for the right venue and period, shows what comes back, and only asks for the
  * roles AC5 allows.
  *
- * A bookings error beside a successful availability result, and a late reply from an
- * earlier venue search, are not SCRUM-67 criteria. Those tests sit in their own
- * describe at the bottom.
+ * A bookings error beside a successful availability result (AC1) and a late reply from an
+ * earlier venue search (AC4) check ways those criteria cannot fail. Those tests sit in
+ * their own describe at the bottom.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -209,14 +209,16 @@ describe('SCRUM-67 Existing bookings list', () => {
 
 });
 
-describe('Existing bookings cases outside SCRUM-67', () => {
+describe('SCRUM-67 page guards: bookings error and late replies', () => {
   /*
-   * AC: none for SCRUM-67. The signed-in user is an Event Coordinator, who AC5 allows.
+   * AC: SCRUM-67 AC1 (cannot fail this way: a failed bookings call looks like no bookings, or
+   *     hides the availability result). The user is an Event Coordinator, who AC5 allows.
    * Scenario: The bookings request fails while the availability request succeeds.
    * Setup: The bookings API throws "You do not have access to this action". The API is mocked.
    * Expected: The error is shown and the availability heading is still shown. No bookings table.
    * Type: error
    */
+  // SCRUM-67-TC26
   it('US67-F05: shows a bookings error without hiding the availability result', async () => {
     signInAs('EVENT_COORDINATOR');
     mockApi({ bookingsError: 'You do not have access to this action' });
@@ -227,13 +229,15 @@ describe('Existing bookings cases outside SCRUM-67', () => {
   });
 
   /*
-   * AC: none for SCRUM-67. AC4 is one event listed once under each of its own venues.
+   * AC: SCRUM-67 AC4 (cannot fail this way: one venue's bookings are shown under another
+   *     venue's heading).
    * Scenario: The user checks Helix Hall, then a breakout room, and Helix Hall's reply arrives late.
    * Setup: Venue 7's bookings call is held open. Venue 8 answers with its own booking.
    *        Venue 7's late reply either succeeds with Leadership Forum or fails. The API is mocked.
    * Expected: Only the breakout room's booking is shown, under "Existing bookings at Breakout Room".
    * Type: conflict
    */
+  // SCRUM-67-TC27
   it.each([
     ['succeeds', (late) => late.resolve({ venue: { id: 7, name: 'Helix Hall' }, bookings: [CONFIRMED] })],
     ['fails', (late) => late.reject(new Error('Venue 7 bookings failed'))],

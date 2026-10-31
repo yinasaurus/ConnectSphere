@@ -311,12 +311,13 @@ describe('Queue page when the load fails', () => {
   });
 
   /*
-   * AC: none for SCRUM-65. A failed load is not one of the queue criteria.
+   * AC: SCRUM-65 AC1 (cannot fail this way: a failed load looks like an empty queue).
    * Scenario: The queue API fails while the Lead is viewing it.
    * Setup: GET /api/events/unassigned-queue rejects.
    * Expected: The error message is shown instead of pretending the queue is empty.
    * Type: error
    */
+  // SCRUM-65-TC18
   it('shows an error when the queue cannot be loaded', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/events/unassigned-queue') {
@@ -339,12 +340,14 @@ describe('Lead nav link to the unassigned queue', () => {
   });
 
   /*
-   * AC: none for SCRUM-65. The sidebar link is the Lead access check (SCRUM-54 AC3).
+   * AC: SCRUM-65 AC1 (cannot fail this way: the Lead's sidebar has no way to reach the queue).
+   *     Who may open it is SCRUM-54 AC3.
    * Scenario: The Lead looks at the sidebar.
    * Setup: Layout is rendered for EVENT_COORDINATOR_LEAD. The queue returns no events.
    * Expected: An Unassigned queue link to /app/events/unassigned is present.
    * Type: normal
    */
+  // SCRUM-65-TC19
   it('the Lead nav includes Unassigned queue', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/events/unassigned-queue') {

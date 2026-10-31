@@ -16,7 +16,7 @@
  *   SCRUM-69 AC5  Approve flags affected venue/equipment rows for review (SCRUM-41/42).
  *   SCRUM-36 AC1  Organiser is notified on approve and on reject. Those tests keep their
  *                 SCRUM-36 ids. SCRUM-69 AC6 is the same notice, so it is not labeled again.
- *   A Date-to-ISO audit format check is not a SCRUM-69 criterion. It sits at the bottom.
+ *   A Date-to-ISO audit format check guards AC4. It sits at the bottom.
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
@@ -1170,14 +1170,16 @@ describe('SCRUM-34/35 HTTP routes', () => {
   });
 });
 
-describe('Change request cases outside SCRUM-69', () => {
+describe('SCRUM-69 audit guard: Date values', () => {
   /*
-   * AC: none for SCRUM-69. AC4 records who approved, when, and each field's previous and new value.
+   * AC: SCRUM-69 AC4 (cannot fail this way: a time that arrives as a Date object is not
+   *     saved as a readable previous or new value).
    * Scenario: The database returns Date objects for the timestamps.
    * Setup: Event and request start/end are Date instances. The database is mocked.
    * Expected: The audit stores those values as ISO strings.
    * Type: boundary
    */
+  // SCRUM-69-TC17
   it('Date values in the request are stored as ISO strings in the audit', async () => {
     const start = new Date('2026-11-20T09:00:00.000Z');
     const end = new Date('2026-11-20T17:00:00.000Z');

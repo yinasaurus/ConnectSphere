@@ -3,9 +3,9 @@
  * The backend computes the periods; these tests check the page asks for the right
  * range and shows what comes back.
  *
- * An empty form, a server error message, a failed venue list, and the sidebar link
- * for internal roles are not SCRUM-66 criteria. Those tests sit in their own
- * describes at the bottom.
+ * An empty form and a server error message (AC5), a failed venue list and the sidebar
+ * link for internal roles (AC6) check ways those criteria cannot fail. Those tests sit
+ * in their own describes at the bottom.
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -124,14 +124,16 @@ describe('SCRUM-66 navigation (AC6)', () => {
   });
 });
 
-describe('Availability page cases outside SCRUM-66', () => {
+describe('SCRUM-66 page guards: empty form and errors', () => {
   /*
-   * AC: none for SCRUM-66. The criteria assume a venue and a range already exist.
+   * AC: SCRUM-66 AC5 (cannot fail this way: the page checks or shows availability before a
+   *     venue and a range are chosen).
    * Scenario: The user clicks Check availability without filling in the form.
    * Setup: The venue list has loaded. Venue, From, and To are empty. The API is mocked.
    * Expected: An inline message asks for all three, and no availability request is sent.
    * Type: error
    */
+  // SCRUM-66-TC22
   it('US66-F02: asks for a venue and both dates before calling the API', async () => {
     mockApi();
     render(<VenueAvailability />);
@@ -142,12 +144,14 @@ describe('Availability page cases outside SCRUM-66', () => {
   });
 
   /*
-   * AC: none for SCRUM-66. This message is a bad range, not an AC6 refusal.
+   * AC: SCRUM-66 AC5 (cannot fail this way: the server refuses the check and the page still
+   *     shows a results table). The message here is a bad range, not an AC6 refusal.
    * Scenario: The server rejects the availability request.
    * Setup: The availability call throws "from must be before to". The API is mocked.
    * Expected: The server's message is shown and no results table is rendered.
    * Type: error
    */
+  // SCRUM-66-TC23
   it('US66-F03: shows the server error, e.g. a refused or invalid range', async () => {
     mockApi({ availabilityError: 'from must be before to' });
     render(<VenueAvailability />);
@@ -159,12 +163,14 @@ describe('Availability page cases outside SCRUM-66', () => {
   });
 
   /*
-   * AC: none for SCRUM-66. The venue dropdown fails before a range is checked.
+   * AC: SCRUM-66 AC6 (cannot fail this way: the server refuses the venue list and the page
+   *     hides the refusal). The refusal is mocked; the signed-in role is Technical Support.
    * Scenario: GET /api/venues fails.
    * Setup: Every API call rejects. The API is mocked.
    * Expected: The error is shown on the page.
    * Type: error
    */
+  // SCRUM-66-TC24
   it('US66-F06: shows an error if the venue list cannot be loaded', async () => {
     api.mockRejectedValue(new Error('You do not have access to this action'));
     render(<VenueAvailability />);
@@ -174,13 +180,15 @@ describe('Availability page cases outside SCRUM-66', () => {
 
 describe('Venue availability link for internal roles', () => {
   /*
-   * AC: none for SCRUM-66. AC6 is that Organisers and Attendees cannot access the view.
+   * AC: SCRUM-66 AC6 (cannot fail this way: hiding the link from Organisers and Attendees
+   *     also hides it from internal roles).
    * Scenario: An internal user looks at the sidebar.
    * Setup: Layout rendered for a user with only that role.
    * Expected: The "Venue availability" link is shown. This checks the nav link only.
    *           Who can open the view is the API (US66-R01).
    * Type: normal
    */
+  // SCRUM-66-TC16
   it.each([
     'EVENT_COORDINATOR',
     'EVENT_COORDINATOR_LEAD',

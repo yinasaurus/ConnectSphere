@@ -8,7 +8,8 @@
  * AC5  The Lead can view the full details of any request in the queue.
  *
  * Access-only-Lead (who may open the page) is SCRUM-54 AC3. Assignment is SCRUM-71.
- * The no-cookie 401 and the missing-event 404 sit in their own describes below. They are not SCRUM-65 criteria.
+ * The no-cookie 401 (AC1) and the missing-event 404 (AC5) sit in their own describes below.
+ * They check ways those criteria cannot fail, not the criteria themselves.
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
@@ -335,12 +336,14 @@ describe('Queue route with no session', () => {
   const app = createApp();
 
   /*
-   * AC: none for SCRUM-65. No cookie is rejected by requireAuth before a role is read.
+   * AC: SCRUM-65 AC1 (cannot fail this way: the queue is listed to someone who is not
+   *     signed in). requireAuth rejects before a role is read.
    * Scenario: Unauthenticated queue listing.
    * Setup: No session cookie.
    * Expected: 401, and the events table is not queried for the queue.
    * Type: error
    */
+  // SCRUM-65-TC20
   it('GET unassigned-queue without a session is 401', async () => {
     const res = await request(app).get('/api/events/unassigned-queue');
 
@@ -351,12 +354,14 @@ describe('Queue route with no session', () => {
 
 describe('Missing event details', () => {
   /*
-   * AC: none for SCRUM-65. AC5 is a request that is in the queue. This id is not.
+   * AC: SCRUM-65 AC5 (cannot fail this way: an id that is not a real request opens a blank
+   *     or wrong record).
    * Scenario: The Lead asks for an event id that does not exist.
    * Setup: fetchOne returns null. The database is mocked.
    * Expected: 404 NOT_FOUND. There is no request to show details for.
    * Type: error
    */
+  // SCRUM-65-TC17
   it('the Lead gets 404 when the event does not exist', async () => {
     db.fetchOne.mockResolvedValue(null);
 
