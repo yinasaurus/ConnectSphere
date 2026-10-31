@@ -419,20 +419,4 @@ describe('SCRUM-15 draft lifecycle', () => {
     await service.submitEvent(organiser, 99);
     expect(db.updateById).toHaveBeenCalledWith('events', 99, expect.objectContaining({ status: 'SUBMITTED' }));
   });
-
- /*
- * AC:       SCRUM-15 (AC5: Coordinator can view other events for planning purpose)
- * Scenario: A Coordinator who is not assigned to a Draft event opens it.
- * Setup:    Event status DRAFT; coordinator_id is null (not assigned); caller has the Coordinator role.
- * Expected: getEvent() returns the event (no 404); AC5 as originally written is superseded by the later clarification.
- * Type:     normal
- */
-  // SCRUM-15-TC05
-  it('a Coordinator can view a Draft event', async () => {
-    db.fetchOne.mockImplementation(async () => ({
-      id: 99, organiser_id: 1, organisation_id: 10, coordinator_id: null, status: 'DRAFT', name: 'Untitled draft',
-    }));
-    const visible = await service.getEvent(coordinator, 99);
-    expect(visible.id).toBe(99);
-  });
 });

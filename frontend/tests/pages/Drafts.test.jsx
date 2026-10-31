@@ -151,7 +151,7 @@ describe('TC-DRAFT-04 (Draft Saving & Resuming)', () => {
   * Expected: PATCH /api/events/123 sends the completed fields; POST /api/events/123/submit is called; page navigates to the event detail page.
   * Type:     normal
   */
-  // SCRUM-15-TC06
+  // SCRUM-15-TC05
   it('completing and submitting a resumed draft saves and submits through the UI', async () => {
     const draftEvent = {
       id: 123,
@@ -250,7 +250,7 @@ describe('Drafts list page (client-side filtering)', () => {
    * Expected: Only the caller's own draft is shown; the other Organiser's is filtered out.
    * Type:     normal
    */
-  // SCRUM-15-TC07
+  // SCRUM-15-TC06
   it("shows only the signed-in organiser's own drafts, not another organiser's", async () => {
     api.mockImplementation((path) => {
       if (path === '/api/auth/me') return setupAuth();
@@ -284,7 +284,7 @@ describe('Drafts list page (client-side filtering)', () => {
    * Expected: The "No drafts yet..." empty-state message is shown.
    * Type:     boundary
    */
-  // SCRUM-15-TC08
+  // SCRUM-15-TC07
   it('shows the empty-state message when the organiser has no drafts', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/auth/me') return setupAuth();
