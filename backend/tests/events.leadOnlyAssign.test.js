@@ -92,6 +92,7 @@ describe('SCRUM-33 service refusals', () => {
    *   No audit entry. Lead success itself is US71-B01.
    * Type: error
    */
+  // SCRUM-33-TC01
   it.each(assignCallers)('US33-B01: %s cannot assign a Coordinator', async (_label, user) => {
     event.coordinator_id = null;
     event.status = 'SUBMITTED';
@@ -113,6 +114,7 @@ describe('SCRUM-33 service refusals', () => {
    *   A Lead reassignment is US31-B01 and still writes the SCRUM-32 audit.
    * Type: error
    */
+  // SCRUM-33-TC02
   it.each(callers)('US33-B02: %s cannot reassign a Coordinator', async (_label, user) => {
     await expect(service.reassignEventCoordinator(user, 3, 4)).rejects.toMatchObject({
       status: 403,
@@ -130,6 +132,7 @@ describe('SCRUM-33 service refusals', () => {
    *   Coordinator 2 still holds the event.
    * Type: error
    */
+  // SCRUM-33-TC03
   it.each(callers)('US33-B03: %s cannot request a reassignment', async (_label, user) => {
     await expect(service.requestCoordinatorChange(user, 3, 4)).rejects.toMatchObject({
       status: 403,
@@ -147,6 +150,7 @@ describe('SCRUM-33 service refusals', () => {
    * Expected: 403 FORBIDDEN. The event stays with Coordinator 2. No audit entry and no notice.
    * Type: error
    */
+  // SCRUM-33-TC04
   it.each(callers)('US33-B04: %s cannot accept a reassignment', async (_label, user) => {
     db.fetchOne.mockResolvedValue({
       id: 9,
@@ -175,6 +179,7 @@ describe('SCRUM-33 service refusals', () => {
    *   Coordinator 2 still holds the event.
    * Type: error
    */
+  // SCRUM-33-TC05
   it('US33-B05: a Lead who does not hold the event cannot request a reassignment', async () => {
     const lead = { id: 11, roles: [ROLES.EVENT_COORDINATOR_LEAD] };
 
@@ -209,6 +214,7 @@ describe('SCRUM-33 HTTP refusals', () => {
    * Expected: 403 from the route, before the service writes the event or an audit entry.
    * Type: error
    */
+  // SCRUM-33-TC06
   it('US33-R01: an Organiser cannot assign through the API', async () => {
     event.coordinator_id = null;
     event.status = 'SUBMITTED';
@@ -231,6 +237,7 @@ describe('SCRUM-33 HTTP refusals', () => {
    * Expected: 403. The event stays with Coordinator 2. No audit entry.
    * Type: error
    */
+  // SCRUM-33-TC07
   it('US33-R02: the assigned Coordinator cannot reassign through the API', async () => {
     const res = await session(2, ROLES.EVENT_COORDINATOR)
       .post('/api/events/3/reassign-coordinator')
@@ -249,6 +256,7 @@ describe('SCRUM-33 HTTP refusals', () => {
    * Expected: 403. No handover row and no audit entry. Coordinator 2 still holds the event.
    * Type: error
    */
+  // SCRUM-33-TC08
   it('US33-R03: the assigned Coordinator cannot request a handover through the API', async () => {
     const res = await session(2, ROLES.EVENT_COORDINATOR)
       .post('/api/events/3/reassign')
@@ -268,6 +276,7 @@ describe('SCRUM-33 HTTP refusals', () => {
    * Expected: 403 before the event is read. Coordinator 2 still holds it. No audit entry.
    * Type: error
    */
+  // SCRUM-33-TC09
   it('US33-R04: a Coordinator cannot accept a handover through the API', async () => {
     const res = await session(4, ROLES.EVENT_COORDINATOR)
       .post('/api/events/3/reassign/accept');

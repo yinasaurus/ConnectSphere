@@ -6,8 +6,8 @@ const controller = require('../controllers/access.controller');
 const router = express.Router();
 
 /**
- * Purpose: Lead-only overview of who is assigned to each event.
- * AC: SCRUM-54 AC3
+ * Purpose: Lead-only overview of the Coordinators and events this Lead allocated.
+ * AC: SCRUM-54 AC3 (only a Lead can open it). SCRUM-57 AC1–AC5 (whose events are listed).
  * Mounted at /api so this path is /api/assignments/overview.
  * Auth is on this route only so unmatched /api paths still fall through to 404
  * instead of being intercepted as unauthenticated.

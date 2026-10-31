@@ -667,6 +667,8 @@ async function listBookings(filters = {}) {
       event_end_at: row.events?.end_at,
       // SCRUM-58 AC6: the Venues list needs this so an approved booking can be approved again.
       needs_review: Boolean(row.needs_review),
+      // SCRUM-75: the Venues page shows when a Held booking expires.
+      hold_expires_at: row.hold_expires_at || null,
       has_conflict: hasConflict,
       conflict_details: conflictDetails,
     };
@@ -695,7 +697,7 @@ async function requestBooking(user, payload) {
     payload.endAt,
     payload.setupMinutes,
     payload.teardownMinutes,
-    { confirmedOnly: true }
+    { confirmedOnly: true, ownEventId: payload.eventId }
   );
   if (conflict) {
     throw httpError(409, 'This venue already has a confirmed booking in that window', 'BOOKING_CONFLICT');
@@ -779,7 +781,7 @@ async function decideBooking(user, id, decision) {
       booking.end_at,
       booking.setup_minutes,
       booking.teardown_minutes,
-      { excludeBookingId: booking.id, confirmedOnly: true }
+      { excludeBookingId: booking.id, confirmedOnly: true, ownEventId: booking.event_id }
     );
     if (conflict) {
       throw httpError(
@@ -818,6 +820,125 @@ async function decideBooking(user, id, decision) {
   return updated;
 }
 
+/**
+ * Purpose: Venue Staff place a tentative hold on a venue for an event's date and time, so the
+ * venue stays reserved while the Coordinator finalises arrangements. The hold is stored as a
+ * venue booking with status TENTATIVE (shown as "Held") and an expiry in hold_expires_at.
+ * AC: SCRUM-75 AC1 (hold recorded as Held, linked to the event and its Coordinator),
+ *     AC2-AC4 (expiry required, not in the past, not after the event starts),
+ *     AC5 (no overlap with a confirmed booking or active hold, nothing saved),
+ *     AC9 (Venue Staff only, nothing saved).
+ * Business rule: W7 #4, a tentative hold has a mandatory expiry and is never a confirmed
+ *     booking. W7 #1, the occupied window includes the venue's setup and turnaround (SCRUM-59).
+ * Inputs: user (must have VENUE_STAFF), payload { eventId, venueId, expiresAt }, and `now`
+ *     (a parameter so tests can fix the time).
+ * Output: the created booking row plus coordinator_id (the event's assigned Coordinator).
+ * Failure: 403 FORBIDDEN, 400 VALIDATION_ERROR / HOLD_EXPIRY_REQUIRED / HOLD_EXPIRY_IN_PAST /
+ *     HOLD_EXPIRY_AFTER_EVENT_START, 404 NOT_FOUND, 409 BOOKING_CONFLICT. Nothing is saved on
+ *     any failure.
+ */
+// A hold only makes sense for an event that is still being planned. Matches the events the
+// Place a hold card offers; checked here too so a direct request can't hold a Draft,
+// Cancelled or Completed event and block the venue until the hold expires.
+const HOLDABLE_EVENT_STATUSES = [
+  EVENT_STATUS.SUBMITTED,
+  EVENT_STATUS.UNDER_REVIEW,
+  EVENT_STATUS.APPROVED,
+  EVENT_STATUS.PLANNING,
+];
+
+async function placeHold(user, payload = {}, now = new Date()) {
+  if (!hasRole(user, ROLES.VENUE_STAFF)) {
+    throw httpError(403, 'Only venue staff can place a hold on a venue', 'FORBIDDEN');
+  }
+  if (!payload.eventId || !payload.venueId) {
+    throw httpError(400, 'eventId and venueId are required', 'VALIDATION_ERROR');
+  }
+
+  // AC2: the expiry is mandatory.
+  if (payload.expiresAt === undefined || payload.expiresAt === null || payload.expiresAt === '') {
+    throw httpError(400, 'A hold needs an expiry date and time', 'HOLD_EXPIRY_REQUIRED');
+  }
+  const expiresAt = new Date(payload.expiresAt);
+  if (Number.isNaN(expiresAt.getTime())) {
+    throw httpError(400, 'The hold expiry must be a valid date and time', 'VALIDATION_ERROR');
+  }
+  // AC3: an expiry at or before now would leave a hold that is already expired.
+  if (expiresAt <= new Date(now)) {
+    throw httpError(400, 'The hold expiry cannot be in the past', 'HOLD_EXPIRY_IN_PAST');
+  }
+
+  const event = await fetchOne(
+    supabase.from('events').select('id, name, status, start_at, end_at, coordinator_id').eq('id', payload.eventId)
+  );
+  if (!event) throw httpError(404, 'Event not found', 'NOT_FOUND');
+  if (!HOLDABLE_EVENT_STATUSES.includes(event.status)) {
+    throw httpError(409, 'A venue can only be held for an event that is still being planned', 'EVENT_NOT_HOLDABLE');
+  }
+  if (!event.start_at || !event.end_at) {
+    throw httpError(400, 'The event needs a start and end time before a venue can be held', 'VALIDATION_ERROR');
+  }
+
+  // AC4: an expiry exactly at the event start is allowed; anything later is not.
+  if (expiresAt > new Date(event.start_at)) {
+    throw httpError(
+      400,
+      'The hold expiry cannot be later than the event start',
+      'HOLD_EXPIRY_AFTER_EVENT_START'
+    );
+  }
+
+  const venue = await fetchOne(
+    supabase.from('venues').select('id, name, setup_minutes, teardown_minutes').eq('id', payload.venueId)
+  );
+  if (!venue) throw httpError(404, 'Venue not found', 'NOT_FOUND');
+
+  // SCRUM-59: the hold records the venue's current setup/turnaround, like any booking, so its
+  // occupied window stays the same even if the venue's defaults change later.
+  const setupMinutes = venue.setup_minutes ?? 30;
+  const teardownMinutes = venue.teardown_minutes ?? 30;
+
+  // AC5: checked against confirmed bookings and active holds only (PENDING requests are not
+  // commitments). Touching windows are not a clash (windowsOverlap is strict).
+  const conflict = await findConflict(
+    venue.id,
+    event.start_at,
+    event.end_at,
+    setupMinutes,
+    teardownMinutes,
+    { confirmedOnly: true, now }
+  );
+  if (conflict) {
+    throw httpError(
+      409,
+      'This venue already has a confirmed booking or active hold in that window',
+      'BOOKING_CONFLICT'
+    );
+  }
+
+  // AC1 + AC8: stored as TENTATIVE (Held), never APPROVED, so it is never a confirmed booking.
+  const created = await insertOne('venue_bookings', {
+    event_id: event.id,
+    venue_id: venue.id,
+    requested_by: user.id,
+    status: BOOKING_STATUS.TENTATIVE,
+    start_at: event.start_at,
+    end_at: event.end_at,
+    setup_minutes: setupMinutes,
+    teardown_minutes: teardownMinutes,
+    hold_expires_at: expiresAt.toISOString(),
+  });
+
+  await writeAudit(user.id, 'HOLD_PLACED', 'venue_booking', created.id, {
+    eventId: event.id,
+    venueId: venue.id,
+    expiresAt: expiresAt.toISOString(),
+  });
+
+  // AC1: the event's Coordinator is who the hold is for (SCRUM-80 notifies them later).
+  return { ...created, coordinator_id: event.coordinator_id ?? null };
+}
+
 /*
  * Purpose: cancel one venue booking and move its Confirmed event back to Planning when needed.
  * AC: SCRUM-61 AC1–AC10 — assigned Coordinators may cancel eligible bookings except for Completed events.
@@ -850,6 +971,16 @@ async function cancelBooking(user, bookingId) {
    */
   if (event.status === EVENT_STATUS.COMPLETED) {
     throw httpError(409, 'Cannot cancel bookings for completed events', 'EVENT_COMPLETED');
+  }
+
+  /*
+   * Purpose: block changes to bookings that belong to a cancelled event.
+   * AC: SCRUM-61 AC11 — cancelled events cannot have their bookings modified.
+   * Inputs: the assigned event row. Output: throws 409 before any database writes.
+   * Failure: the request is rejected with EVENT_CANCELLED and the booking remains unchanged.
+   */
+  if (event.status === EVENT_STATUS.CANCELLED) {
+    throw httpError(409, 'Cannot cancel bookings for cancelled events', 'EVENT_CANCELLED');
   }
 
   if (booking.status === BOOKING_STATUS.CANCELLED) {
@@ -955,7 +1086,12 @@ async function findConflict(
   teardownMinutes = 30,
   options = {}
 ) {
-  const { excludeBookingId = null, confirmedOnly = false, now = new Date() } = options;
+  const {
+    excludeBookingId = null,
+    confirmedOnly = false,
+    now = new Date(),
+    ownEventId = null,
+  } = options;
   const sMin = Number(setupMinutes !== undefined && setupMinutes !== null ? setupMinutes : 30);
   const tMin = Number(teardownMinutes !== undefined && teardownMinutes !== null ? teardownMinutes : 30);
   const { occupiedStart: newStart, occupiedEnd: newEnd } = computeOccupiedWindow(startAt, endAt, sMin, tMin);
@@ -985,6 +1121,11 @@ async function findConflict(
     if (row.status === BOOKING_STATUS.TENTATIVE) {
       const expiry = row.expires_at || row.hold_expires_at;
       if (expiry && new Date(expiry) <= new Date(now)) {
+        continue;
+      }
+      // SCRUM-75 AC6: a hold blocks requests from *another* event. The held event's own
+      // Coordinator can still request (and staff approve) the venue it is holding.
+      if (ownEventId && Number(row.event_id) === Number(ownEventId)) {
         continue;
       }
     }
@@ -1018,13 +1159,32 @@ async function listUnavailability(venueId) {
   return fetchMany(query);
 }
 
+/**
+ * Purpose: Venue Staff record a venue as unavailable for a period, with a reason.
+ * AC: SCRUM-72 AC1 (start, end, reason required); AC2 (missing start/end/reason rejected);
+ *     AC3 (end must be after start); AC4 (saved even when bookings overlap - checked
+ *     elsewhere, at availability-check time, not here); AC5 (no existing event/booking is
+ *     touched); AC8 (non-Venue-Staff rejected, nothing saved).
+ * Inputs: user, payload { venueId, startAt, endAt, reason }.
+ * Output: the inserted venue_unavailability row.
+ * Failure: 403 if not Venue Staff; 400 if start/end/reason missing or end is not after start.
+ */
 async function blockVenue(user, payload) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can block venues', 'FORBIDDEN');
   }
+  if (!payload.startAt || !payload.endAt) {
+    throw httpError(400, 'startAt and endAt are required', 'VALIDATION_ERROR');
+  }
+  if (!payload.reason || !String(payload.reason).trim()) {
+    throw httpError(400, 'reason is required', 'VALIDATION_ERROR');
+  }
+  if (new Date(payload.endAt) <= new Date(payload.startAt)) {
+    throw httpError(400, 'endAt must be after startAt', 'VALIDATION_ERROR');
+  }
   return insertOne('venue_unavailability', {
     venue_id: payload.venueId,
-    reason: payload.reason || 'Maintenance',
+    reason: payload.reason,
     start_at: payload.startAt,
     end_at: payload.endAt,
     created_by: user.id,
@@ -1041,6 +1201,7 @@ module.exports = {
   listBookings,
   requestBooking,
   decideBooking,
+  placeHold,
   cancelBooking,
   buildBookingDecisionNotice,
   listUnavailability,
