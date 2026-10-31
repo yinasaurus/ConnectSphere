@@ -40,7 +40,7 @@ describe('SCRUM-72 UnavailabilityList', () => {
    * Expected: the period's venue name and reason are rendered in the list.
    * Type:     normal
    */
-  // SCRUM-72-TC17
+  // SCRUM-72-TC16
   it('shows each period with its venue name, reason, and from/until', async () => {
     mockApi();
     render(<UnavailabilityList venues={venues} refreshKey={0} />);
@@ -56,7 +56,7 @@ describe('SCRUM-72 UnavailabilityList', () => {
    * Expected: the card renders nothing (no "unavailability-list" test id in the DOM).
    * Type:     boundary
    */
-  // SCRUM-72-TC18
+  // SCRUM-72-TC17
   it('shows nothing when there are no recorded periods', async () => {
     mockApi({ periods: [] });
     render(<UnavailabilityList venues={venues} refreshKey={0} />);

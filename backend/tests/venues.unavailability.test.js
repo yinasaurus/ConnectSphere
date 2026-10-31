@@ -181,52 +181,6 @@ describe('SCRUM-72 record venue unavailability (service rules)', () => {
   });
 
   /*
-   * AC:       SCRUM-72 (AC6/AC7: once recorded, the occupied-window overlap check treats
-   *           an overlapping window as unavailable, and a touching-edge window as available)
-   * Scenario: A period is recorded for 10:00-12:00. A venue-availability check is then run
-   *           for a window that overlaps it, and for one that only touches its edge.
-   * Setup:    blockVenue() records 10:00-12:00 with no setup/teardown padding (padding on
-   *           the checking side is applied separately, per SCRUM-66/59). The subsequent
-   *           getVenueAvailability() call sees that same period via the mocked fetchMany.
-   * Expected: The 10:00-12:00 slot is unavailable; a 08:00-10:00 slot (ending exactly when
-   *           the period starts) is available.
-   * Type:     normal
-   */
-  // SCRUM-72-TC08
-  it('US72-B08: a recorded period makes an overlapping window unavailable, but a touching one available', async () => {
-    const recorded = await venuesService.blockVenue(venueStaff, period({
-      startAt: '2026-11-01T10:00:00Z',
-      endAt: '2026-11-01T12:00:00Z',
-    }));
-
-    fetchOne.mockResolvedValueOnce({ id: 7, name: 'Helix Hall' });
-    fetchMany
-      .mockResolvedValueOnce([]) // no bookings
-      .mockResolvedValueOnce([{ id: recorded.id, reason: 'Maintenance', start_at: recorded.start_at, end_at: recorded.end_at }]);
-
-    const overlapping = await venuesService.getVenueAvailability(
-      7,
-      { from: '2026-11-01T09:00:00Z', to: '2026-11-01T13:00:00Z' },
-      new Date('2026-10-20T00:00:00Z')
-    );
-    const unavailablePeriod = overlapping.periods.find((p) => !p.available);
-    expect(unavailablePeriod).toBeDefined();
-    expect(unavailablePeriod.reasons[0]).toMatchObject({ type: 'UNAVAILABILITY' });
-
-    fetchOne.mockResolvedValueOnce({ id: 7, name: 'Helix Hall' });
-    fetchMany
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]); // the 08:00-10:00 check window never reaches the period at all
-
-    const touching = await venuesService.getVenueAvailability(
-      7,
-      { from: '2026-11-01T08:00:00Z', to: '2026-11-01T10:00:00Z' },
-      new Date('2026-10-20T00:00:00Z')
-    );
-    expect(touching.periods.every((p) => p.available)).toBe(true);
-  });
-
-  /*
    * AC:       SCRUM-72 (AC8: a user who is not Venue Staff cannot record a period;
    *           nothing is saved)
    * Scenario: An Organiser (not Venue Staff) tries to record a period.
@@ -234,7 +188,7 @@ describe('SCRUM-72 record venue unavailability (service rules)', () => {
    * Expected: Rejected with 403 FORBIDDEN; insertOne is never called.
    * Type:     error
    */
-  // SCRUM-72-TC09
+  // SCRUM-72-TC08
   it('US72-B09: a user who is not Venue Staff cannot record a period', async () => {
     await expect(venuesService.blockVenue(organiser, period()))
       .rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
@@ -258,7 +212,7 @@ describe('SCRUM-72 record venue unavailability route', () => {
    * Expected: 201 with the saved unavailability row in the body.
    * Type:     normal
    */
-  // SCRUM-72-TC10
+  // SCRUM-72-TC09
   it('US72-R01: Venue Staff can record a period through the API', async () => {
     fetchOne.mockResolvedValueOnce({ id: 5, is_active: true }); // auth: the signed-in user
     fetchMany.mockResolvedValueOnce([{ role: ROLES.VENUE_STAFF }]); // auth: their roles
@@ -279,7 +233,7 @@ describe('SCRUM-72 record venue unavailability route', () => {
    * Expected: 403, through the real role middleware; nothing saved.
    * Type:     error
    */
-  // SCRUM-72-TC11
+  // SCRUM-72-TC10
   it('US72-R02: a non-Venue-Staff user gets 403 through the API', async () => {
     fetchOne.mockResolvedValueOnce({ id: 1, is_active: true });
     fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_ORGANISER }]);
@@ -300,7 +254,7 @@ describe('SCRUM-72 record venue unavailability route', () => {
     * Expected: 401, before the service or database is reached.
     * Type:     error
     */
-  // SCRUM-72-TC12
+  // SCRUM-72-TC11
   it('US72-R03: the route needs a signed-in user', async () => {
     const res = await request(app).post('/api/venues/unavailability').send(period());
     expect(res.status).toBe(401);

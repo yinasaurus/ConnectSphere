@@ -54,7 +54,7 @@ describe('SCRUM-72 BlockVenueCard', () => {
     *           fires.
     * Type:     normal
     */
-  // SCRUM-72-TC13
+  // SCRUM-72-TC12
   it('sends the venue, period and reason (as ISO) to the unavailability route', async () => {
     mockApi();
     const onRecorded = jest.fn();
@@ -85,7 +85,7 @@ describe('SCRUM-72 BlockVenueCard', () => {
    *           only appears once "Other" is selected.
    * Type:     normal
    */
-  // SCRUM-72-TC14
+  // SCRUM-72-TC13
   it('offers every reason the AC names, plus Other with free text', async () => {
     mockApi();
     render(<BlockVenueCard venues={venues} />);
@@ -106,7 +106,7 @@ describe('SCRUM-72 BlockVenueCard', () => {
    * Expected: api() is called with reason: 'Pest control' in the request body.
    * Type:     normal
    */
-  // SCRUM-72-TC15
+  // SCRUM-72-TC14
   it('sends the typed-in text when Other is chosen', async () => {
     mockApi();
     render(<BlockVenueCard venues={venues} />);
@@ -130,7 +130,7 @@ describe('SCRUM-72 BlockVenueCard', () => {
    * Expected: that message is shown on the card.
    * Type:     error
    */
-  // SCRUM-72-TC16
+  // SCRUM-72-TC15
   it('shows the server\'s validation message (e.g. end not after start)', async () => {
     mockApi({ blockError: { message: 'endAt must be after startAt', code: 'VALIDATION_ERROR' } });
     render(<BlockVenueCard venues={venues} />);
