@@ -42,8 +42,20 @@ describe('SCRUM-72 BlockVenueCard', () => {
     api.mockReset();
   });
 
+    /*
+    * AC:       SCRUM-72 (AC1: Venue Staff can record a period with start, end, reason —
+    *           through the UI form)
+    * Scenario: Venue Staff fills in venue, start and end on the form and submits with the
+    *           default reason.
+    * Setup:    Form filled via fillForm() (venue 8, start 2026-11-18T09:00, end
+    *           2026-11-18T17:00, reason Maintenance).
+    * Expected: api() is called with POST to /api/venues/unavailability with venueId, startAt/
+    *           endAt converted to ISO, and reason; a success message is shown and onRecorded
+    *           fires.
+    * Type:     normal
+    */
   // SCRUM-72-TC13
-  it('US72-F01: sends the venue, period and reason (as ISO) to the unavailability route', async () => {
+  it('sends the venue, period and reason (as ISO) to the unavailability route', async () => {
     mockApi();
     const onRecorded = jest.fn();
     render(<BlockVenueCard venues={venues} onRecorded={onRecorded} />);
@@ -64,8 +76,17 @@ describe('SCRUM-72 BlockVenueCard', () => {
     expect(onRecorded).toHaveBeenCalled();
   });
 
+  /*
+   * AC:       SCRUM-72 (AC1: reason can be any of the five named examples, plus Other with
+   *           free text)
+   * Scenario: Venue Staff opens the reason dropdown.
+   * Setup:    Card rendered with no interaction yet.
+   * Expected: all five reason options are present; the free-text "Describe the reason" field
+   *           only appears once "Other" is selected.
+   * Type:     normal
+   */
   // SCRUM-72-TC14
-  it('US72-F02: offers every reason the AC names, plus Other with free text', async () => {
+  it('offers every reason the AC names, plus Other with free text', async () => {
     mockApi();
     render(<BlockVenueCard venues={venues} />);
 
@@ -78,8 +99,15 @@ describe('SCRUM-72 BlockVenueCard', () => {
     expect(screen.getByPlaceholderText('Describe the reason')).toBeInTheDocument();
   });
 
+  /*
+   * AC:       SCRUM-72 (AC1: reason is free text when Other is picked, not a fixed value)
+   * Scenario: Venue Staff picks Other and types a custom reason.
+   * Setup:    Form filled, reason set to Other, custom text "Pest control" typed.
+   * Expected: api() is called with reason: 'Pest control' in the request body.
+   * Type:     normal
+   */
   // SCRUM-72-TC15
-  it('US72-F03: sends the typed-in text when Other is chosen', async () => {
+  it('sends the typed-in text when Other is chosen', async () => {
     mockApi();
     render(<BlockVenueCard venues={venues} />);
 
@@ -93,8 +121,17 @@ describe('SCRUM-72 BlockVenueCard', () => {
     }));
   });
 
+  /*
+   * AC:       SCRUM-72 (AC2/AC3: invalid submissions are rejected by the server; the UI
+   *           surfaces that message)
+   * Scenario: Venue Staff submits a period the server rejects (e.g. end not after start).
+   * Setup:    api() mocked to throw a VALIDATION_ERROR with message 'endAt must be after
+   *           startAt'.
+   * Expected: that message is shown on the card.
+   * Type:     error
+   */
   // SCRUM-72-TC16
-  it('US72-F04: shows the server\'s validation message (e.g. end not after start)', async () => {
+  it('shows the server\'s validation message (e.g. end not after start)', async () => {
     mockApi({ blockError: { message: 'endAt must be after startAt', code: 'VALIDATION_ERROR' } });
     render(<BlockVenueCard venues={venues} />);
 

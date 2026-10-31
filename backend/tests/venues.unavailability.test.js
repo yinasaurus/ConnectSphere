@@ -293,6 +293,13 @@ describe('SCRUM-72 record venue unavailability route', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+    /*
+    * AC:       SCRUM-72 (the route requires authentication)
+    * Scenario: An unauthenticated request hits the real route.
+    * Setup:    No session cookie is sent.
+    * Expected: 401, before the service or database is reached.
+    * Type:     error
+    */
   // SCRUM-72-TC12
   it('US72-R03: the route needs a signed-in user', async () => {
     const res = await request(app).post('/api/venues/unavailability').send(period());

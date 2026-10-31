@@ -33,8 +33,15 @@ describe('SCRUM-72 UnavailabilityList', () => {
     api.mockReset();
   });
 
-  // SCRUM-72-TC26
-  it('US72-F05: shows each period with its venue name, reason, and from/until', async () => {
+  /*
+   * AC:       SCRUM-72 (AC1: a recorded period's venue, reason, and start/end are visible)
+   * Scenario: Venue Staff opens the Venues page with at least one recorded period.
+   * Setup:    api() mocked to return one future period (Helix Hall, Maintenance).
+   * Expected: the period's venue name and reason are rendered in the list.
+   * Type:     normal
+   */
+  // SCRUM-72-TC17
+  it('shows each period with its venue name, reason, and from/until', async () => {
     mockApi();
     render(<UnavailabilityList venues={venues} refreshKey={0} />);
 
@@ -42,8 +49,15 @@ describe('SCRUM-72 UnavailabilityList', () => {
     expect(screen.getByText('Maintenance')).toBeInTheDocument();
   });
 
-  // SCRUM-72-TC27
-  it('US72-F06: shows nothing when there are no recorded periods', async () => {
+  /*
+   * AC:       SCRUM-72 (empty-state guard)
+   * Scenario: Venue Staff opens the Venues page before any period has been recorded.
+   * Setup:    api() mocked to return an empty unavailability list.
+   * Expected: the card renders nothing (no "unavailability-list" test id in the DOM).
+   * Type:     boundary
+   */
+  // SCRUM-72-TC18
+  it('shows nothing when there are no recorded periods', async () => {
     mockApi({ periods: [] });
     render(<UnavailabilityList venues={venues} refreshKey={0} />);
 
