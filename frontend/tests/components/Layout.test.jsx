@@ -96,6 +96,7 @@ describe('SCRUM-82 Sign out stays in the sidebar', () => {
    * Expected: A Sign out button is present.
    * Type:     normal
    */
+  // SCRUM-82-TC01
   it('shows Sign out for an Event Coordinator', () => {
     mount(['EVENT_COORDINATOR']);
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
@@ -108,6 +109,7 @@ describe('SCRUM-82 Sign out stays in the sidebar', () => {
    * Expected: Sign out is still present.
    * Type:     boundary
    */
+  // SCRUM-82-TC02
   it('shows Sign out for a Coordinator + Lead hybrid', () => {
     mount(['EVENT_COORDINATOR', 'EVENT_COORDINATOR_LEAD']);
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
