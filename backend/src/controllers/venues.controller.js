@@ -103,6 +103,17 @@ const block = asyncHandler(async (req, res) => {
   res.status(201).json({ unavailability: blockRow });
 });
 
+/*
+ * Purpose: pass the Venue Staff user and unavailability period id to the affected-bookings
+ *   lookup.
+ * AC: SCRUM-60 AC8. Inputs: req.user, req.params.id. Output: 200 { bookings }.
+ * Failure: propagates 403/404 from the service to the error handler.
+ */
+const affectedBookings = asyncHandler(async (req, res) => {
+  const rows = await venuesService.listBookingsAffectedByUnavailability(req.user, req.params.id);
+  res.json({ bookings: rows });
+});
+
 module.exports = {
   list,
   search,
@@ -117,4 +128,5 @@ module.exports = {
   cancelBooking,
   unavailability,
   block,
+  affectedBookings,
 };

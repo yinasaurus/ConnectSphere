@@ -51,5 +51,11 @@ router.get(
 
 router.get('/unavailability', controller.unavailability);
 router.post('/unavailability', requireRole(ROLES.VENUE_STAFF), controller.block);
+// SCRUM-60 AC8: the Venue Staff who recorded a period can view the bookings it affects.
+router.get(
+  '/unavailability/:id/affected-bookings',
+  requireRole(ROLES.VENUE_STAFF),
+  controller.affectedBookings
+);
 
 module.exports = router;
