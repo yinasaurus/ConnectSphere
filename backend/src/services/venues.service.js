@@ -1266,13 +1266,32 @@ async function listBookingsAffectedByUnavailability(user, unavailabilityId, now 
   return overlapping.map(toAffectedBookingSummary);
 }
 
+/**
+ * Purpose: Venue Staff record a venue as unavailable for a period, with a reason.
+ * AC: SCRUM-72 AC1 (start, end, reason required); AC2 (missing start/end/reason rejected);
+ *     AC3 (end must be after start); AC4 (saved even when bookings overlap - checked
+ *     elsewhere, at availability-check time, not here); AC5 (no existing event/booking is
+ *     touched); AC8 (non-Venue-Staff rejected, nothing saved).
+ * Inputs: user, payload { venueId, startAt, endAt, reason }.
+ * Output: the inserted venue_unavailability row.
+ * Failure: 403 if not Venue Staff; 400 if start/end/reason missing or end is not after start.
+ */
 async function blockVenue(user, payload) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can block venues', 'FORBIDDEN');
   }
+  if (!payload.startAt || !payload.endAt) {
+    throw httpError(400, 'startAt and endAt are required', 'VALIDATION_ERROR');
+  }
+  if (!payload.reason || !String(payload.reason).trim()) {
+    throw httpError(400, 'reason is required', 'VALIDATION_ERROR');
+  }
+  if (new Date(payload.endAt) <= new Date(payload.startAt)) {
+    throw httpError(400, 'endAt must be after startAt', 'VALIDATION_ERROR');
+  }
   const period = await insertOne('venue_unavailability', {
     venue_id: payload.venueId,
-    reason: payload.reason || 'Maintenance',
+    reason: payload.reason,
     start_at: payload.startAt,
     end_at: payload.endAt,
     created_by: user.id,
