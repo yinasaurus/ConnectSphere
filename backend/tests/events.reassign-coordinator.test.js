@@ -85,6 +85,7 @@ describe('SCRUM-31 reassign coordinator (service rules)', () => {
    *   Notice wording is US29-H01. This test does not check that a notice was sent.
    * Type: normal
    */
+  // SCRUM-31-TC01
   it('US31-B01: a Lead replaces the assigned Coordinator and the previous one can no longer edit', async () => {
     queueReplacement();
 
@@ -119,6 +120,7 @@ describe('SCRUM-31 reassign coordinator (service rules)', () => {
    * Expected: coordinator_id becomes 4 and the status value is the one the test started with.
    * Type: boundary
    */
+  // SCRUM-31-TC02
   it.each(['DRAFT', 'CONFIRMED', 'COMPLETED'])(
     'US31-B02: a Lead can reassign while the event is %s',
     async (status) => {
@@ -141,6 +143,7 @@ describe('SCRUM-31 reassign coordinator (service rules)', () => {
    * Expected: 409 ALREADY_ASSIGNED. coordinator_id stays 2 and nothing is written.
    * Type: boundary
    */
+  // SCRUM-31-TC03
   it('US31-B03: reassigning to the Coordinator already assigned is rejected and the event is unchanged', async () => {
     await expect(service.reassignEventCoordinator(lead, 3, 2)).rejects.toMatchObject({
       status: 409,
@@ -160,6 +163,7 @@ describe('SCRUM-31 reassign coordinator (service rules)', () => {
    * Expected: 409 INVALID_COORDINATOR. coordinator_id stays 2.
    * Type: error
    */
+  // SCRUM-31-TC04
   it('US31-B04: an inactive Coordinator is rejected and the event is unchanged', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -182,6 +186,7 @@ describe('SCRUM-31 reassign coordinator (service rules)', () => {
    * Expected: 409 NOT_ASSIGNED. The event stays unassigned.
    * Type: conflict
    */
+  // SCRUM-31-TC05
   it('US31-B05: an event with no Coordinator cannot be reassigned', async () => {
     event.coordinator_id = null;
     event.status = 'SUBMITTED';
@@ -201,6 +206,7 @@ describe('SCRUM-31 reassign coordinator (service rules)', () => {
    * Expected: 404. Nothing is written.
    * Type: error
    */
+  // SCRUM-31-TC06
   it('US31-B06: reassigning a missing event returns 404 and writes nothing', async () => {
     db.fetchOne.mockResolvedValueOnce(null);
 
@@ -225,6 +231,7 @@ describe('SCRUM-31 POST /api/events/:id/reassign-coordinator (route)', () => {
    * Expected: 200. The stored coordinator id is 4 and the status in the response is unchanged.
    * Type: normal
    */
+  // SCRUM-31-TC07
   it('US31-R01: a Lead can reassign a Coordinator through the API', async () => {
     db.fetchOne
       .mockResolvedValueOnce({ id: 11, is_active: true })
@@ -256,6 +263,7 @@ describe('SCRUM-31 POST /api/events/:id/reassign-coordinator (route)', () => {
    * Expected: 409. The event row is not written.
    * Type: boundary
    */
+  // SCRUM-31-TC08
   it('US31-R02: the API rejects the Coordinator who is already assigned', async () => {
     db.fetchOne
       .mockResolvedValueOnce({ id: 11, is_active: true })
@@ -280,6 +288,7 @@ describe('SCRUM-31 POST /api/events/:id/reassign-coordinator (route)', () => {
    * Expected: 409. The event row is not written.
    * Type: error
    */
+  // SCRUM-31-TC09
   it('US31-R03: the API rejects an inactive Coordinator and leaves the event unchanged', async () => {
     db.fetchOne
       .mockResolvedValueOnce({ id: 11, is_active: true })
@@ -305,6 +314,7 @@ describe('SCRUM-31 POST /api/events/:id/reassign-coordinator (route)', () => {
    * Expected: 400. The service does not write the event.
    * Type: error
    */
+  // SCRUM-31-TC10
   it('US31-R04: a request with no Coordinator is rejected', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 11, is_active: true });
     db.fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_COORDINATOR_LEAD }]);

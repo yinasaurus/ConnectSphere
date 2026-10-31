@@ -111,6 +111,7 @@ describe('SCRUM-31 reassign coordinator (event page)', () => {
    * Expected: The reassign card lists both active Coordinators.
    * Type: boundary
    */
+  // SCRUM-31-TC11
   it('US31-F01: a Lead sees active Coordinators on an event that already has one', async () => {
     mockAuth(leadUser);
     stubApi(leadUser, assignedEvent('COMPLETED'));
@@ -128,6 +129,7 @@ describe('SCRUM-31 reassign coordinator (event page)', () => {
    * Expected: POST /api/events/3/reassign-coordinator with coordinatorId 4.
    * Type: normal
    */
+  // SCRUM-31-TC12
   it('US31-F02: a Lead reassigns the chosen Coordinator', async () => {
     const user = userEvent.setup();
     const extras = {};
@@ -152,6 +154,7 @@ describe('SCRUM-31 reassign coordinator (event page)', () => {
    *   The unchanged event record is US31-B03 and US31-R02. This test does not read it.
    * Type: boundary
    */
+  // SCRUM-31-TC13
   it('US31-F03: choosing the Coordinator already assigned shows the rejection', async () => {
     const user = userEvent.setup();
     const extras = {};
@@ -175,6 +178,7 @@ describe('SCRUM-31 reassign coordinator (event page)', () => {
    * Expected: The reassign card is absent.
    * Type: error
    */
+  // SCRUM-31-TC14
   it('US31-F04: a Coordinator does not see the reassign action', async () => {
     mockAuth(coordinatorUser);
     stubApi(coordinatorUser, assignedEvent());
