@@ -816,13 +816,17 @@ export default function EventDetail() {
                 <div className="row-between">
                   <p style={{ margin: '2px 0' }}>
                     <span style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 }}>
-                      {booking.venue_name || `Venue #${booking.venue_id}`}: {booking.status}
+                      {booking.venue_name || `Venue #${booking.venue_id}`}: {booking.status === 'TENTATIVE' ? 'HELD' : booking.status}
                     </span>
                     <strong>{booking.venue_name || `Venue #${booking.venue_id}`}</strong>
                     <BookingStatusBadge status={booking.status} />
                     {booking.needs_review && <span className="needs-review-flag">Requires review</span>}
                   </p>
-                  <span className={`booking-status ${booking.status}`}>{formatBookingStatus(booking.status)}</span>
+                  {/* SCRUM-75 AC1: a hold already shows HELD in its badge, so the stored
+                      status (Tentative) is not printed again beside it. */}
+                  {booking.status !== 'TENTATIVE' && (
+                    <span className={`booking-status ${booking.status}`}>{formatBookingStatus(booking.status)}</span>
+                  )}
                 </div>
                 <p className="muted" style={{ margin: '2px 0', fontSize: '0.85rem' }}>
                   {booking.start_at && booking.end_at

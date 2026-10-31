@@ -51,6 +51,7 @@ const NOW = new Date('2026-11-05T09:00:00.000Z');
 const EVENT = {
   id: 50,
   name: 'Tech Talk',
+  status: 'PLANNING',
   start_at: '2026-11-20T10:00:00.000Z',
   end_at: '2026-11-20T12:00:00.000Z',
   coordinator_id: 21,
@@ -290,6 +291,27 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  it.each(['DRAFT', 'CANCELLED', 'COMPLETED', 'REJECTED', 'CONFIRMED', 'PREPARATION', 'AWAITING_SAFETY_CHECK'])(
+    'US75-B36: a %s event cannot be held (409), and nothing is saved',
+    async (status) => {
+      mockEventAndVenue({ ...EVENT, status });
+      await expect(
+        venuesService.placeHold(STAFF, { eventId: 50, venueId: 8, expiresAt: EXPIRES }, NOW)
+      ).rejects.toMatchObject({ status: 409, code: 'EVENT_NOT_HOLDABLE' });
+      expect(insertOne).not.toHaveBeenCalled();
+      expect(writeAudit).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(['SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'PLANNING'])(
+    'US75-B37: a %s event can be held',
+    async (status) => {
+      mockEventAndVenue({ ...EVENT, status });
+      const hold = await venuesService.placeHold(STAFF, { eventId: 50, venueId: 8, expiresAt: EXPIRES }, NOW);
+      expect(hold.status).toBe(BOOKING_STATUS.TENTATIVE);
+    }
+  );
+
   it('US75-B20: 404 when the venue does not exist', async () => {
     mockEventAndVenue(EVENT, null);
     await expect(
@@ -458,6 +480,17 @@ describe('SCRUM-75 HTTP routes', () => {
   // Real-clock tests: use times far in the future so "now" never catches up with them.
   const FUTURE_EVENT = { ...EVENT, start_at: '2099-11-20T10:00:00.000Z', end_at: '2099-11-20T12:00:00.000Z' };
   const FUTURE_EXPIRES = '2099-11-18T09:00:00.000Z';
+
+  it('US75-R08: a direct request to hold a Draft event gets 409 and saves nothing', async () => {
+    mockUser = STAFF;
+    mockEventAndVenue({ ...FUTURE_EVENT, status: 'DRAFT' });
+    const res = await request(app)
+      .post('/api/venues/holds')
+      .send({ eventId: 50, venueId: 8, expiresAt: FUTURE_EXPIRES });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('EVENT_NOT_HOLDABLE');
+    expect(insertOne).not.toHaveBeenCalled();
+  });
 
   it('US75-R01: Venue Staff get 201 with the Held booking', async () => {
     mockUser = STAFF;

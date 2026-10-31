@@ -837,6 +837,16 @@ async function decideBooking(user, id, decision) {
  *     HOLD_EXPIRY_AFTER_EVENT_START, 404 NOT_FOUND, 409 BOOKING_CONFLICT. Nothing is saved on
  *     any failure.
  */
+// A hold only makes sense for an event that is still being planned. Matches the events the
+// Place a hold card offers; checked here too so a direct request can't hold a Draft,
+// Cancelled or Completed event and block the venue until the hold expires.
+const HOLDABLE_EVENT_STATUSES = [
+  EVENT_STATUS.SUBMITTED,
+  EVENT_STATUS.UNDER_REVIEW,
+  EVENT_STATUS.APPROVED,
+  EVENT_STATUS.PLANNING,
+];
+
 async function placeHold(user, payload = {}, now = new Date()) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can place a hold on a venue', 'FORBIDDEN');
@@ -859,9 +869,12 @@ async function placeHold(user, payload = {}, now = new Date()) {
   }
 
   const event = await fetchOne(
-    supabase.from('events').select('id, name, start_at, end_at, coordinator_id').eq('id', payload.eventId)
+    supabase.from('events').select('id, name, status, start_at, end_at, coordinator_id').eq('id', payload.eventId)
   );
   if (!event) throw httpError(404, 'Event not found', 'NOT_FOUND');
+  if (!HOLDABLE_EVENT_STATUSES.includes(event.status)) {
+    throw httpError(409, 'A venue can only be held for an event that is still being planned', 'EVENT_NOT_HOLDABLE');
+  }
   if (!event.start_at || !event.end_at) {
     throw httpError(400, 'The event needs a start and end time before a venue can be held', 'VALIDATION_ERROR');
   }
