@@ -7,6 +7,7 @@ import EventDecisionPanel from '../components/EventDecisionPanel';
 import AttendeeRegistrationCard from '../components/AttendeeRegistrationCard';
 import RegistrationSettingsCard from '../components/RegistrationSettingsCard';
 import EventRegistrationsCard from '../components/EventRegistrationsCard';
+import RescheduleBookingForm from '../components/RescheduleBookingForm';
 import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
 
@@ -233,12 +234,14 @@ export default function EventDetail() {
       const result = await action();
       setMessage(typeof result === 'string' ? result : 'Updated.');
       await reload();
+      return true;
     } catch (err) {
       if (err.code === 'BOOKING_CONFLICT') {
         setConflictModalMsg(err.message);
       } else {
         showError(err.message);
       }
+      return false;
     }
   }
 
@@ -901,6 +904,32 @@ export default function EventDetail() {
                   <p style={{ margin: '2px 0', fontSize: '0.88rem', color: '#22c55e' }}>
                     ✓ Confirmed venue booking
                   </p>
+                )}
+                {/*
+                 * Purpose: show a rescheduling form only to the assigned Coordinator for active, non-rejected bookings on active events.
+                 * AC: SCRUM-62 AC1, AC3, AC6, AC7, AC10–AC12 — rejected bookings and bookings on completed/cancelled events cannot be modified.
+                 * Inputs: assignment state, booking status, event status, and booking id. Output: PATCH request followed by a page refresh.
+                 * Failure: runCoordinatorAction displays server errors and leaves persisted booking data unchanged.
+                 */}
+                {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR)
+                  && booking.status !== 'CANCELLED'
+                  && booking.status !== 'REJECTED'
+                  && event.status !== 'COMPLETED'
+                  && event.status !== 'CANCELLED' && (
+                  <RescheduleBookingForm
+                    bookingId={booking.id}
+                    onSubmit={(startAt, endAt) =>
+                      runCoordinatorAction(() =>
+                        api(`/api/venues/bookings/${booking.id}`, {
+                          method: 'PATCH',
+                          body: {
+                            startAt: new Date(startAt).toISOString(),
+                            endAt:   new Date(endAt).toISOString(),
+                          },
+                        }).then(() => reload())
+                      )
+                    }
+                  />
                 )}
                 {/*
                  * Purpose: expose cancellation for an eligible booking to its assigned Coordinator.

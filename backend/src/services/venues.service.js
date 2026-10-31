@@ -1043,6 +1043,104 @@ async function cancelBooking(user, bookingId) {
   return updated;
 }
 
+/*
+ * Purpose: reschedule one venue booking and return a Confirmed event to Planning when needed.
+ * AC: SCRUM-62 AC1–AC8, AC10–AC12 — assigned Coordinators may change eligible bookings without affecting siblings.
+ * Inputs: authenticated user, booking id, and new startAt/endAt values. Output: the updated booking row.
+ * Failure: throws authorization, missing-row, cancellation, or venue-conflict errors before changing state.
+ */
+async function changeBooking(user, bookingId, payload) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
+    throw httpError(403, 'Only the assigned coordinator can change a booking', 'FORBIDDEN');
+  }
+
+  const booking = await fetchOne(
+    supabase.from('venue_bookings').select('*').eq('id', bookingId)
+  );
+  if (!booking) throw httpError(404, 'Booking not found', 'NOT_FOUND');
+  if (booking.status === BOOKING_STATUS.CANCELLED) {
+    throw httpError(409, 'This booking has been cancelled and cannot be changed', 'BOOKING_CANCELLED');
+  }
+  /*
+   * Purpose: prevent modification of rejected venue bookings.
+   * AC: SCRUM-62 AC10 — a rejected venue booking cannot be modified.
+   * Inputs: booking row. Output: throws 409 if status is REJECTED.
+   * Failure: rejects with BOOKING_REJECTED before reading event data or checking conflicts.
+   */
+  if (booking.status === BOOKING_STATUS.REJECTED) {
+    throw httpError(409, 'A rejected venue booking cannot be modified', 'BOOKING_REJECTED');
+  }
+
+  const event = await fetchOne(
+    supabase.from('events').select('*').eq('id', booking.event_id)
+  );
+  if (!event) throw httpError(404, 'Event not found', 'NOT_FOUND');
+  if (event.coordinator_id !== user.id) {
+    throw httpError(403, 'Only the assigned coordinator can change a booking', 'FORBIDDEN');
+  }
+  /*
+   * Purpose: lock bookings of completed events for historical record-keeping and block changes to cancelled events.
+   * AC: SCRUM-62 AC11 (completed events locked), AC12 (cancelled events locked).
+   * Inputs: event status. Output: throws 409 if event is COMPLETED or CANCELLED.
+   * Failure: rejects with EVENT_COMPLETED or EVENT_CANCELLED before conflict checks or database writes.
+   */
+  if (event.status === EVENT_STATUS.COMPLETED) {
+    throw httpError(409, 'Cannot modify bookings for completed events', 'EVENT_COMPLETED');
+  }
+  if (event.status === EVENT_STATUS.CANCELLED) {
+    throw httpError(409, 'Cannot modify bookings for cancelled events', 'EVENT_CANCELLED');
+  }
+
+  const conflict = await findConflict(
+    booking.venue_id,
+    payload.startAt,
+    payload.endAt,
+    booking.setup_minutes,
+    booking.teardown_minutes,
+    { excludeBookingId: bookingId }
+  );
+  if (conflict) {
+    throw httpError(409, 'New time conflicts with an existing booking at this venue', 'BOOKING_CONFLICT');
+  }
+
+  const patch = {
+    start_at: payload.startAt,
+    end_at: payload.endAt,
+    status: BOOKING_STATUS.PENDING,
+    decided_by: null,
+    decision_reason: null,
+    alternative_suggestion: null,
+    decided_at: null,
+    needs_review: false,
+    updated_at: new Date().toISOString(),
+  };
+  const updated = await updateById('venue_bookings', bookingId, patch);
+  await writeAudit(user.id, 'BOOKING_RESCHEDULED', 'venue_booking', bookingId, {
+    eventId: booking.event_id,
+    venueId: booking.venue_id,
+    previousStartAt: booking.start_at,
+    previousEndAt: booking.end_at,
+    newStartAt: payload.startAt,
+    newEndAt: payload.endAt,
+  });
+
+  if (event.status === EVENT_STATUS.CONFIRMED) {
+    await updateById('events', event.id, {
+      status: EVENT_STATUS.PLANNING,
+      updated_at: new Date().toISOString(),
+    });
+    await insertOne('event_status_history', {
+      event_id: event.id,
+      actor_id: user.id,
+      from_status: EVENT_STATUS.CONFIRMED,
+      to_status: EVENT_STATUS.PLANNING,
+      note: 'Venue booking rescheduled',
+    });
+  }
+
+  return updated;
+}
+
 /**
  * Purpose: the text of the notice an event's Coordinator gets when Venue Staff approve or
  * reject their venue booking request, so they can go ahead or look for another venue
@@ -1184,6 +1282,7 @@ module.exports = {
   decideBooking,
   placeHold,
   cancelBooking,
+  changeBooking,
   buildBookingDecisionNotice,
   listUnavailability,
   blockVenue,
