@@ -5,6 +5,7 @@ import ConflictModal from '../components/ConflictModal';
 import BlockVenueCard from '../components/BlockVenueCard';
 import UnavailabilityList from '../components/UnavailabilityList';
 import PlaceHoldCard from '../components/PlaceHoldCard';
+import AffectedBookingsCard from '../components/AffectedBookingsCard';
 import { LAYOUTS, ROLES } from '../constants';
 
 const emptyForm = {
@@ -689,6 +690,9 @@ export default function Venues() {
       )}
       {/* SCRUM-75: Venue Staff place a tentative hold with an expiry. */}
       {isVenueStaff && <PlaceHoldCard venues={venues} onPlaced={reload} />}
+
+      {/* SCRUM-60 AC8: Venue Staff view the bookings a recorded unavailability period affects. */}
+      {isVenueStaff && <AffectedBookingsCard venues={venues} />}
 
       {/*
         SCRUM-18 AC1/AC2/AC3: Booking requests section.
