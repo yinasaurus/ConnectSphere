@@ -69,7 +69,7 @@ export default function AffectedBookingsCard({ venues }) {
         bookings.length === 0 ? (
           <p className="muted">No bookings are affected by this period.</p>
         ) : (
-          <table>
+          <table className="table" id="affected-bookings-table" style={{ marginTop: 16 }}>
             <thead>
               <tr>
                 <th>Event</th>
