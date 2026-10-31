@@ -270,8 +270,8 @@ describe('SCRUM-60 identify and mark affected bookings (service rules)', () => {
   });
 
   /*
-   * AC:       SCRUM-60 (not tied to a single AC -- idempotency: re-identifying an
-   *           already-marked booking does not write again, but still returns it)
+   * AC:       SCRUM-60 (idempotency: re-identifying an already-marked booking does not 
+   *           write again, but still returns it)
    * Scenario: A booking is already needs_review: true from an earlier overlapping period.
    * Setup:    booking({ needs_review: true }), overlapping the new period too.
    * Expected: The booking is still returned; updateById is not called again.
@@ -381,7 +381,7 @@ describe('SCRUM-60 view bookings affected by a period (AC8, service rules)', () 
   });
 
   /*
-   * AC:       SCRUM-60 (not tied to a numbered AC -- general 404 guard)
+   * AC:       SCRUM-60 (general 404 guard)
    * Scenario: Venue Staff looks up a period that does not exist.
    * Setup:    fetchOne resolves null.
    * Expected: Rejected with 404.
