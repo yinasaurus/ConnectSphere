@@ -252,4 +252,48 @@ describe('SCRUM-74 list registrations route', () => {
     const res = await request(app).get('/api/events/3/registrations');
     expect(res.status).toBe(401);
   });
+
+    /*
+   * AC: SCRUM-74 (AC2: The event's assigned Coordinator can view the same registrations.)
+   * Scenario: The event's assigned Coordinator (not its Organiser) reads registrations through the real HTTP route.
+   * Setup: signed-in user is coordinator id 2; service returns the same registrations the Organiser route test gets.
+   * Expected: 200 with registrations, activeCount and capacity in the body, same as the Organiser.
+   * Type: normal
+   */
+  // SCRUM-74-TC12
+  it('US74-R04: the assigned Coordinator reads registrations through the API', async () => {
+    db.fetchOne.mockResolvedValueOnce({ id: 2, is_active: true }); // auth: the signed-in user
+    db.fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_COORDINATOR }]); // auth: their roles
+    db.fetchOne.mockResolvedValueOnce(event); // service: the event
+    db.fetchMany.mockResolvedValueOnce([registrationRow()]); // service: the registrations
+    db.fetchCount.mockResolvedValueOnce(1);
+
+    const res = await request(app)
+      .get('/api/events/3/registrations')
+      .set('Cookie', cookieFor(2));
+
+    expect(res.status).toBe(200);
+    expect(res.body.activeCount).toBe(1);
+    expect(res.body.capacity).toBe(50);
+  });
+
+  /*
+   * AC: SCRUM-74 (AC5: An Organiser or Coordinator cannot view registrations for events they do not manage. The attempt is rejected and no registration details are shown.)
+   * Scenario: A Coordinator who is not assigned to this event hits the real route.
+   * Setup: signed-in user is coordinator id 98; event.coordinator_id is 2.
+   * Expected: 403, through the real middleware and service, same as an unrelated Organiser.
+   * Type: error
+   */
+  // SCRUM-74-TC13
+  it('US74-R05: an unassigned Coordinator gets 403 through the API', async () => {
+    db.fetchOne.mockResolvedValueOnce({ id: 98, is_active: true }); // auth: the signed-in user
+    db.fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_COORDINATOR }]); // auth: their roles
+    db.fetchOne.mockResolvedValueOnce(event); // service: the event
+
+    const res = await request(app)
+      .get('/api/events/3/registrations')
+      .set('Cookie', cookieFor(98));
+
+    expect(res.status).toBe(403);
+  });
 });
