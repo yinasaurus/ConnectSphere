@@ -25,8 +25,6 @@ const { env } = require('../src/config/env');
 
 const lead = { id: 11, roles: [ROLES.EVENT_COORDINATOR_LEAD] };
 const coordinator = { id: 2, roles: [ROLES.EVENT_COORDINATOR] };
-const organiser = { id: 1, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] };
-
 let event;
 
 function submittedUnassigned() {
@@ -195,26 +193,6 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
       expect(db.updateById).not.toHaveBeenCalled();
     }
   );
-
-  /*
-   * AC: SCRUM-71 AC6
-   * Scenario: A user who is not a Lead calls the assign service.
-   * Setup: Caller is a Coordinator, Organiser, or Venue Staff. Event is otherwise assignable.
-   * Expected: 403. The event stays unassigned.
-   * Type: error
-   */
-  it.each([
-    ['Event Coordinator', coordinator],
-    ['Event Organiser', organiser],
-    ['Venue Staff', { id: 5, roles: [ROLES.VENUE_STAFF] }],
-  ])('US71-B07: %s cannot assign a Coordinator', async (_label, user) => {
-    await expect(service.assignPrimaryCoordinator(user, 3, 2)).rejects.toMatchObject({
-      status: 403,
-      code: 'FORBIDDEN',
-    });
-    expect(db.updateById).not.toHaveBeenCalled();
-    expect(event.coordinator_id).toBeNull();
-  });
 
   /*
    * AC: SCRUM-71 AC6

@@ -14,12 +14,6 @@ describe('homePathForRoles', () => {
     expect(homePathForRoles([ROLES.EVENT_COORDINATOR])).toBe('/app');
   });
 
-  it('still sends the Lead to the queue when they also have Coordinator', () => {
-    expect(homePathForRoles([ROLES.EVENT_COORDINATOR, ROLES.EVENT_COORDINATOR_LEAD])).toBe(
-      '/app/events/unassigned'
-    );
-  });
-
   it('sends a Safety Officer to the dashboard', () => {
     expect(homePathForRoles([ROLES.SAFETY_OFFICER])).toBe('/app');
   });

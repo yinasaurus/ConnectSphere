@@ -385,7 +385,7 @@ describe('SCRUM-58 review a marked reserved equipment request', () => {
    * Expected: Reserve is shown. Unavailable is not, so the request cannot be cancelled from here.
    * Type:     normal
    */
-  // SCRUM-58-TC15
+  // SCRUM-58-TC13
   it('US58-F02 (AC6): Reserve is shown for a reserved request that needs review', async () => {
     asRole('TECHNICAL_SUPPORT');
     mockLists({

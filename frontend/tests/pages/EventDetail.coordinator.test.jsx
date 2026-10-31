@@ -81,7 +81,7 @@ describe('SCRUM-29 assigned Coordinator on the event page', () => {
    * Expected: The People card shows "Coordinator: Chloe Lim".
    * Type:     normal
    */
-  // SCRUM-29-TC17
+  // SCRUM-29-TC15
   it('US29-F01: shows the assigned Coordinator name to the Organiser', async () => {
     renderAsOrganiser(baseEvent());
     expect(await screen.findByText('Global AI Summit')).toBeInTheDocument();
@@ -96,7 +96,7 @@ describe('SCRUM-29 assigned Coordinator on the event page', () => {
    * Expected: The People card shows "Coordinator: Unassigned".
    * Type:     boundary
    */
-  // SCRUM-29-TC18
+  // SCRUM-29-TC16
   it('US29-F02: shows Unassigned when no Coordinator is assigned', async () => {
     renderAsOrganiser(baseEvent({ status: 'SUBMITTED', coordinatorId: null, coordinatorName: null }));
     expect(await screen.findByText('Global AI Summit')).toBeInTheDocument();
@@ -111,7 +111,7 @@ describe('SCRUM-29 assigned Coordinator on the event page', () => {
    * Expected: "Dan Ong" is shown and "Chloe Lim" is not.
    * Type:     normal
    */
-  // SCRUM-29-TC19
+  // SCRUM-29-TC17
   it('US29-F03: after reassignment the Organiser sees the new Coordinator, not the old one', async () => {
     renderAsOrganiser(baseEvent({ coordinatorId: 12, coordinatorName: 'Dan Ong' }));
     expect(await screen.findByText('Global AI Summit')).toBeInTheDocument();

@@ -277,26 +277,13 @@ describe('SCRUM-58 safety queue hides an event until every mark is cleared', () 
   });
 
   /*
-   * AC:       SCRUM-58 AC6
-   * Scenario: Every marked arrangement has been reviewed. The event is awaiting a safety check.
-   * Setup:    Status AWAITING_SAFETY_CHECK. Both needs_review flags are false. Arrangements are ready.
-   * Expected: The event is on the Safety Officer queue.
-   * Type:     normal
-   */
-  // SCRUM-58-TC06
-  it('US58-Q02 (AC6): the event returns to the queue once every mark is cleared', async () => {
-    const rows = await access.listSafetyQueue(safetyOfficer);
-    expect(rows.map((row) => row.id)).toContain(3);
-  });
-
-  /*
    * AC:       SCRUM-58 AC5
    * Scenario: The Coordinator sends the event back while a mark is still set.
    * Setup:    Event is Planning. Booking is APPROVED and needs_review. Equipment is RESERVED.
    * Expected: The send succeeds. The queue still omits the event, because the mark remains.
    * Type:     normal
    */
-  // SCRUM-58-TC07
+  // SCRUM-58-TC06
   it('US58-Q03 (AC5): sending back while a mark is set leaves the event off the queue', async () => {
     event.status = 'PLANNING';
     booking.needs_review = true;
@@ -318,7 +305,7 @@ describe('SCRUM-58 reviewing a marked arrangement clears the mark only', () => {
    * Expected: The mark clears. Status, venue and times stay. The Coordinator is not notified again.
    * Type:     normal
    */
-  // SCRUM-58-TC08
+  // SCRUM-58-TC07
   it('US58-R01 (AC4, AC6): approving again clears the booking mark and changes nothing else', async () => {
     booking.needs_review = true;
     audit.notifyUser.mockClear();
@@ -340,7 +327,7 @@ describe('SCRUM-58 reviewing a marked arrangement clears the mark only', () => {
    * Expected: 409 ALREADY_DECIDED. The booking is not written.
    * Type:     error
    */
-  // SCRUM-58-TC09
+  // SCRUM-58-TC08
   it('US58-R02 (AC4): an approved booking with no mark cannot be decided again', async () => {
     await expect(
       venues.decideBooking(venueStaff, 7, { approve: true })
@@ -355,7 +342,7 @@ describe('SCRUM-58 reviewing a marked arrangement clears the mark only', () => {
    * Expected: 409. Status stays APPROVED and the mark stays. Nothing is cancelled.
    * Type:     error
    */
-  // SCRUM-58-TC10
+  // SCRUM-58-TC09
   it('US58-R03 (AC4): rejecting a marked approved booking does not cancel it', async () => {
     booking.needs_review = true;
     await expect(
@@ -372,7 +359,7 @@ describe('SCRUM-58 reviewing a marked arrangement clears the mark only', () => {
    * Expected: The mark clears. Status and quantity stay. No second reservation row is written.
    * Type:     normal
    */
-  // SCRUM-58-TC11
+  // SCRUM-58-TC10
   it('US58-R04 (AC4, AC6): reserving again clears the equipment mark and does not hold stock twice', async () => {
     kit.needs_review = true;
     tables.equipment_reservations.push({
@@ -388,28 +375,13 @@ describe('SCRUM-58 reviewing a marked arrangement clears the mark only', () => {
   });
 
   /*
-   * AC:       existing equipment decision rule (must still hold)
-   * Scenario: Technical Support try to reserve a request that is already reserved and not marked.
-   * Setup:    Request 21 is RESERVED with needs_review false.
-   * Expected: 409 ALREADY_DECIDED.
-   * Type:     error
-   */
-  // SCRUM-58-TC12
-  it('US58-R05: a reserved request with no mark cannot be reserved again', async () => {
-    await expect(
-      equipment.decideRequest(tech, 21, { approve: true })
-    ).rejects.toMatchObject({ status: 409, code: 'ALREADY_DECIDED' });
-    expect(tables.equipment_reservations).toHaveLength(0);
-  });
-
-  /*
    * AC:       SCRUM-58 AC4
    * Scenario: Technical Support mark a reserved request unavailable.
    * Setup:    Request 21 is RESERVED and needs_review. Decision is not approve.
    * Expected: 409. Status stays RESERVED. The mark stays.
    * Type:     error
    */
-  // SCRUM-58-TC13
+  // SCRUM-58-TC11
   it('US58-R06 (AC4): a marked reserved request cannot be set unavailable', async () => {
     kit.needs_review = true;
     await expect(

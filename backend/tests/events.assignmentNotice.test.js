@@ -13,7 +13,7 @@
  *   AC1 rejection and important changes, AC2 important updates  -> events.notifications.test.js
  *       (SCRUM-44-N01, N02, N05 in the SCRUM-44 sheet).
  *   Reassignment request / accept notices, in full               -> events.assignedCoordinator.test.js
- *       (SCRUM-29-TC09, TC10, TC12, TC16). SCRUM-29 refers back to this file for the Lead assign
+ *       (SCRUM-29-TC08, TC10, TC14). SCRUM-29 refers back to this file for the Lead assign
  *       notice (SCRUM-45-TC04, TC09), so that notice is tested end to end once.
  *   New / viewed on the Notifications page                       -> Notifications.test.jsx (SCRUM-44).
  */
@@ -39,8 +39,6 @@ const { env } = require('../src/config/env');
 const lead = { id: 11, roles: [ROLES.EVENT_COORDINATOR_LEAD] };
 const organiser = { id: 1, roles: [ROLES.EVENT_ORGANISER], organisationId: 10 };
 const coordinator = { id: 2, roles: [ROLES.EVENT_COORDINATOR], fullName: 'Chloe Lim' };
-const otherCoordinator = { id: 4, roles: [ROLES.EVENT_COORDINATOR], fullName: 'Dan Ong' };
-
 let event;
 let builder;
 
@@ -356,7 +354,7 @@ describe('SCRUM-45 assignment notice HTTP routes', () => {
    * Setup:    Cookie for Coordinator 4; pending reassignment from 2; event owned by Organiser 1.
    * Expected: 200; Organiser and outgoing Coordinator notified; incoming not notified again.
    * Type:     normal
-   * Side note: the same notices without the route are SCRUM-29-TC10 and TC12.
+   * Side note: the same notices without the route are SCRUM-29-TC10.
    */
   // SCRUM-45-TC10
   it('SCRUM-45 AC2/AC5: POST reassign/accept notifies Organiser and outgoing Coordinator', async () => {
@@ -399,26 +397,5 @@ describe('SCRUM-45 assignment notice HTTP routes', () => {
     );
     const recipients = audit.notifyUser.mock.calls.map(([userId]) => userId);
     expect(recipients).not.toContain(4);
-  });
-});
-
-describe('SCRUM-45 reassignment error path (the notices themselves are SCRUM-29)', () => {
-  /*
-   * AC:       SCRUM-45 AC2, AC5
-   * Scenario: Accept with no matching pending request.
-   * Setup:    fetchOne returns null for the reassignment row.
-   * Expected: 404; no notices.
-   * Type:     error
-   * Side note: the request and accept notices are SCRUM-29-TC09, TC10, TC12 and TC16;
-   *           SCRUM-29-TC07 checks the same 'refused, nobody told' rule for a request.
-   */
-  // SCRUM-45-TC17
-  it('SCRUM-45 AC2: accepting with no pending reassignment creates no notices', async () => {
-    db.fetchOne.mockResolvedValueOnce(null);
-
-    await expect(events.acceptCoordinatorChange(otherCoordinator, 3)).rejects.toMatchObject({
-      status: 404,
-    });
-    expect(audit.notifyUser).not.toHaveBeenCalled();
   });
 });

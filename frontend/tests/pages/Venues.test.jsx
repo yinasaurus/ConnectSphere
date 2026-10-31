@@ -1150,7 +1150,7 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
    *           Approving sends approve true for 201 only. The pending booking is unchanged.
    * Type:     normal
    */
-  // SCRUM-58-TC16
+  // SCRUM-58-TC14
   it('US58-F03 (AC6): an approved booking that needs review can be approved from the Venues list', async () => {
     database.bookings.push({
       id: 201,
