@@ -56,6 +56,7 @@ describe('SCRUM-32 audit row insert', () => {
    *   is 4. created_at is absent, so when stays the column default now().
    * Type: normal
    */
+  // SCRUM-32-TC10
   it('inserts an audit_logs row for a confirmed Lead reassignment and leaves when to the database', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
