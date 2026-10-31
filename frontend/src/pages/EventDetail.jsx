@@ -30,7 +30,8 @@ function BookingStatusBadge({ status }) {
       color: '#fff',
       marginLeft: 6,
     }}>
-      {status}
+      {/* SCRUM-75 AC1: a hold is stored as TENTATIVE and shown as Held. */}
+      {status === 'TENTATIVE' ? 'HELD' : status}
     </span>
   );
 }
@@ -327,7 +328,8 @@ export default function EventDetail() {
 
           {/*
             Purpose: Lead chooses the one primary Coordinator for a Submitted event that has none.
-            AC: SCRUM-71 AC1, AC2, AC6
+            AC: SCRUM-71 AC1, AC2, AC6. SCRUM-33 AC2 — the card is rendered only for a Lead,
+            so an Organiser or a Coordinator is not offered the action.
             Business rule: W7 #5, W4 (manual choice). Inactive Coordinators are omitted by the API.
             Failure: the server message is shown; the event is not changed.
           */}
@@ -364,6 +366,8 @@ export default function EventDetail() {
             Purpose: Lead picks a different active Coordinator. Any status is allowed.
             AC: SCRUM-31 AC1, AC4 — the list is the active Coordinators; confirming the
             person already assigned is refused by the API and shown here.
+            SCRUM-33 AC2 — a Coordinator, including the one assigned to this event, does
+            not see this card. The API also rejects their attempt.
             Business rule: W7 #5. Shiyin, 24 Oct 2026: reassignment is not limited by status.
             Failure: the server message is shown and the event is left as it was loaded.
           */}
@@ -859,13 +863,17 @@ export default function EventDetail() {
                 <div className="row-between">
                   <p style={{ margin: '2px 0' }}>
                     <span style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 }}>
-                      {booking.venue_name || `Venue #${booking.venue_id}`}: {booking.status}
+                      {booking.venue_name || `Venue #${booking.venue_id}`}: {booking.status === 'TENTATIVE' ? 'HELD' : booking.status}
                     </span>
                     <strong>{booking.venue_name || `Venue #${booking.venue_id}`}</strong>
                     <BookingStatusBadge status={booking.status} />
                     {booking.needs_review && <span className="needs-review-flag">Requires review</span>}
                   </p>
-                  <span className={`booking-status ${booking.status}`}>{formatBookingStatus(booking.status)}</span>
+                  {/* SCRUM-75 AC1: a hold already shows HELD in its badge, so the stored
+                      status (Tentative) is not printed again beside it. */}
+                  {booking.status !== 'TENTATIVE' && (
+                    <span className={`booking-status ${booking.status}`}>{formatBookingStatus(booking.status)}</span>
+                  )}
                 </div>
                 <p className="muted" style={{ margin: '2px 0', fontSize: '0.85rem' }}>
                   {booking.start_at && booking.end_at
@@ -893,6 +901,23 @@ export default function EventDetail() {
                   <p style={{ margin: '2px 0', fontSize: '0.88rem', color: '#22c55e' }}>
                     ✓ Confirmed venue booking
                   </p>
+                )}
+                {/*
+                 * Purpose: expose cancellation for an eligible booking to its assigned Coordinator.
+                 * AC: SCRUM-61 AC1/AC5 — only pending, held, or approved bookings can be cancelled.
+                 * Inputs: current user, event assignment, and booking status. Output: cancel request and refreshed event data.
+                 * Failure: run displays API errors and leaves the booking unchanged when cancellation fails.
+                 */}
+                {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR)
+                  && event.status !== 'COMPLETED'
+                  && event.status !== 'CANCELLED'
+                  && ['PENDING', 'TENTATIVE', 'APPROVED'].includes(booking.status) && (
+                  <button
+                    className="btn ghost"
+                    onClick={() => run(() => api(`/api/venues/bookings/${booking.id}/cancel`, { method: 'POST' }))}
+                  >
+                    Cancel booking
+                  </button>
                 )}
               </div>
             )) : <p className="muted">No booking yet. Essential arrangements must be approved before confirmation.</p>}

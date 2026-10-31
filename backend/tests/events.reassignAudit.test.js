@@ -1,6 +1,8 @@
 /**
  * SCRUM-32: an audit entry is written when a reassignment is confirmed.
  * A request that is still pending is not confirmed, so it writes nothing.
+ * SCRUM-33: a Coordinator who is not a Lead cannot confirm one by accepting.
+ * A Lead who accepts still can, and that writes the entry.
  * The database is mocked. writeAudit is the audit_logs insert.
  */
 const request = require('supertest');
@@ -23,7 +25,6 @@ const { env } = require('../src/config/env');
 
 const lead = { id: 11, roles: [ROLES.EVENT_COORDINATOR_LEAD] };
 const outgoing = { id: 2, roles: [ROLES.EVENT_COORDINATOR] };
-const incoming = { id: 4, roles: [ROLES.EVENT_COORDINATOR] };
 
 let event;
 
@@ -161,16 +162,17 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
 
   /*
    * AC: SCRUM-32 AC1, AC2
-   * Scenario: The incoming Coordinator accepts a pending reassignment.
-   * Setup: Coordinator 2 holds event 3 and has asked Coordinator 4 to take it.
-   *   The request is still PENDING until Coordinator 4 accepts. Accepting saves the
+   * Scenario: A Lead accepts a pending reassignment.
+   * Setup: Coordinator 2 holds event 3. A PENDING request names user 4. User 4 holds
+   *   the Lead role. SCRUM-33 rejects this same accept when the caller is only a
+   *   Coordinator; that refusal is in the SCRUM-33 tests. Accepting here saves the
    *   new Coordinator, which is the confirmed reassignment.
-   * Expected: One audit entry. Who is Coordinator 4, the person who confirmed it.
+   * Expected: One audit entry. Who is user 4, the Lead who confirmed it.
    *   The old Coordinator is 2 and the new one is 4.
    * Type: normal
    */
-  // SCRUM-32-TC05
-  it('records the audit entry when the incoming Coordinator accepts', async () => {
+// SCRUM-32-TC05
+it('records the audit entry when a Lead accepts a pending reassignment', async () => {
     const pending = {
       id: 9,
       event_id: 3,
@@ -183,7 +185,7 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
       .mockResolvedValueOnce(event)
       .mockResolvedValue(event);
 
-    await service.acceptCoordinatorChange(incoming, 3);
+    await service.acceptCoordinatorChange({ id: 4, roles: [ROLES.EVENT_COORDINATOR_LEAD] }, 3);
 
     expect(audit.writeAudit).toHaveBeenCalledTimes(1);
     expect(audit.writeAudit).toHaveBeenCalledWith(4, 'COORDINATOR_REASSIGNED', 'event', 3, {
@@ -194,8 +196,9 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
 
   /*
    * AC: SCRUM-32 AC1
-   * Scenario: A Coordinator accepts a reassignment, but there is no pending request for them.
-   * Setup: Event 3 is held by Coordinator 2. Nothing is pending for Coordinator 4.
+   * Scenario: A Lead accepts a reassignment, but there is no pending request for them.
+   * Setup: Event 3 is held by Coordinator 2. Nothing is pending for Lead 4.
+   *   The caller is a Lead so the SCRUM-33 role check lets the lookup run.
    * Expected: The accept is refused and no audit entry is written, because the Coordinator
    *   on the event did not change.
    * Type: error
@@ -204,7 +207,10 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
   it('does not write an audit entry when there is nothing to accept', async () => {
     db.fetchOne.mockResolvedValueOnce(null);
 
-    await expect(service.acceptCoordinatorChange(incoming, 3)).rejects.toMatchObject({
+    await expect(service.acceptCoordinatorChange(
+      { id: 4, roles: [ROLES.EVENT_COORDINATOR_LEAD] },
+      3
+    )).rejects.toMatchObject({
       status: 404,
       code: 'NOT_FOUND',
     });
@@ -214,18 +220,31 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
 
   /*
    * AC: SCRUM-32 AC1
-   * Scenario: The current Coordinator asks someone else to take the event, and nobody has accepted.
-   * Setup: Coordinator 2 holds event 3 and requests Coordinator 4. The request stays PENDING.
-   * Expected: No audit entry. Asking is not a confirmed reassignment, and the Coordinator
-   *   on the event is still 2.
+   * Scenario: A Lead who currently holds the event asks someone else to take it,
+   *   and nobody has accepted.
+   * Setup: User 2 holds event 3 and holds the Lead role. They request Coordinator 4.
+   *   SCRUM-33 allows this caller past the role check. The request stays PENDING.
+   * Expected: One pending handover row is stored. No audit entry. Asking is not a
+   *   confirmed reassignment, and the Coordinator on the event is still 2.
    * Type: boundary
    */
   // SCRUM-32-TC07
   it('does not write an audit entry for a reassignment that has only been requested', async () => {
     db.fetchOne.mockResolvedValue(event);
 
-    await service.requestCoordinatorChange(outgoing, 3, 4);
+    await service.requestCoordinatorChange(
+      { id: 2, roles: [ROLES.EVENT_COORDINATOR_LEAD], fullName: 'Chloe Lim' },
+      3,
+      4
+    );
 
+    expect(db.insertOne).toHaveBeenCalledTimes(1);
+    expect(db.insertOne).toHaveBeenCalledWith('coordinator_reassignments', expect.objectContaining({
+      event_id: 3,
+      from_coordinator_id: 2,
+      to_coordinator_id: 4,
+      status: 'PENDING',
+    }));
     expect(audit.writeAudit).not.toHaveBeenCalled();
     expect(event.coordinator_id).toBe(2);
   });
@@ -269,15 +288,16 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
 
   /*
    * AC: SCRUM-32 AC1, AC2
-   * Scenario: The incoming Coordinator accepts through the HTTP route.
-   * Setup: Session user 4 is a Coordinator. A pending request asks them to take event 3
+   * Scenario: A Lead accepts through the HTTP route.
+   * Setup: Session user 4 is a Lead. A pending request asks them to take event 3
    *   from Coordinator 2. The route is POST /api/events/:id/reassign/accept.
-   * Expected: 200, and one audit entry. Who is Coordinator 4. The old Coordinator is 2
+   *   SCRUM-33: the same route rejects a session that is only a Coordinator.
+   * Expected: 200, and one audit entry. Who is user 4. The old Coordinator is 2
    *   and the new one is 4. The event id is the route param, which Express passes as a string.
    * Type: normal
    */
-  // SCRUM-32-TC09
-  it('writes the audit entry when the incoming Coordinator accepts over HTTP', async () => {
+// SCRUM-32-TC09
+it('writes the audit entry when a Lead accepts over HTTP', async () => {
     const { createApp } = require('../src/app');
     const app = createApp();
     const token = jwt.sign({ sub: 4 }, env.jwtSecret);
@@ -293,7 +313,7 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
       .mockResolvedValueOnce(pending)
       .mockResolvedValueOnce(event)
       .mockResolvedValue(event);
-    db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }]);
+    db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR_LEAD }]);
 
     const res = await request(app)
       .post('/api/events/3/reassign/accept')
