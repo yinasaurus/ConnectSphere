@@ -446,6 +446,13 @@ describe('SCRUM-60 affected-bookings route', () => {
     expect(res.status).toBe(403);
   });
 
+  /*
+   * AC:       SCRUM-60 (the route requires authentication)
+   * Scenario: An unauthenticated request hits the real route.
+   * Setup:    No session cookie is sent.
+   * Expected: 401, before the service or database is reached.
+   * Type:     error
+   */
   // SCRUM-60-TC17
   it('US60-R03: the route needs a signed-in user', async () => {
     const res = await request(app).get('/api/venues/unavailability/60/affected-bookings');
