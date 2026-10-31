@@ -1246,9 +1246,9 @@ async function identifyAndMarkAffectedBookings(venueId, period, now = new Date()
 /*
  * Purpose: the Venue Staff who recorded a period can view the bookings it affects, any time
  *   -- not only right after recording it.
- * AC: SCRUM-60 AC8. Re-derives the same overlap as identifyAndMarkAffectedBookings (read-only
- *     -- recording already did the marking), so the list stays correct even if bookings were
- *     added after the period was recorded.
+ * AC: SCRUM-60 AC8. Calls identifyAndMarkAffectedBookings again on every view, not just at
+ *     record time, so a booking made or approved after the period was recorded is marked
+ *     too -- the list and the needs_review mark never disagree (review finding).
  * Inputs: the requesting user, and the unavailability period id.
  * Output: every booking affected by that period (event, venue, date, time).
  * Failure: 403 if not Venue Staff; 404 if the period doesn't exist.
@@ -1262,8 +1262,7 @@ async function listBookingsAffectedByUnavailability(user, unavailabilityId, now 
   );
   if (!period) throw httpError(404, 'Unavailability period not found', 'NOT_FOUND');
 
-  const overlapping = await findBookingsOverlappingPeriod(period.venue_id, period, now);
-  return overlapping.map(toAffectedBookingSummary);
+  return identifyAndMarkAffectedBookings(period.venue_id, period, now);
 }
 
 /**

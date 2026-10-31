@@ -393,6 +393,38 @@ describe('SCRUM-60 view bookings affected by a period (AC8, service rules)', () 
     await expect(venuesService.listBookingsAffectedByUnavailability(venueStaff, 999, NOW))
       .rejects.toMatchObject({ status: 404 });
   });
+
+    /*
+    * AC:       SCRUM-60 (AC7/AC8 consistency -- review finding: the list and the needs_review
+    *           mark must never disagree, even for a booking made after the period was recorded)
+    * Scenario: A period is recorded with nothing overlapping it yet. A booking is then made at
+    *           that venue, in the same window, and approved. Viewing the list afterward must
+    *           mark it and include it -- not just report it unmarked, and not skip it.
+    * Setup:    First view: fetchMany returns no bookings. Second view (after the booking
+    *           exists): fetchMany returns the new APPROVED booking.
+    * Expected: The first view returns nothing and marks nothing. The second view marks the
+    *           booking needs_review and includes it in the returned list.
+    * Type:     normal
+    */
+  // SCRUM-60-TC15
+  it('US60-B15: viewing the list marks and includes a booking that started overlapping after the period was recorded', async () => {
+    fetchOne.mockResolvedValueOnce(period());
+    fetchMany.mockResolvedValueOnce([]);
+
+    const firstView = await venuesService.listBookingsAffectedByUnavailability(venueStaff, 60, NOW);
+    expect(firstView).toHaveLength(0);
+    expect(updateById).not.toHaveBeenCalled();
+
+    fetchOne.mockResolvedValueOnce(period());
+    fetchMany.mockResolvedValueOnce([booking()]);
+
+    const secondView = await venuesService.listBookingsAffectedByUnavailability(venueStaff, 60, NOW);
+    expect(secondView).toHaveLength(1);
+    expect(secondView[0].id).toBe(100);
+    expect(updateById).toHaveBeenCalledWith('venue_bookings', 100, expect.objectContaining({
+      needs_review: true,
+    }));
+  });
 });
 
 describe('SCRUM-60 affected-bookings route', () => {
@@ -411,7 +443,7 @@ describe('SCRUM-60 affected-bookings route', () => {
    * Expected: 200 with the affected booking in the body.
    * Type:     normal
    */
-  // SCRUM-60-TC15
+  // SCRUM-60-TC16
   it('US60-R01: Venue Staff can view affected bookings through the API', async () => {
     fetchOne.mockResolvedValueOnce({ id: 5, is_active: true }); // auth: the signed-in user
     fetchMany.mockResolvedValueOnce([{ role: ROLES.VENUE_STAFF }]); // auth: their roles
@@ -434,7 +466,7 @@ describe('SCRUM-60 affected-bookings route', () => {
    * Expected: 403, through the real role middleware.
    * Type:     error
    */
-  // SCRUM-60-TC16
+  // SCRUM-60-TC17
   it('US60-R02: a non-Venue-Staff user gets 403 through the API', async () => {
     fetchOne.mockResolvedValueOnce({ id: 1, is_active: true });
     fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_ORGANISER }]);
@@ -453,7 +485,7 @@ describe('SCRUM-60 affected-bookings route', () => {
    * Expected: 401, before the service or database is reached.
    * Type:     error
    */
-  // SCRUM-60-TC17
+  // SCRUM-60-TC18
   it('US60-R03: the route needs a signed-in user', async () => {
     const res = await request(app).get('/api/venues/unavailability/60/affected-bookings');
     expect(res.status).toBe(401);

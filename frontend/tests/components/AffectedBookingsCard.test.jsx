@@ -60,7 +60,7 @@ describe('SCRUM-60 AffectedBookingsCard', () => {
    * Expected: the card renders nothing (no "affected-bookings-card" test id in the DOM).
    * Type:     boundary
    */
-  // SCRUM-60-TC18
+  // SCRUM-60-TC19
   it('shows nothing when there are no recorded periods', async () => {
     mockApi({ periods: [] });
     const { container } = render(<AffectedBookingsCard venues={venues} />);
@@ -80,7 +80,7 @@ describe('SCRUM-60 AffectedBookingsCard', () => {
    *           booking's event and venue.
    * Type:     normal
    */
-  // SCRUM-60-TC19
+  // SCRUM-60-TC20
   it('lets Venue Staff pick a recorded period and view its affected bookings', async () => {
     mockApi();
     render(<AffectedBookingsCard venues={venues} />);
@@ -101,7 +101,7 @@ describe('SCRUM-60 AffectedBookingsCard', () => {
    * Expected: "No bookings are affected by this period." is shown instead of a table.
    * Type:     boundary
    */
-  // SCRUM-60-TC20
+  // SCRUM-60-TC21
   it('shows a message when no bookings are affected', async () => {
     mockApi({ bookings: [] });
     render(<AffectedBookingsCard venues={venues} />);
@@ -120,7 +120,7 @@ describe('SCRUM-60 AffectedBookingsCard', () => {
    * Expected: that message is shown on the card.
    * Type:     error
    */
-  // SCRUM-60-TC21
+  // SCRUM-60-TC22
   it('shows the server\'s message when the lookup is refused', async () => {
     mockApi({ affectedError: { message: 'Only venue staff can view affected bookings', code: 'FORBIDDEN' } });
     render(<AffectedBookingsCard venues={venues} />);
