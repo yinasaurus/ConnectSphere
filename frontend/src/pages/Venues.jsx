@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import ConflictModal from '../components/ConflictModal';
+import BlockVenueCard from '../components/BlockVenueCard';
+import UnavailabilityList from '../components/UnavailabilityList';
 import PlaceHoldCard from '../components/PlaceHoldCard';
 import { LAYOUTS, ROLES } from '../constants';
 
@@ -274,6 +276,7 @@ function BookingRow({ booking, onApprove }) {
 export default function Venues() {
   const { hasRole } = useAuth();
   const [venues, setVenues] = useState([]);
+  const [unavailabilityRefresh, setUnavailabilityRefresh] = useState(0);
   const [bookings, setBookings] = useState([]);
   const [form, setForm] = useState({
     name: '',
@@ -667,6 +670,23 @@ export default function Venues() {
         </div>
       )}
 
+      {/* SCRUM-72: Venue Staff record a venue as unavailable for a period, with a reason. */}
+      {isVenueStaff && (
+        <BlockVenueCard
+          venues={venues}
+          onRecorded={async () => {
+            await reload();
+            setUnavailabilityRefresh((n) => n + 1);
+          }}
+        />
+      )}
+      {/* SCRUM-72: shows recorded venue unavailability periods. */}
+      {isVenueStaff && (
+        <UnavailabilityList
+          venues={venues}
+          refreshKey={unavailabilityRefresh}
+        />
+      )}
       {/* SCRUM-75: Venue Staff place a tentative hold with an expiry. */}
       {isVenueStaff && <PlaceHoldCard venues={venues} onPlaced={reload} />}
 
