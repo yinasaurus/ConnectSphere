@@ -970,8 +970,9 @@ async function isReadyToConfirm(event) {
       .eq('event_id', event.id)
   );
 
+  // SCRUM-76 AC6: an expired hold is no longer an arrangement, like a cancelled booking.
   const activeBookings = allBookings.filter(
-    (booking) => booking.status !== BOOKING_STATUS.CANCELLED
+    (booking) => ![BOOKING_STATUS.CANCELLED, BOOKING_STATUS.EXPIRED].includes(booking.status)
   );
 
   if (activeBookings.length === 0) {
@@ -1046,9 +1047,13 @@ async function isReadyToConfirm(event) {
   return { ok: true };
 }
 
-// Rejected and cancelled bookings are no longer part of the event's arrangements,
-// so they don't count for or against readiness.
-const INACTIVE_BOOKING_STATUSES = [BOOKING_STATUS.REJECTED, BOOKING_STATUS.CANCELLED];
+// Rejected, cancelled and expired (SCRUM-76) bookings are no longer part of the event's
+// arrangements, so they don't count for or against readiness.
+const INACTIVE_BOOKING_STATUSES = [
+  BOOKING_STATUS.REJECTED,
+  BOOKING_STATUS.CANCELLED,
+  BOOKING_STATUS.EXPIRED,
+];
 
 async function isReadyForSafetyCheck(eventId) {
   const bookings = await fetchMany(

@@ -18,6 +18,7 @@ function BookingStatusBadge({ status }) {
     REJECTED: '#b91c1c',
     TENTATIVE: '#1d4ed8',
     CANCELLED: '#6b7280',
+    EXPIRED: '#6b7280',
   };
   return (
     <span style={{
