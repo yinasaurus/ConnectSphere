@@ -208,6 +208,7 @@ describe('SCRUM-8 Equipment reserve on the request list', () => {
    * Expected: The decision is posted for that request and the row leaves PENDING.
    * Type: normal
    */
+  // SCRUM-8-TC20
   it('AC1: Reserve posts a confirmation for that request', async () => {
     let reserved = false;
     api.mockImplementation(async (path, options = {}) => {
@@ -245,6 +246,7 @@ describe('SCRUM-8 Equipment reserve on the request list', () => {
    * Expected: That message is shown. The request stays PENDING (Reserve still there).
    * Type: error
    */
+  // SCRUM-8-TC21
   it('AC2: shows the API error and keeps the request pending when reserve is blocked', async () => {
     api.mockImplementation(async (path, options = {}) => {
       if (path === '/api/equipment') return { equipment: [] };
@@ -269,6 +271,7 @@ describe('SCRUM-8 Equipment reserve on the request list', () => {
    * Expected: No Reserve button — only Tech may create a reservation.
    * Type: error
    */
+  // SCRUM-8-TC22
   it('AC3: Coordinators do not see Reserve', async () => {
     asRole('EVENT_COORDINATOR');
     mockLists();

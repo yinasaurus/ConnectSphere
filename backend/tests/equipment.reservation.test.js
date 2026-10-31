@@ -103,6 +103,7 @@ describe('SCRUM-8 decideRequest (service)', () => {
    *          Catalogue quantity is not written down — available falls because of the new row.
    * Type: normal
    */
+  // SCRUM-8-TC01
   it('AC1: Tech can reserve kit for the request event and a reservation row is written', async () => {
     fetchOne
       .mockResolvedValueOnce(PENDING)
@@ -137,6 +138,7 @@ describe('SCRUM-8 decideRequest (service)', () => {
    * Expected: 409 INSUFFICIENT_EQUIPMENT. Request and reservations are unchanged.
    * Type: error
    */
+  // SCRUM-8-TC02
   it('AC2: refuses reserve when leftover operational stock is below the request', async () => {
     fetchOne
       .mockResolvedValueOnce(PENDING)
@@ -157,6 +159,7 @@ describe('SCRUM-8 decideRequest (service)', () => {
    * Expected: reserve succeeds (boundary of AC2).
    * Type: boundary
    */
+  // SCRUM-8-TC03
   it('AC2: reserving exactly the remaining operational quantity is allowed', async () => {
     fetchOne
       .mockResolvedValueOnce(PENDING)
@@ -175,10 +178,11 @@ describe('SCRUM-8 decideRequest (service)', () => {
   /*
    * AC: SCRUM-8 AC2
    * Scenario: Another reservation ends exactly when this event starts.
-   * Setup: Other event ends 09:00; this event starts 09:00. Catalogue 8 AVAILABLE.
+   * Setup: Other event ends 09:00 and holds all 8; this event starts 09:00. Catalogue 8 AVAILABLE.
    * Expected: not overlapping — reserve succeeds.
    * Type: boundary
    */
+  // SCRUM-8-TC04
   it('AC2: a touching reservation does not block this event', async () => {
     fetchOne
       .mockResolvedValueOnce(PENDING)
@@ -186,6 +190,7 @@ describe('SCRUM-8 decideRequest (service)', () => {
       .mockResolvedValueOnce(MIC);
     fetchMany.mockResolvedValue([
       overlappingReservation({
+        quantity: 8,
         events: {
           id: 5,
           name: 'Earlier slot',
@@ -207,6 +212,7 @@ describe('SCRUM-8 decideRequest (service)', () => {
    * Expected: not committed — reserve succeeds (same formula as SCRUM-21).
    * Type: boundary
    */
+  // SCRUM-8-TC05
   it('AC2: a cancelled event reservation does not block this reserve', async () => {
     fetchOne
       .mockResolvedValueOnce(PENDING)
@@ -234,6 +240,7 @@ describe('SCRUM-8 decideRequest (service)', () => {
    * Expected: 409. Maintenance stock is not in the operational pool.
    * Type: error
    */
+  // SCRUM-8-TC06
   it('AC2: refuses reserve when the catalogue item is not operational', async () => {
     fetchOne
       .mockResolvedValueOnce(PENDING)
@@ -253,6 +260,7 @@ describe('SCRUM-8 decideRequest (service)', () => {
    * Expected: request becomes UNAVAILABLE; no reservation row (AC2 is only for confirm).
    * Type: normal
    */
+  // SCRUM-8-TC07
   it('AC2: marking Unavailable is not a reservation and is not blocked by short stock', async () => {
     fetchOne
       .mockResolvedValueOnce(PENDING)
@@ -274,6 +282,7 @@ describe('SCRUM-8 decideRequest (service)', () => {
    * Expected: 400. No reservation.
    * Type: error
    */
+  // SCRUM-8-TC08
   it('AC1/AC2: refuses reserve when the request has no catalogue item', async () => {
     fetchOne
       .mockResolvedValueOnce({ ...PENDING, equipment_id: null })
@@ -291,6 +300,7 @@ describe('SCRUM-8 decideRequest (service)', () => {
    * Expected: 400. AC2 cannot be satisfied without a window.
    * Type: error
    */
+  // SCRUM-8-TC09
   it('AC2: refuses reserve when the event has no date and time', async () => {
     fetchOne
       .mockResolvedValueOnce(PENDING)
@@ -308,6 +318,7 @@ describe('SCRUM-8 decideRequest (service)', () => {
    * Expected: 409 ALREADY_DECIDED. No second reservation row (would over-commit).
    * Type: conflict
    */
+  // SCRUM-8-TC10
   it('AC1: refuses a second reserve on an already decided request', async () => {
     fetchOne.mockResolvedValue({ ...PENDING, status: 'RESERVED' });
 
@@ -324,6 +335,7 @@ describe('SCRUM-8 decideRequest (service)', () => {
    * Expected: 404.
    * Type: error
    */
+  // SCRUM-8-TC11
   it('AC1: returns 404 when the request is missing', async () => {
     fetchOne.mockResolvedValue(null);
     await expect(equipmentService.decideRequest(TECH, 99, { approve: true }))
@@ -337,6 +349,7 @@ describe('SCRUM-8 decideRequest (service)', () => {
    * Expected: 403 before the request row is loaded. That is create and modify.
    * Type: error
    */
+  // SCRUM-8-TC12
   it('AC3: refuses create or modify to anyone who is not Technical Support', async () => {
     await expect(equipmentService.decideRequest(COORDINATOR, 20, { approve: true }))
       .rejects.toMatchObject({ status: 403 });
@@ -358,6 +371,7 @@ describe('SCRUM-8 reservation HTTP', () => {
    * Expected: 200 and request status RESERVED.
    * Type: normal
    */
+  // SCRUM-8-TC13
   it('AC1: Tech receives 200 when the reservation is confirmed', async () => {
     fetchOne
       .mockResolvedValueOnce(PENDING)
@@ -379,6 +393,7 @@ describe('SCRUM-8 reservation HTTP', () => {
    * Expected: 409 INSUFFICIENT_EQUIPMENT. Body is not a reserved request.
    * Type: error
    */
+  // SCRUM-8-TC14
   it('AC2: Tech receives 409 when the requested quantity exceeds available', async () => {
     fetchOne
       .mockResolvedValueOnce(PENDING)
@@ -401,6 +416,7 @@ describe('SCRUM-8 reservation HTTP', () => {
    * Expected: 403. No reservation is created.
    * Type: error
    */
+  // SCRUM-8-TC15
   it('AC3: Coordinators receive 403 on the decision route', async () => {
     mockRoles = [ROLES.EVENT_COORDINATOR];
     const res = await request(app)
@@ -417,6 +433,7 @@ describe('SCRUM-8 reservation HTTP', () => {
    * Expected: 400. No reservation body.
    * Type: error
    */
+  // SCRUM-8-TC16
   it('AC1/AC2: missing catalogue item returns 400', async () => {
     fetchOne
       .mockResolvedValueOnce({ ...PENDING, equipment_id: null })
@@ -435,6 +452,7 @@ describe('SCRUM-8 reservation HTTP', () => {
    * Expected: 400.
    * Type: error
    */
+  // SCRUM-8-TC17
   it('AC2: missing event times return 400', async () => {
     fetchOne
       .mockResolvedValueOnce(PENDING)
@@ -452,6 +470,7 @@ describe('SCRUM-8 reservation HTTP', () => {
    * Expected: 404.
    * Type: error
    */
+  // SCRUM-8-TC18
   it('AC1: unknown request returns 404', async () => {
     fetchOne.mockResolvedValue(null);
     const res = await request(app)
@@ -467,6 +486,7 @@ describe('SCRUM-8 reservation HTTP', () => {
    * Expected: 409 ALREADY_DECIDED.
    * Type: conflict
    */
+  // SCRUM-8-TC19
   it('AC1: already decided request returns 409', async () => {
     fetchOne.mockResolvedValue({ ...PENDING, status: 'RESERVED' });
     const res = await request(app)
