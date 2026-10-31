@@ -1159,17 +1159,127 @@ async function listUnavailability(venueId) {
   return fetchMany(query);
 }
 
+/*
+ * Purpose: every confirmed booking or active tentative hold at one venue whose occupied
+ *   window overlaps a given period, so a recorded unavailability period can be matched
+ *   against what is already booked there.
+ * AC: SCRUM-60 AC2 (occupied window = start - setup to end + turnaround; holds keep their
+ *     held period, same as SCRUM-67), AC3 (a window that only touches the period's edge is
+ *     not an overlap -- windowsOverlap is strict), AC4 (only APPROVED bookings and active
+ *     TENTATIVE holds; PENDING/REJECTED/CANCELLED and expired holds are excluded), AC5 (only
+ *     this venue's bookings -- another venue booking of the same multi-venue event is a
+ *     separate row with its own venue_id and is filtered out), AC6 (a booking already in the
+ *     past, end_at at or before now, is excluded).
+ * Inputs: venueId, a period with startAt/endAt (accepts either camelCase or the
+ *   start_at/end_at shape a venue_unavailability row already has), and now (a parameter so
+ *   tests can fix the time).
+ * Output: [{ row, isHold, occupiedStart, occupiedEnd }] for each overlapping booking.
+ * Failure: a database error propagates.
+ */
+async function findBookingsOverlappingPeriod(venueId, period, now = new Date()) {
+  const periodStart = new Date(period.startAt ?? period.start_at);
+  const periodEnd = new Date(period.endAt ?? period.end_at);
+
+  const rows = await fetchMany(
+    supabase
+      .from('venue_bookings')
+      .select('*, events ( name )')
+      .eq('venue_id', venueId)
+      .in('status', [BOOKING_STATUS.APPROVED, BOOKING_STATUS.TENTATIVE])
+  );
+
+  return rows
+    .filter((row) => String(row.venue_id) === String(venueId))
+    .filter((row) => row.status === BOOKING_STATUS.APPROVED || row.status === BOOKING_STATUS.TENTATIVE)
+    .filter((row) => new Date(row.end_at) > now)
+    .map((row) => {
+      const isHold = row.status === BOOKING_STATUS.TENTATIVE;
+      if (isHold && !isActiveHold(row, now)) return null;
+      const occupied = isHold
+        ? { occupiedStart: new Date(row.start_at), occupiedEnd: new Date(row.end_at) }
+        : computeOccupiedWindow(row.start_at, row.end_at, row.setup_minutes, row.teardown_minutes);
+      return { row, isHold, ...occupied };
+    })
+    .filter((entry) => entry
+      && windowsOverlap(periodStart, periodEnd, entry.occupiedStart, entry.occupiedEnd));
+}
+
+// Shapes one overlapping booking entry for an API response (event, venue, date, time).
+function toAffectedBookingSummary({ row, isHold }) {
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    eventName: row.events?.name || null,
+    venueId: row.venue_id,
+    type: isHold ? AVAILABILITY_BLOCK.TENTATIVE_HOLD : AVAILABILITY_BLOCK.BOOKING,
+    status: row.status,
+    startAt: new Date(row.start_at).toISOString(),
+    endAt: new Date(row.end_at).toISOString(),
+  };
+}
+
+/*
+ * Purpose: when a venue unavailability period is recorded, find every booking it affects and
+ *   mark each one as needing alternative arrangements, reusing the same needs_review flag
+ *   SCRUM-42/58 already set -- so the Coordinator sees "Requires review" on the event page
+ *   with no new UI there.
+ * AC: SCRUM-60 AC1 (runs when the period is recorded), AC7 (marks needs_review; the
+ *     Coordinator already sees this flag on the event page via listVenueBookings), AC9 (marks
+ *     needs_review only -- status, venue, date and time are left exactly as they were).
+ * Inputs: venueId, the just-recorded period, and now (a parameter so tests can fix the time).
+ * Output: every affected booking (event, venue, date, time), whether newly marked here or
+ *   already marked from an earlier overlapping period -- the Venue Staff viewing the period
+ *   sees everything affected now, not just what changed this time.
+ * Failure: a database error propagates; the unavailability period has already been saved.
+ */
+async function identifyAndMarkAffectedBookings(venueId, period, now = new Date()) {
+  const overlapping = await findBookingsOverlappingPeriod(venueId, period, now);
+  const nowIso = now.toISOString();
+  for (const { row } of overlapping) {
+    if (!row.needs_review) {
+      await updateById('venue_bookings', row.id, { needs_review: true, updated_at: nowIso });
+    }
+  }
+  return overlapping.map(toAffectedBookingSummary);
+}
+
+/*
+ * Purpose: the Venue Staff who recorded a period can view the bookings it affects, any time
+ *   -- not only right after recording it.
+ * AC: SCRUM-60 AC8. Re-derives the same overlap as identifyAndMarkAffectedBookings (read-only
+ *     -- recording already did the marking), so the list stays correct even if bookings were
+ *     added after the period was recorded.
+ * Inputs: the requesting user, and the unavailability period id.
+ * Output: every booking affected by that period (event, venue, date, time).
+ * Failure: 403 if not Venue Staff; 404 if the period doesn't exist.
+ */
+async function listBookingsAffectedByUnavailability(user, unavailabilityId, now = new Date()) {
+  if (!hasRole(user, ROLES.VENUE_STAFF)) {
+    throw httpError(403, 'Only venue staff can view affected bookings', 'FORBIDDEN');
+  }
+  const period = await fetchOne(
+    supabase.from('venue_unavailability').select('*').eq('id', unavailabilityId)
+  );
+  if (!period) throw httpError(404, 'Unavailability period not found', 'NOT_FOUND');
+
+  const overlapping = await findBookingsOverlappingPeriod(period.venue_id, period, now);
+  return overlapping.map(toAffectedBookingSummary);
+}
+
 async function blockVenue(user, payload) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can block venues', 'FORBIDDEN');
   }
-  return insertOne('venue_unavailability', {
+  const period = await insertOne('venue_unavailability', {
     venue_id: payload.venueId,
     reason: payload.reason || 'Maintenance',
     start_at: payload.startAt,
     end_at: payload.endAt,
     created_by: user.id,
   });
+  // SCRUM-60 AC1: identify and mark affected bookings as soon as the period is recorded.
+  const affectedBookings = await identifyAndMarkAffectedBookings(payload.venueId, period);
+  return { ...period, affectedBookings };
 }
 
 module.exports = {
@@ -1187,6 +1297,8 @@ module.exports = {
   buildBookingDecisionNotice,
   listUnavailability,
   blockVenue,
+  identifyAndMarkAffectedBookings,
+  listBookingsAffectedByUnavailability,
   computeOccupiedWindow,
   windowsOverlap,
   findConflict,
