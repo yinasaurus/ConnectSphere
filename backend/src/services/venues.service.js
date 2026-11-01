@@ -441,7 +441,7 @@ async function listVenueBookingsForPeriod(venueId, { from, to } = {}, now = new 
   const rows = await fetchMany(
     supabase
       .from('venue_bookings')
-      .select('*, events ( name )')
+      .select('*, events ( name, coordinator_id ), venues ( name )')
       .eq('venue_id', venueId)
       .in('status', [BOOKING_STATUS.APPROVED, BOOKING_STATUS.TENTATIVE])
   );
@@ -1219,26 +1219,70 @@ function toAffectedBookingSummary({ row, isHold }) {
 }
 
 /*
- * Purpose: when a venue unavailability period is recorded, find every booking it affects and
- *   mark each one as needing alternative arrangements, reusing the same needs_review flag
- *   SCRUM-42/58 already set -- so the Coordinator sees "Requires review" on the event page
- *   with no new UI there.
- * AC: SCRUM-60 AC1 (runs when the period is recorded), AC7 (marks needs_review; the
- *     Coordinator already sees this flag on the event page via listVenueBookings), AC9 (marks
- *     needs_review only -- status, venue, date and time are left exactly as they were).
- * Inputs: venueId, the just-recorded period, and now (a parameter so tests can fix the time).
- * Output: every affected booking (event, venue, date, time), whether newly marked here or
- *   already marked from an earlier overlapping period -- the Venue Staff viewing the period
- *   sees everything affected now, not just what changed this time.
- * Failure: a database error propagates; the unavailability period has already been saved.
+ * Purpose: notify the assigned Coordinator once for each affected event when a venue period
+ *   is recorded. Read-only affected-booking lookups do not send notices.
+ * AC: SCRUM-79 AC1-AC5; recipients and affected events come from SCRUM-60 overlap matching.
+ * Inputs: overlapping booking entries with event and venue details, and the saved period.
+ * Output: nothing. One in-app notice per Coordinator/event pair.
+ * Failure: notification database errors propagate to the caller.
  */
-async function identifyAndMarkAffectedBookings(venueId, period, now = new Date()) {
+async function notifyAffectedCoordinators(overlapping, period) {
+  const notices = new Map();
+  for (const { row } of overlapping) {
+    const coordinatorId = row.events?.coordinator_id;
+    if (coordinatorId == null) continue;
+
+    const key = `${coordinatorId}:${row.event_id}`;
+    if (notices.has(key)) continue;
+
+    const eventName = row.events?.name || 'Event';
+    const venueName = row.venues?.name || 'Venue';
+    const startAt = period.start_at || period.startAt;
+    const endAt = period.end_at || period.endAt;
+    const reason = period.reason ? ` Reason: ${period.reason}.` : '';
+    notices.set(key, {
+      coordinatorId,
+      eventId: row.event_id,
+      title: 'Alternative arrangements required',
+      body: `${eventName} at ${venueName} is affected by an unavailability period from ${startAt} to ${endAt}.${reason} Please arrange an alternative venue.`,
+    });
+  }
+
+  for (const notice of notices.values()) {
+    await notifyUser(
+      notice.coordinatorId,
+      'VENUE_UNAVAILABLE',
+      notice.title,
+      notice.body,
+      notice.eventId
+    );
+  }
+}
+
+/*
+ * Purpose: find each booking affected by a recorded venue period and set the existing
+ *   needs_review flag. Notify Coordinators only when called by the recording flow, never on
+ *   subsequent list/read calls.
+ * AC: SCRUM-60 AC1, AC7, AC9; SCRUM-79 AC1-AC5.
+ * Inputs: venueId, period, a fixed testable clock, and optional notification flag.
+ * Output: each affected booking summary.
+ * Failure: database or notification errors propagate; the period has already been saved.
+ */
+async function identifyAndMarkAffectedBookings(
+  venueId,
+  period,
+  now = new Date(),
+  { notifyCoordinators = false } = {}
+) {
   const overlapping = await findBookingsOverlappingPeriod(venueId, period, now);
   const nowIso = now.toISOString();
   for (const { row } of overlapping) {
     if (!row.needs_review) {
       await updateById('venue_bookings', row.id, { needs_review: true, updated_at: nowIso });
     }
+  }
+  if (notifyCoordinators) {
+    await notifyAffectedCoordinators(overlapping, period);
   }
   return overlapping.map(toAffectedBookingSummary);
 }
@@ -1295,8 +1339,10 @@ async function blockVenue(user, payload) {
     end_at: payload.endAt,
     created_by: user.id,
   });
-  // SCRUM-60 AC1: identify and mark affected bookings as soon as the period is recorded.
-  const affectedBookings = await identifyAndMarkAffectedBookings(payload.venueId, period);
+  // SCRUM-60 AC1 / SCRUM-79 AC1: identify, mark and notify for newly affected bookings.
+  const affectedBookings = await identifyAndMarkAffectedBookings(payload.venueId, period, new Date(), {
+    notifyCoordinators: true,
+  });
   return { ...period, affectedBookings };
 }
 
