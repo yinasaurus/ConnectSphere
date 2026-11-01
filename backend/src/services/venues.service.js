@@ -793,13 +793,12 @@ async function listBookings(filters = {}) {
       decided_at: row.decided_at,
       created_at: row.created_at,
       // SCRUM-77 AC5: Venue Staff see which bookings are flagged for review (same mark as SCRUM-42).
+      // SCRUM-58 AC6: the Venues list needs this so an approved booking can be approved again.
       needs_review: Boolean(row.needs_review),
       venue_name: row.venues?.name,
       event_name: row.events?.name,
       event_start_at: row.events?.start_at,
       event_end_at: row.events?.end_at,
-      // SCRUM-58 AC6: the Venues list needs this so an approved booking can be approved again.
-      needs_review: Boolean(row.needs_review),
       // SCRUM-75: the Venues page shows when a Held booking expires.
       hold_expires_at: row.hold_expires_at || null,
       has_conflict: hasConflict,
