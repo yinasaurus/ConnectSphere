@@ -292,10 +292,12 @@ export default function EventDetail() {
       </div>
       {error && <div className="alert">{error}</div>}
       {/* Keep the submitted-request confirmation visible after returning from booking or equipment request. */}
-      {(message || location.state?.venueBookingSubmitted || location.state?.equipmentRequestSubmitted) && (
+      {(message || location.state?.venueBookingSubmitted || location.state?.replacementBookingSubmitted || location.state?.equipmentRequestSubmitted) && (
         <div className="alert success" role="status">
           {location.state?.venueBookingSubmitted
             ? 'Venue booking request submitted. Venue Staff will review it as Pending.'
+            : location.state?.replacementBookingSubmitted
+            ? 'Replacement venue request submitted. Venue Staff will review it as Pending.'
             : location.state?.equipmentRequestSubmitted
             ? 'Equipment request submitted. Technical Support Staff can now review and prepare the equipment.'
             : message}
@@ -907,6 +909,14 @@ export default function EventDetail() {
                   <p style={{ margin: '2px 0', fontSize: '0.88rem', color: '#22c55e' }}>
                     ✓ Confirmed venue booking
                   </p>
+                )}
+                {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && booking.needs_review && (
+                  <Link
+                    className="btn secondary"
+                    to={`/app/events/${id}/venue-booking?replacementFor=${encodeURIComponent(booking.id)}`}
+                  >
+                    Request replacement venue
+                  </Link>
                 )}
                 {/*
                  * Purpose: expose cancellation for an eligible booking to its assigned Coordinator.

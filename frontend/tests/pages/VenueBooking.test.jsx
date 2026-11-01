@@ -69,6 +69,21 @@ function configureApi(event = eventFixture, bookings = [], venues = venueFixture
     if (path === '/api/events/3/history') return { history: [] };
     if (path === '/api/comments/3') return { comments: [] };
     if (path === '/api/events/3/venue-bookings') return { bookings: savedBookings };
+    if (path === '/api/venues/bookings/10/replacement' && options.method === 'POST') {
+      savedBookings = [{
+        id: 8,
+        event_id: 3,
+        venue_id: options.body.venueId,
+        venue_name: 'Multi-purpose Hall B',
+        status: 'PENDING',
+        start_at: event.startAt,
+        end_at: event.endAt,
+        setup_minutes: 30,
+        teardown_minutes: 45,
+        created_at: '2026-10-05T12:00:00.000Z',
+      }];
+      return { booking: { id: 8, status: 'PENDING' } };
+    }
     if (path === '/api/venues/bookings' && options.method === 'POST') {
       savedBookings = [{
         id: 8,
@@ -87,9 +102,9 @@ function configureApi(event = eventFixture, bookings = [], venues = venueFixture
 }
 
 // Exercise the booking-to-event return in the same router used by the actual application.
-function renderBookingRoute() {
+function renderBookingRoute(initialPath = '/app/events/3/venue-booking') {
   render(
-    <MemoryRouter initialEntries={['/app/events/3/venue-booking']}>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/app/events/:id/venue-booking" element={<VenueBooking />} />
         <Route path="/app/events/:id" element={<EventDetail />} />
@@ -293,4 +308,45 @@ it('uses each historical request venue snapshot when the venue is no longer acti
   const formerVenue = await screen.findByText('Former Venue');
   const requestRow = formerVenue.closest('.venue-request-row');
   expect(within(requestRow).getByText('Venue appears suitable')).toBeInTheDocument();
+});
+
+/*
+ * AC: SCRUM-68 AC1, AC2, AC3, AC5.
+ * Scenario: The assigned Coordinator requests a replacement venue for a flagged booking.
+ * Setup: The affected booking is flagged; event details are read-only and the selected
+ *        replacement venue has saved setup and turnaround values.
+ * Expected: The existing venue selection and suitability checks are shown, and submission
+ *           calls the replacement endpoint with only the selected venue id.
+ * Type: normal.
+ */
+// SCRUM-68-TC08
+it('submits a flagged booking replacement through the standard venue selection flow', async () => {
+  const user = userEvent.setup();
+  configureApi(eventFixture, [{
+    id: 10,
+    event_id: eventFixture.id,
+    venue_id: 4,
+    venue_name: 'Seminar Room 3-4',
+    status: 'APPROVED',
+    needs_review: true,
+  }]);
+
+  renderBookingRoute('/app/events/3/venue-booking?replacementFor=10');
+
+  expect(await screen.findByText('Request a replacement venue for this event')).toBeInTheDocument();
+  expect(screen.getByText(/event remain unchanged/i)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Submit replacement request' })).toBeDisabled();
+  await user.selectOptions(screen.getByLabelText('Choose a venue'), '5');
+
+  expect(screen.getAllByText('Venue appears unsuitable')).toHaveLength(2);
+  expect(screen.getByText('Expected attendance (100) exceeds venue capacity (80).')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Submit replacement request' })).toBeEnabled();
+  await user.click(screen.getByRole('button', { name: 'Submit replacement request' }));
+
+  await waitFor(() => {
+    expect(api).toHaveBeenCalledWith('/api/venues/bookings/10/replacement', {
+      method: 'POST',
+      body: { venueId: 5 },
+    });
+  });
 });

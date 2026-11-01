@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 
 // Keep date/time output consistent between the live window and saved requests.
@@ -150,7 +150,9 @@ function BookingRequest({ booking, event, venues }) {
 
 export default function VenueBooking() {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const replacementFor = new URLSearchParams(location.search).get('replacementFor');
   const [event, setEvent] = useState(null);
   const [venues, setVenues] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -186,6 +188,11 @@ export default function VenueBooking() {
     () => venues.find((item) => String(item.id) === venueId),
     [venues, venueId]
   );
+  const replacementSource = replacementFor
+    ? bookings.find((booking) => String(booking.id) === replacementFor)
+    : null;
+  const replacementEligible = !replacementFor
+    || Boolean(replacementSource?.needs_review && String(replacementSource.venue_id) !== venueId);
   const eventTimeValid = isValidDate(event?.startAt)
     && isValidDate(event?.endAt)
     && new Date(event.startAt) < new Date(event.endAt);
@@ -206,9 +213,12 @@ export default function VenueBooking() {
     { label: 'Event date and time set', passed: Boolean(eventTimeValid) },
     { label: 'Venue has setup and turnaround times', passed: venueTimesValid },
     { label: 'Required venue details are recorded', passed: requirementsValid },
+    ...(replacementFor
+      ? [{ label: 'Booking is flagged for alternative arrangements', passed: Boolean(replacementSource?.needs_review) }]
+      : []),
   ];
   // Prevent a second submission while the current request is being saved.
-  const canSubmit = checks.every((check) => check.passed) && !submitting;
+  const canSubmit = checks.every((check) => check.passed) && replacementEligible && !submitting;
   const occupiedWindow = eventTimeValid && venueTimesValid
     ? getOccupiedWindow(event.startAt, event.endAt, venue.setupMinutes, venue.teardownMinutes)
     : null;
@@ -223,9 +233,13 @@ export default function VenueBooking() {
     setError('');
     setSubmitting(true);
     try {
-      await api('/api/venues/bookings', {
+      await api(replacementFor
+        ? `/api/venues/bookings/${encodeURIComponent(replacementFor)}/replacement`
+        : '/api/venues/bookings', {
         method: 'POST',
-        body: {
+        body: replacementFor
+          ? { venueId: Number(venue.id) }
+          : {
           // The API accepts camelCase fields and persists them as event/venue IDs and booking times.
           eventId: Number(id),
           venueId: Number(venue.id),
@@ -237,7 +251,11 @@ export default function VenueBooking() {
       });
       // Return to this event so its refreshed request list shows the new Pending booking.
       // The destination page reads this navigation state to show its success banner.
-      navigate(`/app/events/${id}`, { state: { venueBookingSubmitted: true } });
+      navigate(`/app/events/${id}`, {
+        state: replacementFor
+          ? { replacementBookingSubmitted: true }
+          : { venueBookingSubmitted: true },
+      });
     } catch (err) {
       setError(err.message);
       setSubmitting(false);
@@ -252,11 +270,17 @@ export default function VenueBooking() {
       <header className="venue-booking-heading">
         <p className="muted">{event.category || 'Event'} · {event.status}</p>
         <h1>{event.name}</h1>
-        <p>Book a venue for this event</p>
+        <p>{replacementFor ? 'Request a replacement venue for this event' : 'Book a venue for this event'}</p>
       </header>
 
       <Link className="venue-back-link" to={`/app/events/${id}`}>‹ Back to event</Link>
       {error && <div className="alert" role="alert">{error}</div>}
+      {replacementFor && (
+        <p className="alert info">
+          The replacement request uses this event’s saved details and schedule. The affected booking and event remain unchanged.
+          A new request will be Pending until Venue Staff decide.
+        </p>
+      )}
 
       <div className="venue-booking-columns">
         <div className="stack">
@@ -267,8 +291,13 @@ export default function VenueBooking() {
             <select id="venue-select" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
               <option value="">Select a venue</option>
               {venues.map((item) => (
-                <option key={item.id} value={item.id}>
+                <option
+                  key={item.id}
+                  value={item.id}
+                  disabled={Boolean(replacementSource && String(item.id) === String(replacementSource.venue_id))}
+                >
                   {item.name} (seats {item.capacity})
+                  {replacementSource && String(item.id) === String(replacementSource.venue_id) ? ' — affected venue' : ''}
                 </option>
               ))}
             </select>
@@ -369,7 +398,7 @@ export default function VenueBooking() {
             <div className="actions booking-actions">
               <Link className="btn secondary" to={`/app/events/${id}`}>Cancel</Link>
               <button className="btn" disabled={!canSubmit} onClick={submitRequest}>
-                {submitting ? 'Submitting…' : 'Submit request'}
+                {submitting ? 'Submitting…' : replacementFor ? 'Submit replacement request' : 'Submit request'}
               </button>
             </div>
           </section>

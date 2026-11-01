@@ -720,6 +720,37 @@ it('US18-F03 (AC2): displays event name, venue name, booking window, and event d
   expect(screen.getByText(/Event date:/i)).toBeInTheDocument();
 });
 
+/*
+ * AC: SCRUM-68 AC1 & AC6.
+ * Scenario: The assigned Coordinator views a booking flagged for alternative arrangements.
+ * Setup: The event has an APPROVED venue booking with needs_review true.
+ * Expected: The Coordinator sees a link to request a replacement for that specific booking.
+ * Type: normal.
+ */
+// SCRUM-68-TC07
+it('offers a replacement venue action for a flagged booking to its assigned Coordinator', async () => {
+  useAuth.mockReturnValue({
+    user: { id: 2 },
+    hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
+  });
+  mockEvent({
+    coordinatorId: 2,
+    status: 'PLANNING',
+    bookings: [{
+      id: 12,
+      venue_id: 8,
+      venue_name: 'Affected Hall',
+      status: 'APPROVED',
+      needs_review: true,
+    }],
+  });
+
+  renderEvent();
+
+  expect(await screen.findByRole('link', { name: 'Request replacement venue' }))
+    .toHaveAttribute('href', '/app/events/3/venue-booking?replacementFor=12');
+});
+
 describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () => {
   const approvedBooking = {
     id: 7,
