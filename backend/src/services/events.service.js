@@ -2116,8 +2116,42 @@ async function decideChangeRequest(user, eventId, requestId, { approve, reason }
     // Bypass updateEvent so Confirmed stays locked to every direct edit (SCRUM-40 2A)
     // but an approved change request can still apply date/time/attendance/requirements.
     await updateById('events', event.id, eventPatch);
+    /*
+     * Purpose: return a Confirmed event to Planning when an approved request changes its date,
+     *   time, or expected attendance so operational arrangements can be reviewed again.
+     * AC: SCRUM-85 AC1 (critical fields trigger reversion), AC2 (venue/equipment-only changes
+     *   do not), AC3/AC4 (pending and rejected requests never reach this branch), AC5 (history).
+     * Inputs: original event row and approved eventPatch. Output: event status and status history
+     *   are updated only for a changed revert-trigger field.
+     * Failure: status-update or history-write errors propagate; the request is not approved.
+     */
+    const approvedNextRow = { ...event, ...eventPatch };
+    const approvedChangedFields = changedCriticalFields(event, approvedNextRow);
+    const revertTriggerFields = new Set(['startAt', 'endAt', 'expectedAttendance']);
+    const revertTriggered =
+      event.status === EVENT_STATUS.CONFIRMED &&
+      approvedChangedFields.some((field) => revertTriggerFields.has(field));
+
+    if (revertTriggered) {
+      await updateById('events', event.id, {
+        status: EVENT_STATUS.PLANNING,
+        updated_at: nowIso,
+      });
+      await writeStatusHistory(
+        event.id,
+        user.id,
+        EVENT_STATUS.CONFIRMED,
+        EVENT_STATUS.PLANNING,
+        'Reverted to Planning: approved critical change on Confirmed event'
+      );
+    }
     // Flag before APPROVED so a DB error here leaves the request PENDING (retryable).
-    await flagArrangementsForReview(user, event, { ...event, ...eventPatch });
+    // For Confirmed events: only flag when a revert-trigger field changed (AC2 — venue/
+    // equipment-only changes on a Confirmed event do not flag arrangements).
+    // For all other statuses (Planning, etc.): always flag when any critical field changed.
+    if (revertTriggered || event.status !== EVENT_STATUS.CONFIRMED) {
+      await flagArrangementsForReview(user, event, approvedNextRow);
+    }
   }
 
   const crPatch = {
