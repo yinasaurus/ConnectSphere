@@ -209,6 +209,8 @@ function PendingBookingCard({ booking, onDecide }) {
  * SCRUM-18 AC7/AC8: row in the decided bookings table.
  * SCRUM-58 AC6: an approved booking marked for review gets Approve only.
  * Reject stays off that row so the booking is not cancelled.
+ * SCRUM-77 AC5: a booking flagged for review shows "Requires review" beside its status;
+ * the status itself is unchanged.
  */
 function BookingRow({ booking, onApprove }) {
   const [deciding, setDeciding] = useState(false);
@@ -274,6 +276,16 @@ function BookingRow({ booking, onApprove }) {
   );
 }
 
+/*
+ * Purpose: The venues page. Everyone can search for available venues and browse the catalogue;
+ *   Venue Staff can also add and update venues and handle booking requests.
+ * AC / rule: SCRUM-77 AC5 (Venue Staff see the bookings flagged for review, and are told when
+ *   a save flags some), SCRUM-19 (booking requests), SCRUM-23 (venue search).
+ * Inputs: none; the role comes from the signed-in user, data from /api/venues and
+ *   /api/venues/bookings.
+ * Output: the page. After a venue save the toast says how many bookings were flagged, if any.
+ * Failure: a failed load or save shows its message on the page; nothing is changed in the browser.
+ */
 export default function Venues() {
   const { hasRole } = useAuth();
   const [venues, setVenues] = useState([]);
@@ -308,7 +320,9 @@ export default function Venues() {
 
   const isVenueStaff = hasRole(ROLES.VENUE_STAFF);
   const pendingBookings = bookings.filter((b) => b.status === 'PENDING');
-  const decidedBookings = bookings.filter((b) => b.status !== 'PENDING');
+  const decidedBookings = bookings.filter((b) => b.status !== 'PENDING' && !b.needs_review);
+  // SCRUM-77 AC5: bookings the backend marked as clashing under the venue's setup/turnaround times.
+  const flaggedBookings = bookings.filter((b) => b.needs_review);
 
   async function reload() {
     const [venueRes, bookingRes] = await Promise.all([
@@ -388,12 +402,19 @@ export default function Venues() {
       const updatePayload = { ...updateForm };
       delete updatePayload.updatedAt;
       // The backend uses layout IDs to update or delete existing rows and inserts ID-less layouts.
-      await api(`/api/venues/${selectedId}`, { method: 'PATCH', body: updatePayload });
+      const saved = await api(`/api/venues/${selectedId}`, { method: 'PATCH', body: updatePayload });
       await reload();
       const refreshed = (await api('/api/venues')).venues?.find((venue) => venue.id === selectedId);
       if (refreshed) setUpdateForm(venueForm(refreshed));
-      setSaveToast(`${updatePayload.name} updated`);
-      window.setTimeout(() => setSaveToast(''), 2500);
+      // SCRUM-77 AC1: tell Venue Staff straight away when the new times put bookings in a clash.
+      const flaggedCount = saved?.venue?.flaggedBookingIds?.length || 0;
+      const flaggedNote = flaggedCount === 1
+        ? '1 booking now overlaps another and is flagged for review.'
+        : `${flaggedCount} bookings now overlap and are flagged for review.`;
+      setSaveToast(flaggedCount
+        ? `${updatePayload.name} updated. ${flaggedNote}`
+        : `${updatePayload.name} updated`);
+      window.setTimeout(() => setSaveToast(''), flaggedCount ? 6000 : 2500);
     } catch (err) {
       setUpdateError(err.details?.map((detail) => `${detail.field}: ${detail.message}`).join(' ') || err.message);
     } finally {
@@ -732,6 +753,37 @@ export default function Venues() {
 
         {isVenueStaff && pendingBookings.length === 0 && (
           <p className="muted" style={{ marginBottom: 16 }}>No pending booking requests.</p>
+        )}
+
+        {/*
+          SCRUM-77 AC5: bookings flagged for review, listed for Venue Staff. A booking is flagged
+          when a change to a venue's setup or turnaround time makes it overlap another booking.
+          Nothing is cancelled or changed; staff resolve each one with the Coordinator.
+        */}
+        {isVenueStaff && flaggedBookings.length > 0 && (
+          <div style={{ marginBottom: 24 }} id="flagged-bookings">
+            <h4 style={{ marginBottom: 6 }}>Flagged for review</h4>
+            <p className="muted" style={{ marginBottom: 10 }}>
+              These bookings are flagged for review, for example after a change to a venue&apos;s
+              setup or turnaround times. Nothing has been cancelled or changed.
+            </p>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Venue</th>
+                  <th>Status</th>
+                  <th>Window</th>
+                  <th>Decision / Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {flaggedBookings.map((booking) => (
+                  <BookingRow key={booking.id} booking={booking} onApprove={isVenueStaff ? (id) => handleDecide(id, true) : undefined}/>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {/* Decided bookings table — Venue Staff see only decided ones; others see all */}

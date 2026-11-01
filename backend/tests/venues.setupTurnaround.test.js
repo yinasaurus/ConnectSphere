@@ -50,7 +50,12 @@ let tables;
 function useInMemoryTables() {
   let nextId = 100;
   const rowsFor = (query) => tables[query.table].filter((row) => (
-    query.filters.every(([column, value]) => String(row[column]) === String(value))
+    query.filters.every(([column, value]) => (
+      // `.in()` filters carry a list; `.eq()` filters carry one value.
+      Array.isArray(value)
+        ? value.map(String).includes(String(row[column]))
+        : String(row[column]) === String(value)
+    ))
   ));
 
   db.supabase.from.mockImplementation((table) => {
@@ -59,6 +64,11 @@ function useInMemoryTables() {
     query.order = () => query;
     query.eq = (column, value) => {
       query.filters.push([column, value]);
+      return query;
+    };
+    // Saving a venue's times now also reads that venue's bookings (SCRUM-58), which filters by status.
+    query.in = (column, values) => {
+      query.filters.push([column, values]);
       return query;
     };
     return query;
@@ -109,6 +119,7 @@ describe('SCRUM-59 venue setup and turnaround times', () => {
         is_active: true,
       }],
       venue_layouts: [],
+      venue_bookings: [],
     };
     useInMemoryTables();
   });
