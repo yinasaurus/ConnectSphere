@@ -736,6 +736,72 @@ async function requestBooking(user, payload) {
   return created;
 }
 
+/*
+ * Purpose: request a new venue for a booking marked for alternative arrangements.
+ * AC: SCRUM-68 AC1 (flag required), AC2 (existing conflict checks and pending workflow),
+ *     AC3/AC4 (event data and status are not changed), AC5 (Venue Staff decision flow),
+ *     AC6 (only the assigned Coordinator).
+ * Inputs: assigned Coordinator, affected booking id, and replacement venue id.
+ * Output: a new PENDING booking for the same event using its saved event window.
+ * Failure: 403 if not the assigned Coordinator, 404 if booking/event/venue is missing,
+ *     409 if the booking is not flagged or the same venue is selected, 400 for an invalid
+ *     event window or inactive venue, or the standard BOOKING_CONFLICT response.
+ */
+async function requestReplacementBooking(user, bookingId, payload = {}) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
+    throw httpError(403, 'Only coordinators can request replacement venue bookings', 'FORBIDDEN');
+  }
+
+  const affectedBooking = await fetchOne(
+    supabase.from('venue_bookings').select('*').eq('id', bookingId)
+  );
+  if (!affectedBooking) throw httpError(404, 'Booking not found', 'NOT_FOUND');
+
+  const event = await fetchOne(
+    supabase.from('events').select('*').eq('id', affectedBooking.event_id)
+  );
+  if (!event) throw httpError(404, 'Event not found', 'NOT_FOUND');
+  if (String(event.coordinator_id) !== String(user.id)) {
+    throw httpError(403, 'Only the Coordinator assigned to this event can request a replacement venue', 'FORBIDDEN');
+  }
+  if (!affectedBooking.needs_review) {
+    throw httpError(409, 'This booking is not flagged for alternative arrangements', 'ALTERNATIVE_NOT_REQUIRED');
+  }
+
+  const venueId = Number(payload.venueId);
+  if (!Number.isInteger(venueId) || venueId <= 0) {
+    throw httpError(400, 'A replacement venue is required', 'VALIDATION_ERROR');
+  }
+  if (String(venueId) === String(affectedBooking.venue_id)) {
+    throw httpError(409, 'Choose a different venue for the replacement booking', 'SAME_VENUE');
+  }
+
+  const venue = await fetchOne(
+    supabase.from('venues').select('*').eq('id', venueId)
+  );
+  if (!venue) throw httpError(404, 'Venue not found', 'NOT_FOUND');
+  if (!venue.is_active) {
+    throw httpError(400, 'The selected venue is not available for booking', 'VENUE_UNAVAILABLE');
+  }
+  if (!event.start_at || !event.end_at
+    || !Number.isFinite(new Date(event.start_at).getTime())
+    || !Number.isFinite(new Date(event.end_at).getTime())
+    || new Date(event.start_at) >= new Date(event.end_at)) {
+    throw httpError(400, 'The event must have a valid start and end time before requesting a replacement venue', 'INVALID_EVENT_WINDOW');
+  }
+
+  // Reuse the standard request path so replacements get the same conflict checks,
+  // audit trail, Venue Staff notification, and PENDING approval workflow.
+  return requestBooking(user, {
+    eventId: event.id,
+    venueId: venue.id,
+    startAt: event.start_at,
+    endAt: event.end_at,
+    setupMinutes: venue.setup_minutes,
+    teardownMinutes: venue.teardown_minutes,
+  });
+}
+
 /**
  * Purpose: Venue Staff approve or reject a venue booking request. The decision is saved
  * first, then the event's assigned Coordinator is notified so they can proceed or arrange
@@ -1309,6 +1375,7 @@ module.exports = {
   updateVenue,
   listBookings,
   requestBooking,
+  requestReplacementBooking,
   decideBooking,
   placeHold,
   cancelBooking,
