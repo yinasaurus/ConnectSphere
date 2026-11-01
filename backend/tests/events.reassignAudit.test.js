@@ -70,6 +70,7 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
    *   created_at is left off the row so the database default records it.
    * Type: normal
    */
+  // SCRUM-32-TC01
   it('records who changed the Coordinator, and the old and new Coordinator, when a Lead reassigns', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -95,6 +96,7 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
    *   old and new Coordinator. One entry must not be reused for both.
    * Type: normal
    */
+  // SCRUM-32-TC02
   it('writes a separate audit entry for each confirmed reassignment', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -127,6 +129,7 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
    * Expected: No audit entry. The Coordinator on the event is still 2.
    * Type: error
    */
+  // SCRUM-32-TC03
   it('does not write an audit entry when the reassignment is refused', async () => {
     db.fetchOne.mockResolvedValueOnce(event);
 
@@ -147,6 +150,7 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
    * Expected: 403 FORBIDDEN, no audit entry, and the Coordinator on the event is still 2.
    * Type: error
    */
+  // SCRUM-32-TC04
   it('does not write an audit entry when the caller is not a Lead', async () => {
     await expect(service.reassignEventCoordinator(outgoing, 3, 4)).rejects.toMatchObject({
       status: 403,
@@ -167,7 +171,8 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
    *   The old Coordinator is 2 and the new one is 4.
    * Type: normal
    */
-  it('records the audit entry when a Lead accepts a pending reassignment', async () => {
+// SCRUM-32-TC05
+it('records the audit entry when a Lead accepts a pending reassignment', async () => {
     const pending = {
       id: 9,
       event_id: 3,
@@ -198,6 +203,7 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
    *   on the event did not change.
    * Type: error
    */
+  // SCRUM-32-TC06
   it('does not write an audit entry when there is nothing to accept', async () => {
     db.fetchOne.mockResolvedValueOnce(null);
 
@@ -222,6 +228,7 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
    *   confirmed reassignment, and the Coordinator on the event is still 2.
    * Type: boundary
    */
+  // SCRUM-32-TC07
   it('does not write an audit entry for a reassignment that has only been requested', async () => {
     db.fetchOne.mockResolvedValue(event);
 
@@ -251,6 +258,7 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
    *   entry is the route param, which Express passes as a string.
    * Type: normal
    */
+  // SCRUM-32-TC08
   it('writes the audit entry when a Lead reassigns over HTTP', async () => {
     const { createApp } = require('../src/app');
     const app = createApp();
@@ -288,7 +296,8 @@ describe('SCRUM-32 audit a confirmed reassignment', () => {
    *   and the new one is 4. The event id is the route param, which Express passes as a string.
    * Type: normal
    */
-  it('writes the audit entry when a Lead accepts over HTTP', async () => {
+// SCRUM-32-TC09
+it('writes the audit entry when a Lead accepts over HTTP', async () => {
     const { createApp } = require('../src/app');
     const app = createApp();
     const token = jwt.sign({ sub: 4 }, env.jwtSecret);
