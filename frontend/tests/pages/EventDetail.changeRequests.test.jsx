@@ -2,6 +2,7 @@
  * SCRUM-34: organiser requests a change on the event page.
  * SCRUM-35: assigned coordinator approves or rejects it.
  * SCRUM-69 AC2: approve 400 (invalid requested values) is shown on the page.
+ * That test sits in its own describe at the bottom.
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -94,6 +95,7 @@ describe('SCRUM-34 organiser change request form', () => {
    * Expected: POST includes ISO start/end and the other permitted fields only.
    * Type:     normal
    */
+  // SCRUM-34-TC19
   it('US34-F01 (AC1+AC2): organiser submits date, attendance, venue and equipment changes', async () => {
     let posted = null;
     mockApi({ onCreate: (body) => { posted = body; } });
@@ -128,6 +130,7 @@ describe('SCRUM-34 organiser change request form', () => {
    * Expected: The change-request form is not shown.
    * Type:     negative
    */
+  // SCRUM-34-TC20
   it('US34-F02 (AC1): draft events do not offer a change request form', async () => {
     mockApi({ event: { ...EVENT, status: 'DRAFT' } });
     renderAs({ id: 1, roles: ['EVENT_ORGANISER'] });
@@ -142,6 +145,7 @@ describe('SCRUM-34 organiser change request form', () => {
    * Expected: No change-request form until a coordinator is assigned.
    * Type:     negative
    */
+  // SCRUM-34-TC21
   it('US34-F03 (AC1): unassigned submitted events do not offer a change request form', async () => {
     mockApi({ event: { ...EVENT, status: 'SUBMITTED', coordinatorId: null } });
     renderAs({ id: 1, roles: ['EVENT_ORGANISER'] });
@@ -156,6 +160,7 @@ describe('SCRUM-34 organiser change request form', () => {
    * Expected: The form is shown.
    * Type:     normal
    */
+  // SCRUM-34-TC22
   it('US34-F04 (AC1): confirmed events still offer a change request form', async () => {
     mockApi({ event: { ...EVENT, status: 'CONFIRMED' } });
     renderAs({ id: 1, roles: ['EVENT_ORGANISER'] });
@@ -169,6 +174,7 @@ describe('SCRUM-34 organiser change request form', () => {
    * Expected: The form is hidden (one pending at a time); the list is shown instead.
    * Type:     negative
    */
+  // SCRUM-34-TC23
   it('US34-F05 (AC1): pending request hides the organiser form', async () => {
     mockApi({ changeRequests: [PENDING] });
     renderAs({ id: 1, roles: ['EVENT_ORGANISER'] });
@@ -185,6 +191,7 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
    * Expected: POST decision { approve: true }.
    * Type:     normal
    */
+  // SCRUM-35-TC16
   it('US35-F01 (AC1+AC2): assigned coordinator can approve a pending change', async () => {
     let decided = null;
     mockApi({
@@ -207,6 +214,7 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
    * Expected: POST { approve: false, reason } so the decision is recorded.
    * Type:     normal
    */
+  // SCRUM-35-TC17
   it('US35-F02 (AC2): assigned coordinator can reject with an optional reason', async () => {
     let decided = null;
     mockApi({
@@ -229,14 +237,26 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
    * Expected: No approve/reject change buttons (API would 403).
    * Type:     security
    */
+  // SCRUM-35-TC18
+  it('US35-F03 (AC1): another coordinator does not see decide actions', async () => {
+    mockApi({ changeRequests: [PENDING] });
+    renderAs({ id: 9, roles: ['EVENT_COORDINATOR'] });
+    expect(await screen.findByText('Leadership Forum')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve change' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Change requests' })).not.toBeInTheDocument();
+  });
+});
+
+describe('SCRUM-69 approve error on the event page', () => {
   /*
    * AC:       SCRUM-69 AC2
    * Scenario: Assigned coordinator approves, but the API refuses invalid requested values.
-   * Setup:    Decision POST throws VALIDATION_ERROR with the server message (start in the past).
-   * Expected: That message is shown in the page alert so the coordinator sees why approve failed.
+   * Setup:    Decision POST throws with the server message (start in the past). The API is mocked.
+   * Expected: That message is shown on the page.
    * Type:     error
    */
-  it('US36-F01 (AC2): approve error from the API is shown on the event page', async () => {
+  // SCRUM-69-TC16
+  it('US69-F01 (AC2): approve error from the API is shown on the event page', async () => {
     mockApi({
       changeRequests: [PENDING],
       decideError: 'A change request cannot be approved with a start date/time in the past',
@@ -248,13 +268,5 @@ describe('SCRUM-35 coordinator decide on the event page', () => {
     expect(await screen.findByText(
       'A change request cannot be approved with a start date/time in the past'
     )).toBeInTheDocument();
-  });
-
-  it('US35-F03 (AC1): another coordinator does not see decide actions', async () => {
-    mockApi({ changeRequests: [PENDING] });
-    renderAs({ id: 9, roles: ['EVENT_COORDINATOR'] });
-    expect(await screen.findByText('Leadership Forum')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Approve change' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Change requests' })).not.toBeInTheDocument();
   });
 });

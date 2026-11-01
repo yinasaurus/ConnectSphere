@@ -60,6 +60,7 @@ describe('SCRUM-78 Venue Staff decision on the event page', () => {
    *           Coordinator's notice can include them.
    * Type:     normal
    */
+  // SCRUM-78-TC18
   it('US78-F01 (AC2): rejecting sends the reason and alternative staff typed', async () => {
     await openAsVenueStaff();
     const user = userEvent.setup();
@@ -78,6 +79,7 @@ describe('SCRUM-78 Venue Staff decision on the event page', () => {
    *           gave.
    * Type:     boundary
    */
+  // SCRUM-78-TC19
   it.each([['left blank', ''], ['only spaces', '   ']])(
     'US78-F02 (AC3): rejecting with the reason %s sends no reason',
     async (_label, typed) => {
@@ -102,6 +104,7 @@ describe('SCRUM-78 Venue Staff decision on the event page', () => {
    *           reason.
    * Type:     normal
    */
+  // SCRUM-78-TC20
   it('US78-F03 (AC1): approving sends an approval only', async () => {
     await openAsVenueStaff();
     const user = userEvent.setup();
@@ -122,6 +125,7 @@ describe('SCRUM-78 notice on the Notifications page', () => {
    *           shown, so the Coordinator can act without searching for the event.
    * Type:     normal
    */
+  // SCRUM-78-TC21
   it('US78-F04 (AC2+AC4): shows the decision notice with its event link', async () => {
     useAuth.mockReturnValue({ user: { id: 21 }, hasRole: () => true });
     api.mockResolvedValue({
@@ -149,6 +153,7 @@ describe('SCRUM-58 review a marked approved booking from the event page', () => 
    * Expected: Approve venue is shown. Reject venue is not, because a second approval only clears the mark.
    * Type:     normal
    */
+  // SCRUM-58-TC12
   it('US58-F01 (AC6): Approve is shown for an approved booking that needs review', async () => {
     useAuth.mockReturnValue({ user: { id: 40 }, hasRole: (...roles) => roles.includes('VENUE_STAFF') });
     api.mockImplementation(async (path) => {

@@ -5,7 +5,7 @@ const optionalNullableText = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? null : value,
   z.string().trim().min(1).nullable().optional()
 );
-// SCUM-7 AC4: capacity is part of a complete venue record, and a venue must hold at least one
+// SCRUM-7 AC4: capacity is part of a complete venue record, and a venue must hold at least one
 // person (team decision: 0 counts as incomplete).
 const capacity = z.number({
   error: (issue) => (issue.input === undefined ? 'Capacity is required' : 'Capacity must be a number'),

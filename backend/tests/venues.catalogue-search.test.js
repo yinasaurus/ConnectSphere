@@ -55,7 +55,7 @@ function useInMemoryTables(tables) {
   });
 }
 
-describe('SCUM-7 AC3 catalogue changes reflect instantly in search', () => {
+describe('SCRUM-7 AC3 catalogue changes reflect instantly in search', () => {
   let tables;
 
   beforeEach(() => {
@@ -76,7 +76,7 @@ describe('SCUM-7 AC3 catalogue changes reflect instantly in search', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC3
+   * AC:       SCRUM-7 AC3
    * Scenario: Venue Staff add a new venue, then a coordinator searches straight away.
    * Setup:    Catalogue holds Helix Hall; createVenue adds Studio 9 (Level 5, 40 seats, BANQUET).
    * Expected: The very next search by location and layout returns Studio 9, with no
@@ -98,7 +98,7 @@ describe('SCUM-7 AC3 catalogue changes reflect instantly in search', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC3
+   * AC:       SCRUM-7 AC3
    * Scenario: Venue Staff change a venue's capacity and add a layout, then search again.
    * Setup:    Helix Hall starts at 180 seats with THEATRE only; updateVenue sets 300 seats
    *           and adds CLASSROOM.
@@ -117,7 +117,7 @@ describe('SCUM-7 AC3 catalogue changes reflect instantly in search', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC3
+   * AC:       SCRUM-7 AC3
    * Scenario: Venue Staff deactivate a venue, then a coordinator searches.
    * Setup:    Helix Hall is active and matches a Level 2 search; updateVenue sets isActive false.
    * Expected: The same search returns nothing straight away, so coordinators can't pick a

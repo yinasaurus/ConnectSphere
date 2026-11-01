@@ -76,6 +76,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    *           Leadership Forum at Helix Hall was approved, so the Coordinator can go ahead.
    * Type:     normal
    */
+  // SCRUM-78-TC01
   it('US78-N01 (AC1+AC4): approving notifies the assigned Coordinator, naming event and venue', async () => {
     mockLookups();
     await venuesService.decideBooking(STAFF, 5, { approve: true });
@@ -96,6 +97,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    *           pieces of information staff gave, so they can arrange the alternative.
    * Type:     normal
    */
+  // SCRUM-78-TC02
   it('US78-N02 (AC2+AC4): rejecting includes the reason and the suggested alternative', async () => {
     mockLookups();
     await venuesService.decideBooking(STAFF, 5, {
@@ -118,10 +120,12 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    *           Coordinator isn't shown an empty field.
    * Type:     boundary
    */
+  // SCRUM-78-TC03
   it('US78-N03 (AC2): a reason without an alternative shows only the reason', async () => {
     mockLookups();
     await venuesService.decideBooking(STAFF, 5, { approve: false, reason: 'Double-booked by facilities' });
     const [row] = notificationRows();
+    expect(row.user_id).toBe(21);
     expect(row.body).toBe('The venue booking request for Leadership Forum at Helix Hall was rejected.'
       + ' Reason: Double-booked by facilities');
   });
@@ -134,6 +138,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    *           the event, the venue and the outcome.
    * Type:     boundary
    */
+  // SCRUM-78-TC04
   it.each([
     ['missing', undefined],
     ['null', null],
@@ -156,10 +161,12 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    *           staff gave (AC2).
    * Type:     boundary
    */
+  // SCRUM-78-TC05
   it('US78-N05 (AC2+AC3): an alternative with no reason shows the alternative only', async () => {
     mockLookups();
     await venuesService.decideBooking(STAFF, 5, { approve: false, reason: '', alternativeSuggestion: 'Orchid Room' });
     const [row] = notificationRows();
+    expect(row.user_id).toBe(21);
     expect(row.body).toBe('The venue booking request for Leadership Forum at Helix Hall was rejected.'
       + ' Suggested alternative: Orchid Room');
     expect(row.body).not.toContain('Reason');
@@ -173,10 +180,12 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    *           is only part of rejection notices (AC2), so the note is not added here.
    * Type:     boundary
    */
+  // SCRUM-78-TC06
   it('US78-N06 (AC1): an approval notice does not carry a reason line', async () => {
     mockLookups();
     await venuesService.decideBooking(STAFF, 5, { approve: true, reason: 'Approved, use the side entrance' });
     const [row] = notificationRows();
+    expect(row.user_id).toBe(21);
     expect(row.body).toBe('The venue booking request for Leadership Forum at Helix Hall was approved.');
   });
 
@@ -188,10 +197,12 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    *           and the event; a missing name must not stop the Coordinator hearing back.
    * Type:     error
    */
+  // SCRUM-78-TC07
   it('US78-N07 (AC4): a missing venue record is identified by its id', async () => {
     mockLookups({ venue: null });
     await venuesService.decideBooking(STAFF, 5, { approve: true });
     const [row] = notificationRows();
+    expect(row.user_id).toBe(21);
     expect(row.body).toBe('The venue booking request for Leadership Forum at venue #8 was approved.');
     expect(row.event_id).toBe(50);
   });
@@ -205,6 +216,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    *           Staff member (40) and anyone else get nothing.
    * Type:     conflict
    */
+  // SCRUM-78-TC08
   it('US78-N08 (AC5): only the currently assigned Coordinator is notified', async () => {
     mockLookups();
     await venuesService.decideBooking(STAFF, 5, { approve: false, reason: 'Closed for works' });
@@ -221,6 +233,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    *           owner, though AC5 also says the deciding Venue Staff member is not notified).
    * Type:     conflict
    */
+  // SCRUM-78-TC09
   it('US78-N09 (AC5): a hybrid user deciding their own event booking is notified once', async () => {
     mockLookups();
     const hybrid = { id: 21, roles: [ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF] };
@@ -235,38 +248,12 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    * Expected: Nobody is notified, but the decision is still saved and returned.
    * Type:     boundary
    */
+  // SCRUM-78-TC10
   it('US78-N10 (AC5): no notice when the event has no assigned Coordinator, decision still saved', async () => {
     mockLookups({ event: { ...EVENT, coordinator_id: null } });
     const result = await venuesService.decideBooking(STAFF, 5, { approve: true });
     expect(notificationRows()).toEqual([]);
     expect(result).toEqual(expect.objectContaining({ id: 5, status: 'APPROVED', decided_by: 40 }));
-  });
-
-  /*
-   * AC:       SCRUM-26 AC6
-   * Scenario: A Coordinator submits a request which is saved with an initial Pending status.
-   * Setup:    No conflicting booking exists for the selected venue and occupied interval.
-   * Expected: The service returns a Pending request and writes no decision notice; this test
-   *           does not assert the saved event, venue, or date/time fields.
-   * Type:     normal
-   */
-  /*
-   * AC:       SCRUM-78 AC6
-   * Scenario: A Coordinator sends a booking request, which is now pending.
-   * Setup:    No conflicting booking; the request is created with status PENDING.
-   * Expected: The booking is created. No BOOKING_DECISION notice is written, because nothing
-   *           has been decided yet (the Coordinator is not told). A SCRUM-46 request notice to
-   *           Venue Staff is a different notice and is covered in notifications.venueStaffAttendees.
-   * Type:     normal
-   */
-  it('US78-N11 (AC6): sending a booking request (pending) creates no decision notice', async () => {
-    fetchMany.mockResolvedValueOnce([]);
-    const coordinator = { id: 21, roles: [ROLES.EVENT_COORDINATOR] };
-    const created = await venuesService.requestBooking(coordinator, {
-      eventId: 50, venueId: 8, startAt: '2026-10-20T10:00:00Z', endAt: '2026-10-20T12:00:00Z',
-    });
-    expect(created.status).toBe('PENDING');
-    expect(notificationRows().filter((row) => row.type === 'BOOKING_DECISION')).toEqual([]);
   });
 
   /* A configured zero-minute interval must survive persistence without becoming the default. */
@@ -298,6 +285,35 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
   });
 
   /*
+   * AC:       SCRUM-78 AC6
+   * Scenario: A Coordinator submits a booking request and it stays pending.
+   * Setup:    No overlapping booking. No Venue Staff are active, so the separate
+   *           "new request" notice has nobody to reach.
+   * Expected: The booking is saved as PENDING. No decision notice is written, and
+   *           the Coordinator is not notified.
+   * Type:     normal
+   */
+  // SCRUM-78-TC11
+  it('US78-N11 (AC6): a pending request sends the Coordinator no decision notice', async () => {
+    fetchMany.mockResolvedValue([]);
+    await venuesService.requestBooking(
+      { id: 21, roles: [ROLES.EVENT_COORDINATOR] },
+      {
+        eventId: 50,
+        venueId: 8,
+        startAt: '2026-10-20T10:00:00Z',
+        endAt: '2026-10-20T12:00:00Z',
+      }
+    );
+    expect(insertOne).toHaveBeenCalledWith('venue_bookings', expect.objectContaining({
+      event_id: 50,
+      requested_by: 21,
+      status: 'PENDING',
+    }));
+    expect(notificationRows().filter((row) => row.type === 'BOOKING_DECISION' || row.user_id === 21)).toEqual([]);
+  });
+
+  /*
   * AC:       Not covered by SCRUM-25/26 (authorization and scheduling-conflict guardrails)
   * Scenario: Submitting an unauthorized or conflicting venue booking request.
   * Setup:    Tests two rejection conditions:
@@ -315,6 +331,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    *           so the Coordinator must not hear anything.
    * Type:     error
    */
+  // SCRUM-78-TC12
   it.each([
     ['the sender is not a Coordinator', STAFF, [], 403],
     ['the venue already has an overlapping booking', { id: 21, roles: [ROLES.EVENT_COORDINATOR] }, [{ id: 77 }], 409],
@@ -336,6 +353,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    *           wasn't actually recorded.
    * Type:     error
    */
+  // SCRUM-78-TC13
   it.each([
     ['the user is not Venue Staff', () => venuesService.decideBooking({ id: 21, roles: [ROLES.EVENT_COORDINATOR] }, 5, { approve: true }), 403],
     ['the booking does not exist', () => {
@@ -363,6 +381,7 @@ describe('SCRUM-78 notifyUser (the write path every decision notice goes through
    * Expected: Nothing is written, so a notice can never be stored without a recipient.
    * Type:     boundary
    */
+  // SCRUM-78-TC14
   it.each([['null', null], ['undefined', undefined]])(
     'US78-U01 (AC5): a %s user id writes no notification',
     async (_label, userId) => {
@@ -380,6 +399,7 @@ describe('SCRUM-78 notifyUser (the write path every decision notice goes through
    *           still in the body (see N07).
    * Type:     boundary
    */
+  // SCRUM-78-TC15
   it('US78-U02 (AC4): a notice without an event id is saved with event_id null', async () => {
     await notifyUser(21, 'BOOKING_DECISION', 'Venue booking approved', 'body');
     expect(insertOne).toHaveBeenCalledWith('notifications', {
@@ -410,6 +430,7 @@ describe('SCRUM-78 POST /api/venues/bookings/:id/decision (route, real session c
    *           Coordinator 21 with the reason, the alternative, the event and the venue.
    * Type:     normal
    */
+  // SCRUM-78-TC16
   it('US78-R01 (AC2+AC4+AC5): a rejection through the API notifies the assigned Coordinator', async () => {
     const pending = as(40, [ROLES.VENUE_STAFF])
       .send({ approve: false, reason: 'Stage under repair', alternativeSuggestion: 'Orchid Room' });
@@ -432,6 +453,7 @@ describe('SCRUM-78 POST /api/venues/bookings/:id/decision (route, real session c
    * Expected: 403 and no notice; the request stays pending, so nothing is announced.
    * Type:     error
    */
+  // SCRUM-78-TC17
   it('US78-R02 (AC6): a refused decision sends no notice', async () => {
     const res = await as(21, [ROLES.EVENT_COORDINATOR]).send({ approve: true });
     expect(res.status).toBe(403);

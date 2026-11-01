@@ -17,6 +17,7 @@ describe('SCRUM-54 assignment overview page', () => {
    * Expected: Empty-state copy, not a crash.
    * Type: boundary
    */
+  // SCRUM-54-TC36
   it('shows an empty state when the overview payload has no assignments list', async () => {
     api.mockResolvedValue({});
     render(
@@ -34,6 +35,7 @@ describe('SCRUM-54 assignment overview page', () => {
    * Expected: The row is shown with an em dash instead of a name, not a crash.
    * Type: boundary
    */
+  // SCRUM-54-TC37
   it('shows an em dash when an assignment has no coordinator name', async () => {
     api.mockResolvedValue({
       assignments: [{ eventId: 3, eventName: 'Workshop', coordinatorName: null, status: 'UNDER_REVIEW' }],
@@ -78,6 +80,7 @@ describe('SCRUM-54 assignment overview page', () => {
    * Expected: Event name and coordinator name are listed.
    * Type: normal
    */
+  // SCRUM-54-TC38
   it('lists coordinator assignments for a Lead', async () => {
     api.mockResolvedValue({
       assignments: [{ eventId: 3, eventName: 'Workshop', coordinatorName: 'Chloe Lim', status: 'UNDER_REVIEW' }],
@@ -98,6 +101,7 @@ describe('SCRUM-54 assignment overview page', () => {
    * Expected: The refusal is shown and no assignment rows are rendered.
    * Type: error
    */
+  // SCRUM-54-TC39
   it('shows the refusal and no assignment details when the overview is blocked', async () => {
     const err = new Error('You do not have access to this action');
     err.status = 403;

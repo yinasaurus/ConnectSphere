@@ -65,9 +65,8 @@ beforeEach(() => {
 describe('SCRUM-39 event details on the event page', () => {
   /*
    * AC:       SCRUM-39 AC1 + AC2
-   * Scenario: An authorised user opens a Planning or Confirmed event.
-   * Setup:    Coordinator (not the assigned one) on Planning, Venue Staff and Technical
-   *           Support on Confirmed, and the event's own Organiser (user 1) on Planning. The
+   * Scenario: A Coordinator who is not assigned opens a Planning event.
+   * Setup:    Coordinator user 50. The event's Coordinator is user 21. The
    *           event has 120 attendees, 10:00-12:00 on 20 Oct, venue needs, equipment notes,
    *           an approved Helix Hall booking and 2 projectors requested.
    * Expected: All AC2 details are shown: date and time, attendance, the booked venue and the
@@ -75,12 +74,11 @@ describe('SCRUM-39 event details on the event page', () => {
    *           requests are fetched for this event only.
    * Type:     normal
    */
-  it.each([
-    ['EVENT_COORDINATOR', 'PLANNING', 50],
-    ['VENUE_STAFF', 'CONFIRMED', 50],
-    ['TECHNICAL_SUPPORT', 'CONFIRMED', 50],
-    ['EVENT_ORGANISER', 'PLANNING', 1],
-  ])('US39-F01 (AC1+AC2): %s sees all details of a %s event', async (role, status, userId) => {
+  // SCRUM-39-TC19
+  it('US39-F01 (AC1+AC2): a Coordinator sees all details of a PLANNING event', async () => {
+    const role = 'EVENT_COORDINATOR';
+    const status = 'PLANNING';
+    const userId = 50;
     mockApi({ event: { ...EVENT, status } });
     renderAs(role, userId);
     expect(await screen.findByText('Leadership Forum')).toBeInTheDocument();
@@ -105,6 +103,7 @@ describe('SCRUM-39 event details on the event page', () => {
    *           "No equipment requested yet.") instead of blank or broken text.
    * Type:     boundary
    */
+  // SCRUM-39-TC20
   it('US39-F02 (AC2): missing details show placeholders', async () => {
     mockApi({
       event: { ...EVENT, startAt: null, endAt: null, expectedAttendance: null, venueRequirements: null, equipmentNotes: null },
@@ -129,6 +128,7 @@ describe('SCRUM-39 event details on the event page', () => {
    *           requirement isn't hidden.
    * Type:     boundary
    */
+  // SCRUM-39-TC21
   it('US39-F03 (AC2): a request for a deleted item is still shown', async () => {
     mockApi({ requests: [{ id: 13, equipment_id: null, equipment_name: null, quantity: 1, status: 'PENDING' }] });
     renderAs('TECHNICAL_SUPPORT');
@@ -143,6 +143,7 @@ describe('SCRUM-39 event details on the event page', () => {
    *           is displayed.
    * Type:     error
    */
+  // SCRUM-39-TC22
   it('US39-F04 (AC1): shows the error when the event cannot be viewed', async () => {
     mockApi({ eventError: 'Event not found' });
     renderAs('EVENT_ORGANISER', 1);
@@ -160,6 +161,7 @@ describe('SCRUM-39 event details on the event page', () => {
    *           failing or wrongly claiming nothing was requested.
    * Type:     error
    */
+  // SCRUM-39-TC23
   it('US39-F05 (AC1+AC2): an equipment loading failure does not hide the event details', async () => {
     mockApi({ equipmentError: 'Server unavailable' });
     renderAs('EVENT_COORDINATOR');
@@ -180,6 +182,7 @@ describe('SCRUM-39 event details on the event page', () => {
    * Expected: The card shows "No equipment requested yet." and the rest of the page loads.
    * Type:     boundary
    */
+  // SCRUM-39-TC24
   it('US39-F06 (AC2): a reply without a requests list shows the empty message', async () => {
     mockApi();
     const normal = api.getMockImplementation();

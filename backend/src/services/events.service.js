@@ -36,8 +36,8 @@ const EVENT_SELECT = `
   organiser:users!organiser_id ( full_name ),
   coordinator:users!coordinator_id ( full_name )
 `;
-// SCUM-14: fields the customer briefing marks compulsory for a submitted event request.
-// Drafts (SCUM-15) intentionally skip this — only `name` is required to save a draft.
+// SCRUM-14: fields the customer briefing marks compulsory for a submitted event request.
+// Drafts (SCRUM-15) intentionally skip this — only `name` is required to save a draft.
 const REQUIRED_FOR_SUBMISSION = [
   { column: 'name', field: 'name', label: 'Event name' },
   { column: 'purpose', field: 'purpose', label: 'Purpose' },
@@ -66,7 +66,7 @@ function findMissingSubmissionFields(row) {
 
 // Guards against events like "starts 6 Oct, ends 5 Oct" that are never valid,
 // whichever of create/update set the dates. Skipped when either side is
-// absent (e.g. a draft saved before its dates are filled in, SCUM-15).
+// absent (e.g. a draft saved before its dates are filled in, SCRUM-15).
 function validateDateRange(startAt, endAt) {
   if (startAt === null || startAt === undefined || endAt === null || endAt === undefined) return;
   const start = new Date(startAt);
@@ -431,7 +431,7 @@ async function listEquipmentRequests(user, eventId) {
 }
 
 /**
- * Purpose: save a new event request as a Draft so the organiser can finish it later (SCUM-15).
+ * Purpose: save a new event request as a Draft so the organiser can finish it later (SCRUM-15).
  * AC: SCRUM-28 AC4 — a draft stays DRAFT with no Coordinator and is not placed in the unassigned queue.
  * Inputs: user (organiser or coordinator), payload (name required; other fields optional)
  * Outputs: the created mapped event
@@ -486,6 +486,7 @@ async function createEvent(user, payload) {
  *     SCRUM-40 2A — Confirmed (and terminal) statuses reject every direct field patch.
  *     SCRUM-40 3A — Organiser direct-edits only Draft and clarification ACTION_REQUIRED.
  *     SCRUM-40 4A — ordinary fields via this path; critical Confirmed changes use change requests.
+ *     SCRUM-40 AC4 — an end before the start, or an attendance below 1, is refused and nothing is written.
  *     SCRUM-54 AC5, AC7 — a Coordinator who is not assigned is refused and the row is unchanged.
  *     SCRUM-84 supersedes AC6: that Coordinator also cannot view the event.
  *     SCRUM-41 / SCRUM-42 — after a successful write, critical field changes flag affected
@@ -493,7 +494,8 @@ async function createEvent(user, payload) {
  * Inputs: user, event id, payload of fields to change
  * Outputs: mapped event after the patch
  * Failure: 404 if missing; 403 FORBIDDEN with no event body when the coordinator is not assigned;
- *     409 EDIT_LOCKED when the status or role blocks a direct edit
+ *     409 EDIT_LOCKED when the status or role blocks a direct edit;
+ *     400 VALIDATION_ERROR for a bad date range or an attendance below 1
  */
 async function updateEvent(user, id, payload) {
   const existing = await fetchOne(supabase.from('events').select('*').eq('id', id));
@@ -549,6 +551,9 @@ async function updateEvent(user, id, payload) {
       'EDIT_LOCKED'
     );
   }
+
+  // SCRUM-40 AC4: refuse a bad attendance (zero, negative, fraction) before anything is written.
+  parseOptionalAttendance(payload.expectedAttendance);
 
   const patch = toEventPatch(payload);
   const nextStart = 'start_at' in patch ? patch.start_at : existing.start_at;
@@ -697,7 +702,7 @@ async function listUnassignedQueue(user) {
 /**
  * Purpose: organiser (or assigned coordinator) sends a complete request for Lead assignment.
  * Status becomes Submitted with no Coordinator so it sits in the unassigned queue.
- * AC: SCRUM-28 AC1, AC2, AC3
+ * AC: SCRUM-28 AC1, AC2, AC3; SCRUM-45 AC1 (the Organiser gets an "Event submitted" notice)
  * Business rule: W7 #5 (Oct 3 2026, SHIYIN) — auto-assignment replaced by an unassigned queue.
  * Assignment is SCRUM-71; this method must not pick a Coordinator.
  * Inputs: user, event id
@@ -744,6 +749,18 @@ async function submitEvent(user, id) {
 
   await writeStatusHistory(id, user.id, previousStatus, EVENT_STATUS.SUBMITTED, 'Submitted for review');
   await writeAudit(user.id, 'EVENT_SUBMITTED', 'event', id, { coordinatorId: null });
+
+  // SCRUM-45 AC1: the event's Organiser is told it was submitted. Nobody else is
+  // (AC3): the Lead finds it in the unassigned queue, and no Coordinator is chosen yet.
+  if (existing.organiser_id) {
+    await notifyUser(
+      existing.organiser_id,
+      'EVENT_SUBMITTED',
+      'Event submitted',
+      `"${existing.name || 'An event'}" was submitted for review. A Coordinator will be assigned.`,
+      id
+    );
+  }
 
   // SCRUM-84 AC2: once submitted, the request is in the unassigned queue, so a
   // Coordinator who is not also an Organiser cannot open it again. The submit
@@ -1973,7 +1990,7 @@ function approvedChangeAuditFields(request, existing) {
 
 /**
  * Purpose: tell the event's Organiser that their change request was approved or rejected.
- * AC: SCRUM-69 AC6
+ * AC: SCRUM-36 AC1
  * Failure: none here — notifyUser no-ops when organiser_id is missing.
  */
 async function notifyChangeRequestDecision(event, decided, reason) {
@@ -2074,8 +2091,8 @@ async function createChangeRequest(user, eventId, payload) {
  * AC: SCRUM-35 AC1 (assigned coordinator decides), AC2 (approve applies the change);
  *     SCRUM-69 AC1 (every included field is written onto the event), AC2 (invalid
  *     requested values cannot be approved — request stays PENDING), AC3 (reject does not
- *     touch the event), AC4 (who/when plus previous and new values on approve), AC6
- *     (organiser is notified either way).
+ *     touch the event), AC4 (who/when plus previous and new values on approve).
+ *     SCRUM-36 AC1: organiser is notified either way.
  *     SCRUM-69 AC5 / SCRUM-41 / SCRUM-42: after the event write and before the request is
  *     marked APPROVED, affected venue/equipment rows get needs_review (flag only; status
  *     unchanged). If flagging fails, the request stays PENDING so approve can be retried.

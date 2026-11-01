@@ -60,6 +60,7 @@ describe('SCRUM-21 Equipment availability on the request list', () => {
    * and the checked from–to window (AC1).
    * Type: normal
    */
+  // SCRUM-21-TC28
   it('AC5/AC7: shows Sufficient when the request can be fulfilled', async () => {
     mockLists();
     render(<Equipment />);
@@ -75,6 +76,7 @@ describe('SCRUM-21 Equipment availability on the request list', () => {
    * Expected: Insufficient is shown so they can choose Unavailable or change the request.
    * Type: normal
    */
+  // SCRUM-21-TC29
   it('AC6/AC7: shows Insufficient when free stock is below the request', async () => {
     api.mockImplementation(async (path) => {
       if (path === '/api/equipment') return { equipment: [] };
@@ -102,6 +104,7 @@ describe('SCRUM-21 Equipment availability on the request list', () => {
    * Expected: Unavailable copy, not a false “sufficient”.
    * Type: error
    */
+  // SCRUM-21-TC30
   it('AC2/AC6: shows Unavailable when the catalogue item is not in service', async () => {
     api.mockImplementation(async (path) => {
       if (path === '/api/equipment') return { equipment: [] };
@@ -129,6 +132,7 @@ describe('SCRUM-21 Equipment availability on the request list', () => {
    * Expected: The new indication replaces the old one.
    * Type: normal
    */
+  // SCRUM-21-TC31
   it('AC7: Check availability refreshes the result for that request', async () => {
     let availability = SUFFICIENT;
     api.mockImplementation(async (path) => {
@@ -158,6 +162,7 @@ describe('SCRUM-21 Equipment availability on the request list', () => {
    * Expected: The error is shown. Sufficient is not shown.
    * Type: error
    */
+  // SCRUM-21-TC32
   it('AC6/AC7: shows the API error when the availability check fails', async () => {
     api.mockImplementation(async (path) => {
       if (path === '/api/equipment') return { equipment: [] };
@@ -179,6 +184,7 @@ describe('SCRUM-21 Equipment availability on the request list', () => {
    * Expected: Availability is not requested — the story is for Technical Support.
    * Type: error
    */
+  // SCRUM-21-TC33
   it('AC1: Coordinators do not load availability', async () => {
     asRole('EVENT_COORDINATOR');
     mockLists();
@@ -202,6 +208,7 @@ describe('SCRUM-8 Equipment reserve on the request list', () => {
    * Expected: The decision is posted for that request and the row leaves PENDING.
    * Type: normal
    */
+  // SCRUM-8-TC20
   it('AC1: Reserve posts a confirmation for that request', async () => {
     let reserved = false;
     api.mockImplementation(async (path, options = {}) => {
@@ -239,6 +246,7 @@ describe('SCRUM-8 Equipment reserve on the request list', () => {
    * Expected: That message is shown. The request stays PENDING (Reserve still there).
    * Type: error
    */
+  // SCRUM-8-TC21
   it('AC2: shows the API error and keeps the request pending when reserve is blocked', async () => {
     api.mockImplementation(async (path, options = {}) => {
       if (path === '/api/equipment') return { equipment: [] };
@@ -263,6 +271,7 @@ describe('SCRUM-8 Equipment reserve on the request list', () => {
    * Expected: No Reserve button — only Tech may create a reservation.
    * Type: error
    */
+  // SCRUM-8-TC22
   it('AC3: Coordinators do not see Reserve', async () => {
     asRole('EVENT_COORDINATOR');
     mockLists();
@@ -379,6 +388,7 @@ describe('SCRUM-58 review a marked reserved equipment request', () => {
    * Expected: Reserve is shown. Unavailable is not, so the request cannot be cancelled from here.
    * Type:     normal
    */
+  // SCRUM-58-TC13
   it('US58-F02 (AC6): Reserve is shown for a reserved request that needs review', async () => {
     asRole('TECHNICAL_SUPPORT');
     mockLists({

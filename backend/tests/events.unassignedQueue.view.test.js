@@ -8,6 +8,8 @@
  * AC5  The Lead can view the full details of any request in the queue.
  *
  * Access-only-Lead (who may open the page) is SCRUM-54 AC3. Assignment is SCRUM-71.
+ * The no-cookie 401 (AC1) and the missing-event 404 (AC5) sit in their own describes below.
+ * They check ways those criteria cannot fail, not the criteria themselves.
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
@@ -75,6 +77,7 @@ describe('SCRUM-65 listUnassignedQueue (service)', () => {
    * Expected: Only the two Submitted unassigned requests. Assigned, Draft and Under Review are out.
    * Type: normal (AC1) + boundary (AC2, AC3 other statuses)
    */
+  // SCRUM-65-TC01
   it('AC1/AC2/AC3: Lead sees every Submitted unassigned request and nothing else', async () => {
     const acmeQueued = queuedRow();
     const apexQueued = queuedRow({
@@ -119,6 +122,7 @@ describe('SCRUM-65 listUnassignedQueue (service)', () => {
    * Expected: Empty array, not an error — there can be a valid empty queue.
    * Type: boundary
    */
+  // SCRUM-65-TC02
   it('AC1: an empty queue returns no events', async () => {
     db.fetchMany.mockResolvedValue([]);
 
@@ -134,6 +138,7 @@ describe('SCRUM-65 listUnassignedQueue (service)', () => {
    * Expected: 403. Who may open the page is SCRUM-54 AC3; this covers the new service guard.
    * Type: error
    */
+  // SCRUM-65-TC03
   it('AC1: a Coordinator cannot list the Lead unassigned queue', async () => {
     await expect(service.listUnassignedQueue(coordinator)).rejects.toMatchObject({
       status: 403,
@@ -149,6 +154,7 @@ describe('SCRUM-65 listUnassignedQueue (service)', () => {
    * Expected: name, organiser, start/end, expected attendance, venue needs and equipment needs.
    * Type: normal
    */
+  // SCRUM-65-TC04
   it('AC4: each queued request includes name, organiser, date/time, attendance, venue and equipment', async () => {
     db.fetchMany.mockResolvedValue([queuedRow()]);
 
@@ -170,6 +176,7 @@ describe('SCRUM-65 listUnassignedQueue (service)', () => {
    * Expected: The request stays in the queue and equipmentNotes is null so the UI can show an em dash.
    * Type: boundary
    */
+  // SCRUM-65-TC05
   it('AC4: a queued request with no equipment notes still returns the equipment field', async () => {
     db.fetchMany.mockResolvedValue([queuedRow({ equipment_notes: null })]);
 
@@ -189,6 +196,7 @@ describe('SCRUM-65 getEvent for a queued request (service)', () => {
    * Expected: Planning details are returned (description, purpose, people, venue/equipment), not the attendee subset.
    * Type: normal
    */
+  // SCRUM-65-TC06
   it('AC5: the Lead can load full details of a queued request', async () => {
     db.fetchOne.mockResolvedValue(queuedRow());
 
@@ -205,22 +213,6 @@ describe('SCRUM-65 getEvent for a queued request (service)', () => {
     expect(event.equipmentNotes).toBe('Two wireless mics');
     expect(event.accessibilityNeeds).toBe('None');
   });
-
-  /*
-   * AC: SCRUM-65 AC5
-   * Scenario: The Lead asks for an event id that does not exist.
-   * Setup: fetchOne returns null.
-   * Expected: 404 — there is no request to show details for.
-   * Type: error
-   */
-  it('AC5: the Lead gets 404 when the queued request does not exist', async () => {
-    db.fetchOne.mockResolvedValue(null);
-
-    await expect(service.getEvent(lead, 999)).rejects.toMatchObject({
-      status: 404,
-      code: 'NOT_FOUND',
-    });
-  });
 });
 
 describe('SCRUM-65 GET /api/events/unassigned-queue and GET /api/events/:id (route)', () => {
@@ -236,6 +228,7 @@ describe('SCRUM-65 GET /api/events/unassigned-queue and GET /api/events/:id (rou
    * Expected: 200 with that event and the AC4 fields populated.
    * Type: normal
    */
+  // SCRUM-65-TC07
   it('AC1/AC4: GET unassigned-queue returns queued requests with the Lead columns', async () => {
     db.fetchOne.mockResolvedValue({ id: 9, is_active: true, organisation_id: null });
     db.fetchMany
@@ -268,6 +261,7 @@ describe('SCRUM-65 GET /api/events/unassigned-queue and GET /api/events/:id (rou
    * Expected: 200 with only the unassigned Submitted request.
    * Type: boundary
    */
+  // SCRUM-65-TC08
   it('AC2/AC3: GET unassigned-queue excludes assigned requests and drafts', async () => {
     db.fetchOne.mockResolvedValue({ id: 9, is_active: true, organisation_id: null });
     db.fetchMany
@@ -288,25 +282,12 @@ describe('SCRUM-65 GET /api/events/unassigned-queue and GET /api/events/:id (rou
 
   /*
    * AC: SCRUM-65 AC1
-   * Scenario: Unauthenticated queue listing.
-   * Setup: No session cookie.
-   * Expected: 401, and the events table is not queried for the queue.
-   * Type: error
-   */
-  it('AC1: GET unassigned-queue without a session is 401', async () => {
-    const res = await request(app).get('/api/events/unassigned-queue');
-
-    expect(res.status).toBe(401);
-    expect(db.supabase.from).not.toHaveBeenCalledWith('events');
-  });
-
-  /*
-   * AC: SCRUM-65 AC1
    * Scenario: A Coordinator calls the Lead queue route.
    * Setup: Session is EVENT_COORDINATOR.
    * Expected: 403 from requireRole. The full role matrix is SCRUM-54 AC3.
    * Type: error
    */
+  // SCRUM-65-TC09
   it('AC1: GET unassigned-queue as a Coordinator is 403', async () => {
     db.fetchOne.mockResolvedValue({ id: 2, is_active: true, organisation_id: null });
     db.fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_COORDINATOR }]);
@@ -325,6 +306,7 @@ describe('SCRUM-65 GET /api/events/unassigned-queue and GET /api/events/:id (rou
    * Expected: 200 with full request details (description, people, venue/equipment).
    * Type: normal
    */
+  // SCRUM-65-TC10
   it('AC5: GET event as Lead returns the full queued request', async () => {
     db.fetchOne
       .mockResolvedValueOnce({ id: 9, is_active: true, organisation_id: null, full_name: 'Ivy Chen' })
@@ -346,5 +328,46 @@ describe('SCRUM-65 GET /api/events/unassigned-queue and GET /api/events/:id (rou
       equipmentNotes: 'Two wireless mics',
       coordinatorId: null,
     }));
+  });
+});
+
+describe('Queue route with no session', () => {
+  const { createApp } = require('../src/app');
+  const app = createApp();
+
+  /*
+   * AC: SCRUM-65 AC1 (cannot fail this way: the queue is listed to someone who is not
+   *     signed in). requireAuth rejects before a role is read.
+   * Scenario: Unauthenticated queue listing.
+   * Setup: No session cookie.
+   * Expected: 401, and the events table is not queried for the queue.
+   * Type: error
+   */
+  // SCRUM-65-TC20
+  it('GET unassigned-queue without a session is 401', async () => {
+    const res = await request(app).get('/api/events/unassigned-queue');
+
+    expect(res.status).toBe(401);
+    expect(db.supabase.from).not.toHaveBeenCalledWith('events');
+  });
+});
+
+describe('Missing event details', () => {
+  /*
+   * AC: SCRUM-65 AC5 (cannot fail this way: an id that is not a real request opens a blank
+   *     or wrong record).
+   * Scenario: The Lead asks for an event id that does not exist.
+   * Setup: fetchOne returns null. The database is mocked.
+   * Expected: 404 NOT_FOUND. There is no request to show details for.
+   * Type: error
+   */
+  // SCRUM-65-TC17
+  it('the Lead gets 404 when the event does not exist', async () => {
+    db.fetchOne.mockResolvedValue(null);
+
+    await expect(service.getEvent(lead, 999)).rejects.toMatchObject({
+      status: 404,
+      code: 'NOT_FOUND',
+    });
   });
 });

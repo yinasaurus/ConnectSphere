@@ -165,6 +165,7 @@ describe('SCRUM-54 event page role limits', () => {
    * Expected: They see Safety queue and Open safety check.
    * Type: normal
    */
+  // SCRUM-54-TC42
   it('shows Open safety check to a Safety Officer', async () => {
     useAuth.mockReturnValue({
       user: { id: 12, roles: ['SAFETY_OFFICER'] },
@@ -183,6 +184,7 @@ describe('SCRUM-54 event page role limits', () => {
    * Expected: The safety-check control is not shown.
    * Type: error
    */
+  // SCRUM-54-TC43
   it('does not show Open safety check to a Coordinator who is not a Safety Officer', async () => {
     useAuth.mockReturnValue({
       user: { id: 2, roles: ['EVENT_COORDINATOR'] },
@@ -203,6 +205,7 @@ describe('SCRUM-54 event page role limits', () => {
    * Expected: The Safety check outcome card shows the outcome and reason.
    * Type: normal
    */
+  // SCRUM-56-TC22
   it('shows the safety check outcome card when the API includes safetyCheck', async () => {
     useAuth.mockReturnValue({
       user: { id: 2, roles: ['EVENT_COORDINATOR'] },
@@ -229,6 +232,7 @@ describe('SCRUM-54 event page role limits', () => {
    * Expected: The outcome card is not shown.
    * Type: boundary
    */
+  // SCRUM-56-TC23
   it('does not show the safety check outcome card when the API omits safetyCheck', async () => {
     useAuth.mockReturnValue({
       user: { id: 20, roles: ['EVENT_COORDINATOR_LEAD'] },

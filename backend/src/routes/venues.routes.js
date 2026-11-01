@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { ROLES } = require('../constants/roles');
+const { ROLES, INTERNAL_ROLES } = require('../constants/roles');
 const controller = require('../controllers/venues.controller');
 const { validateBody } = require('../middleware/validate');
 const { createVenueSchema, updateVenueSchema } = require('../validators/venues.validators');
@@ -39,7 +39,7 @@ router.post('/bookings/:id/cancel', requireRole(ROLES.EVENT_COORDINATOR), contro
 // SCRUM-66 AC6: internal users only; Event Organisers and Attendees get 403.
 router.get(
   '/:id/availability',
-  requireRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT),
+  requireRole(...INTERNAL_ROLES),
   controller.availability
 );
 // SCRUM-67 AC5: coordinators, venue staff and the coordinator lead only.

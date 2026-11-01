@@ -19,7 +19,7 @@ const completeDraft = {
   accessibility_needs: 'None',
 };
 
-describe('SCUM-14 submission validation', () => {
+describe('SCRUM-14 submission validation', () => {
   // SCRUM-14-TC01
   it('passes when every compulsory field is filled in', () => {
     expect(findMissingSubmissionFields(completeDraft)).toEqual([]);
@@ -38,7 +38,7 @@ describe('SCUM-14 submission validation', () => {
   });
 
   // SCRUM-15-TC01
-  it('does not enforce these fields when only a draft is being saved (SCUM-15)', () => {
+  it('does not enforce these fields when only a draft is being saved (SCRUM-15)', () => {
     // Draft creation only requires `name` — see createEvent(), which never calls
     // findMissingSubmissionFields. This test documents that expectation.
     const draftPayload = { name: 'Untitled event' };
@@ -91,7 +91,7 @@ describe('event start/end date range validation', () => {
     });
 
     // SCRUM-15-TC02
-    it('allows creating a draft with no dates yet (SCUM-15: only name is required)', async () => {
+    it('allows creating a draft with no dates yet (SCRUM-15: only name is required)', async () => {
       await service.createEvent(organiser, { name: 'Untitled draft' });
       expect(db.insertOne).toHaveBeenCalled();
     });
@@ -160,11 +160,11 @@ describe('event start/end date range validation', () => {
   });
 });
 
-// Regression guard for the actual bug SCUM-14/15 fixed (PR #1): start_at/end_at were
+// Regression guard for the actual bug SCRUM-14/15 fixed (PR #1): start_at/end_at were
 // once passed to insertOne as raw strings, which caused MySQL/Supabase datetime insert
 // errors. toSqlDateTime() converts them to real Date objects first - this was never
 // directly asserted anywhere until now.
-describe('SCUM-14/15 regression: dates are converted to real Date objects before insert', () => {
+describe('SCRUM-14/15 regression: dates are converted to real Date objects before insert', () => {
   const organiser = { id: 1, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] };
 
   beforeEach(() => {
@@ -194,7 +194,7 @@ describe('SCUM-14/15 regression: dates are converted to real Date objects before
   });
 
   // SCRUM-14-TC13
-  it('passes null through for start_at/end_at when no date is given (SCUM-15 draft), not an invalid value', async () => {
+  it('passes null through for start_at/end_at when no date is given (SCRUM-15 draft), not an invalid value', async () => {
     await service.createEvent(organiser, { name: 'No dates yet' });
 
     const [, patch] = db.insertOne.mock.calls[0];

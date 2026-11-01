@@ -22,7 +22,7 @@ function formatTime(value) {
 
 export default function VenueAvailability() {
   const { hasRole } = useAuth();
-  // SCRUM-67 AC5: Technical Support can see availability (SCRUM-66) but not the bookings list.
+  // SCRUM-67 AC5: Technical Support and the Safety Officer can see availability (SCRUM-66) but not the bookings list.
   const canSeeBookings = hasRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.EVENT_COORDINATOR_LEAD);
   const [venues, setVenues] = useState([]);
   const [venueId, setVenueId] = useState('');

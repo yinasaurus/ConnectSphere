@@ -49,6 +49,7 @@ describe('SCRUM-55 / SCRUM-56 safety check page', () => {
    * Expected: Those fields are shown; POST sends outcome APPROVE.
    * Type:     normal
    */
+  // SCRUM-55-TC15
   it('shows review details and lets a Safety Officer approve', async () => {
     api.mockImplementation(async (path, options = {}) => {
       if (path === '/api/events/3/safety-check' && options.method === 'POST') {
@@ -79,6 +80,7 @@ describe('SCRUM-55 / SCRUM-56 safety check page', () => {
    * Expected: Submit stays disabled until reason and checkbox are set; POST includes both.
    * Type:     normal
    */
+  // SCRUM-56-TC19
   it('requires reason and an arrangement for request changes', async () => {
     api.mockImplementation(async (path, options = {}) => {
       if (options.method === 'POST') {
@@ -114,6 +116,7 @@ describe('SCRUM-55 / SCRUM-56 safety check page', () => {
    * Expected: Record outcome is disabled for the duration of the request (no double submit).
    * Type:     boundary
    */
+  // SCRUM-56-TC20
   it('disables Record outcome while the save request is in flight', async () => {
     let resolvePost;
     const postPromise = new Promise((resolve) => {
@@ -141,6 +144,7 @@ describe('SCRUM-55 / SCRUM-56 safety check page', () => {
    * Expected: The refusal is shown and review fields are not rendered.
    * Type:     error
    */
+  // SCRUM-55-TC16
   it('shows the refusal and no extra event details when opening is blocked', async () => {
     const err = new Error('You do not have access to this action');
     err.status = 403;
@@ -158,6 +162,7 @@ describe('SCRUM-55 / SCRUM-56 safety check page', () => {
    * Expected: A clear closed-check message and a link back to the queue; no outcome form.
    * Type:     boundary
    */
+  // SCRUM-56-TC21
   it('explains when the safety check is no longer open after a 409', async () => {
     const err = new Error('Only events awaiting a safety check can be opened for safety review');
     err.status = 409;

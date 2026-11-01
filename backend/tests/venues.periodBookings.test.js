@@ -15,6 +15,10 @@
  * The database is mocked. In the service tests, fetchOne returns the venue and fetchMany
  * returns the booking rows. In the route tests, the first fetchOne/fetchMany calls are
  * the real auth middleware loading the user and their roles.
+ *
+ * A hold with no expiry (AC2, AC3), a string venue id (AC4), a bad period and an unknown
+ * venue (AC1), and a request with no session (AC5) check ways those criteria cannot fail.
+ * Those tests sit in their own describes at the bottom.
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
@@ -82,6 +86,7 @@ describe('SCRUM-67 listVenueBookingsForPeriod (service)', () => {
    *           and type BOOKING, so the user sees everything the venue has committed.
    * Type:     normal
    */
+  // SCRUM-67-TC01
   it('US67-B01 (AC1): a confirmed booking is returned with its full occupied window', async () => {
     mockRows([row()]);
     const result = await venuesService.listVenueBookingsForPeriod(7, PERIOD, NOW);
@@ -115,6 +120,7 @@ describe('SCRUM-67 listVenueBookingsForPeriod (service)', () => {
    *           the advertised times would hide it.
    * Type:     boundary
    */
+  // SCRUM-67-TC02
   it('US67-B02 (AC1): a booking is included when only its turnaround overlaps the period', async () => {
     mockRows([row({ start_at: '2026-10-20T06:00:00Z', end_at: '2026-10-20T07:30:00Z' })]);
     const result = await venuesService.listVenueBookingsForPeriod(7, PERIOD, NOW);
@@ -131,6 +137,7 @@ describe('SCRUM-67 listVenueBookingsForPeriod (service)', () => {
    *           occupy any of it, and (b) is entirely outside.
    * Type:     boundary (a), normal (b)
    */
+  // SCRUM-67-TC03
   it.each([
     ['ends exactly at the period start', { start_at: '2026-10-20T06:00:00Z', end_at: '2026-10-20T07:15:00Z' }],
     ['is on another day', { start_at: '2026-10-21T10:00:00Z', end_at: '2026-10-21T12:00:00Z' }],
@@ -150,6 +157,7 @@ describe('SCRUM-67 listVenueBookingsForPeriod (service)', () => {
    *           its expiry.
    * Type:     normal
    */
+  // SCRUM-67-TC04
   it('US67-B04 (AC2): an active hold is returned and marked as a hold', async () => {
     mockRows([row({ status: 'TENTATIVE', hold_expires_at: '2026-10-16T00:00:00Z' })]);
     const result = await venuesService.listVenueBookingsForPeriod(7, PERIOD, NOW);
@@ -173,25 +181,11 @@ describe('SCRUM-67 listVenueBookingsForPeriod (service)', () => {
    * Expected: Not returned. This proves holds use only their held period.
    * Type:     boundary
    */
+  // SCRUM-67-TC05
   it('US67-B05 (AC2): a hold is matched on its held period, not a padded window', async () => {
     mockRows([row({ status: 'TENTATIVE', start_at: '2026-10-20T06:00:00Z', end_at: '2026-10-20T07:30:00Z' })]);
     const result = await venuesService.listVenueBookingsForPeriod(7, PERIOD, NOW);
     expect(result.bookings).toEqual([]);
-  });
-
-  /*
-   * AC:       SCRUM-67 AC2 (same assumption as SCRUM-66)
-   * Scenario: A hold with no expiry recorded.
-   * Setup:    TENTATIVE row with hold_expires_at null. Holds can't be created with an expiry
-   *           yet (SCRUM-75).
-   * Expected: Returned as an active hold, with holdExpiresAt null, so an undated hold never
-   *           silently disappears.
-   * Type:     boundary
-   */
-  it('US67-B06 (AC2): a hold with no expiry is treated as active', async () => {
-    mockRows([row({ status: 'TENTATIVE', hold_expires_at: null })]);
-    const result = await venuesService.listVenueBookingsForPeriod(7, PERIOD, NOW);
-    expect(result.bookings).toEqual([expect.objectContaining({ type: 'TENTATIVE_HOLD', holdExpiresAt: null })]);
   });
 
   /*
@@ -203,6 +197,7 @@ describe('SCRUM-67 listVenueBookingsForPeriod (service)', () => {
    *           presented as something already committed.
    * Type:     normal (a), boundary (b)
    */
+  // SCRUM-67-TC06
   it.each([
     ['expired the day before', '2026-10-14T00:00:00Z'],
     ['expiring exactly now', NOW.toISOString()],
@@ -219,6 +214,7 @@ describe('SCRUM-67 listVenueBookingsForPeriod (service)', () => {
    * Expected: Not returned. This proves expiry is judged against the actual current time.
    * Type:     normal
    */
+  // SCRUM-67-TC07
   it('US67-B08 (AC3): by default a hold is judged expired against the current time', async () => {
     mockRows([row({ status: 'TENTATIVE', hold_expires_at: '2000-01-01T00:00:00Z' })]);
     const result = await venuesService.listVenueBookingsForPeriod(7, PERIOD);
@@ -235,6 +231,7 @@ describe('SCRUM-67 listVenueBookingsForPeriod (service)', () => {
    *           booking for the same event is never listed under venue 7.
    * Type:     conflict
    */
+  // SCRUM-67-TC08
   it('US67-B09 (AC4): an event booked at several venues appears once, under this venue only', async () => {
     mockRows([
       row({ id: 1, event_id: 50, venue_id: 7 }),
@@ -248,20 +245,6 @@ describe('SCRUM-67 listVenueBookingsForPeriod (service)', () => {
   });
 
   /*
-   * AC:       SCRUM-67 AC4
-   * Scenario: The venue id comes from the URL as a string ("7") while the DB returns a number.
-   * Setup:    venueId "7" (as the controller passes it), row venue_id 7.
-   * Expected: The booking is still returned. Comparing string and number directly would
-   *           wrongly hide every booking.
-   * Type:     boundary
-   */
-  it('US67-B10 (AC4): a string venue id from the URL still matches the venue', async () => {
-    mockRows([row()]);
-    const result = await venuesService.listVenueBookingsForPeriod('7', PERIOD, NOW);
-    expect(result.bookings).toHaveLength(1);
-  });
-
-  /*
    * AC:       SCRUM-67 AC1 + AC2 (agreed decision: PENDING not returned)
    * Scenario: Which booking statuses are fetched at all.
    * Setup:    No rows; this checks the query the service builds.
@@ -269,6 +252,7 @@ describe('SCRUM-67 listVenueBookingsForPeriod (service)', () => {
    *           CANCELLED are not committed bookings.
    * Type:     normal
    */
+  // SCRUM-67-TC09
   it('US67-B11: only confirmed bookings and tentative holds are queried', async () => {
     mockRows([]);
     await venuesService.listVenueBookingsForPeriod(7, PERIOD, NOW);
@@ -283,6 +267,7 @@ describe('SCRUM-67 listVenueBookingsForPeriod (service)', () => {
    *           treated like an APPROVED row and padded.
    * Type:     error
    */
+  // SCRUM-67-TC10
   it('US67-B12: a PENDING row is not returned even if the query lets it through', async () => {
     mockRows([row({ status: 'PENDING' })]);
     const result = await venuesService.listVenueBookingsForPeriod(7, PERIOD, NOW);
@@ -293,11 +278,12 @@ describe('SCRUM-67 listVenueBookingsForPeriod (service)', () => {
    * AC:       SCRUM-67 AC1 + AC2
    * Scenario: A confirmed booking and an active hold in the same period, out of order.
    * Setup:    The DB returns the 13:00 hold first and the 10:00 booking second.
-   * Expected: Both returned, sorted by when the venue becomes occupied (booking from 09:30,
-   *           then the hold from 13:00), each with its own type.
+   * Expected: Both returned, in chronological order by when the hall becomes occupied
+   *           (booking from 09:30, then the hold from 13:00), each with its own type.
    * Type:     normal
    */
-  it('US67-B13 (AC1+AC2): bookings and holds come back together, sorted by occupied start', async () => {
+  // SCRUM-67-TC11
+  it('US67-B13 (AC1+AC2): bookings and holds come back together, in chronological order', async () => {
     mockRows([
       row({ id: 2, status: 'TENTATIVE', start_at: '2026-10-20T13:00:00Z', end_at: '2026-10-20T13:30:00Z' }),
       row({ id: 1 }),
@@ -314,45 +300,13 @@ describe('SCRUM-67 listVenueBookingsForPeriod (service)', () => {
    *           committed booking.
    * Type:     error
    */
+  // SCRUM-67-TC12
   it('US67-B14 (AC1): a booking with no linked event name is still returned', async () => {
     mockRows([row({ events: null })]);
     const result = await venuesService.listVenueBookingsForPeriod(7, PERIOD, NOW);
     expect(result.bookings).toEqual([expect.objectContaining({ id: 1, eventName: null })]);
   });
 
-  /*
-   * AC:       SCRUM-67 (input validation; every AC is "for a given period")
-   * Scenario: The period is missing, unreadable, empty or backwards.
-   * Setup:    Six bad inputs: no from, no to, a non-date, from == to, from after to, and no
-   *           range argument at all.
-   * Expected: 400 with a message saying what is wrong, and no database call.
-   * Type:     error (from == to is a boundary)
-   */
-  it.each([
-    ['from is missing', { to: PERIOD.to }, 'from and to are required'],
-    ['to is missing', { from: PERIOD.from }, 'from and to are required'],
-    ['a date is invalid', { from: 'not-a-date', to: PERIOD.to }, 'from and to must be valid dates'],
-    ['from equals to', { from: PERIOD.from, to: PERIOD.from }, 'from must be before to'],
-    ['from is after to', { from: PERIOD.to, to: PERIOD.from }, 'from must be before to'],
-    ['no range is passed', undefined, 'from and to are required'],
-  ])('US67-B15: returns 400 when %s', async (_label, range, message) => {
-    await expect(venuesService.listVenueBookingsForPeriod(7, range, NOW)).rejects.toMatchObject({ status: 400, message });
-    // Validation happens before any lookup, so a bad request never reaches the DB.
-    expect(fetchOne).not.toHaveBeenCalled();
-  });
-
-  /*
-   * AC:       SCRUM-67 (error handling; "a venue's existing bookings")
-   * Scenario: The venue doesn't exist.
-   * Setup:    The venue lookup returns null; the period is valid.
-   * Expected: 404 "Venue not found", and the bookings query is never run.
-   * Type:     error
-   */
-  it('US67-B16: returns 404 for an unknown venue', async () => {
-    fetchOne.mockResolvedValue(null);
-    await expect(venuesService.listVenueBookingsForPeriod(99, PERIOD, NOW)).rejects.toMatchObject({ status: 404 });
-    expect(fetchMany).not.toHaveBeenCalled();
-  });
 });
 
 describe('SCRUM-67 GET /api/venues/:id/bookings (route, real session cookie)', () => {
@@ -377,6 +331,7 @@ describe('SCRUM-67 GET /api/venues/:id/bookings (route, real session cookie)', (
    *           Lead is included, as AC5 names it.
    * Type:     normal
    */
+  // SCRUM-67-TC13
   it.each([ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.EVENT_COORDINATOR_LEAD])(
     'US67-R01 (AC5): %s gets the venue bookings',
     async (role) => {
@@ -394,13 +349,15 @@ describe('SCRUM-67 GET /api/venues/:id/bookings (route, real session cookie)', (
   /*
    * AC:       SCRUM-67 AC5
    * Scenario: A role AC5 doesn't name calls the endpoint.
-   * Setup:    A real cookie for a user whose only role is Technical Support, Event Organiser,
-   *           Attendee, or an unknown value.
-   * Expected: 403, and no venue or booking lookup happens. Technical Support is refused
-   *           because AC5 only names Coordinators, Venue Staff and the Lead (unlike SCRUM-66).
+   * Setup:    A real cookie for a user whose only role is Safety Officer, Technical Support,
+   *           Event Organiser, Attendee, or an unknown value.
+   * Expected: 403, and no venue or booking lookup happens. The Safety Officer and Technical
+   *           Support are refused because AC5 only names Coordinators, Venue Staff and the
+   *           Lead. SCRUM-66 still lets both open the availability calendar.
    * Type:     error
    */
-  it.each([ROLES.TECHNICAL_SUPPORT, ROLES.EVENT_ORGANISER, ROLES.ATTENDEE, 'UNKNOWN'])(
+  // SCRUM-67-TC14
+  it.each([ROLES.SAFETY_OFFICER, ROLES.TECHNICAL_SUPPORT, ROLES.EVENT_ORGANISER, ROLES.ATTENDEE, 'UNKNOWN'])(
     'US67-R02 (AC5): %s is refused with 403',
     async (role) => {
       const res = await asRoles([role]);
@@ -417,6 +374,7 @@ describe('SCRUM-67 GET /api/venues/:id/bookings (route, real session cookie)', (
    * Expected: Allowed, because one permitted role is enough.
    * Type:     boundary
    */
+  // SCRUM-67-TC15
   it('US67-R03 (AC5): a hybrid user with one permitted role is allowed', async () => {
     const pending = asRoles([ROLES.EVENT_ORGANISER, ROLES.VENUE_STAFF]);
     fetchOne.mockResolvedValueOnce(VENUE);
@@ -424,14 +382,92 @@ describe('SCRUM-67 GET /api/venues/:id/bookings (route, real session cookie)', (
     expect((await pending).status).toBe(200);
   });
 
+});
+
+describe('SCRUM-67 guards: blank expiry, string id, bad period, unknown venue', () => {
   /*
-   * AC:       SCRUM-67 AC5
-   * Scenario: Nobody is signed in.
-   * Setup:    No session cookie.
-   * Expected: 401, before any database query.
-   * Type:     error
+   * AC: SCRUM-67 AC2, AC3 (cannot fail this way: a hold with a blank expiry is dropped as if
+   *     it had expired).
+   * Scenario: A hold with no expiry recorded.
+   * Setup: TENTATIVE row with hold_expires_at null. Holds cannot be saved without an
+   *        expiry yet (SCRUM-75). The database is mocked.
+   * Expected: Returned as an active hold, with holdExpiresAt null.
+   * Type: boundary
    */
-  it('US67-R04 (AC5): a request without a session is rejected with 401', async () => {
+  // SCRUM-67-TC21
+  it('US67-B06: a hold with no expiry is treated as active', async () => {
+    mockRows([row({ status: 'TENTATIVE', hold_expires_at: null })]);
+    const result = await venuesService.listVenueBookingsForPeriod(7, PERIOD, NOW);
+    expect(result.bookings).toEqual([expect.objectContaining({ type: 'TENTATIVE_HOLD', holdExpiresAt: null })]);
+  });
+
+  /*
+   * AC: SCRUM-67 AC4 (cannot fail this way: a booking goes missing from its own venue because
+   *     the venue id from the URL is text).
+   * Scenario: The venue id comes from the URL as a string ("7") while the row stores a number.
+   * Setup: venueId "7", row venue_id 7. The database is mocked.
+   * Expected: The booking is still returned.
+   * Type: boundary
+   */
+  // SCRUM-67-TC22
+  it('US67-B10: a string venue id from the URL still matches the venue', async () => {
+    mockRows([row()]);
+    const result = await venuesService.listVenueBookingsForPeriod('7', PERIOD, NOW);
+    expect(result.bookings).toHaveLength(1);
+  });
+
+  /*
+   * AC: SCRUM-67 AC1 (cannot fail this way: a missing, unreadable, empty or backwards period
+   *     returns a booking list).
+   * Scenario: The period is missing, unreadable, empty, or backwards.
+   * Setup: Six bad inputs: no from, no to, a non-date, from equal to to, from after to,
+   *        and no range argument at all. The database is mocked.
+   * Expected: 400 with a message saying what is wrong, and no database call.
+   * Type: error
+   */
+  // SCRUM-67-TC23
+  it.each([
+    ['from is missing', { to: PERIOD.to }, 'from and to are required'],
+    ['to is missing', { from: PERIOD.from }, 'from and to are required'],
+    ['a date is invalid', { from: 'not-a-date', to: PERIOD.to }, 'from and to must be valid dates'],
+    ['from equals to', { from: PERIOD.from, to: PERIOD.from }, 'from must be before to'],
+    ['from is after to', { from: PERIOD.to, to: PERIOD.from }, 'from must be before to'],
+    ['no range is passed', undefined, 'from and to are required'],
+  ])('US67-B15: returns 400 when %s', async (_label, range, message) => {
+    await expect(venuesService.listVenueBookingsForPeriod(7, range, NOW)).rejects.toMatchObject({ status: 400, message });
+    expect(fetchOne).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC: SCRUM-67 AC1 (cannot fail this way: a venue that does not exist returns an empty
+   *     list that reads as no bookings).
+   * Scenario: The venue does not exist.
+   * Setup: The venue lookup returns null. The period is valid. The database is mocked.
+   * Expected: 404, and the bookings query is never run.
+   * Type: error
+   */
+  // SCRUM-67-TC24
+  it('US67-B16: returns 404 for an unknown venue', async () => {
+    fetchOne.mockResolvedValue(null);
+    await expect(venuesService.listVenueBookingsForPeriod(99, PERIOD, NOW)).rejects.toMatchObject({ status: 404 });
+    expect(fetchMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('Bookings route with no session', () => {
+  const app = createApp();
+  const url = `/api/venues/7/bookings?from=${PERIOD.from}&to=${PERIOD.to}`;
+
+  /*
+   * AC: SCRUM-67 AC5 (cannot fail this way: someone who is not signed in sees the list).
+   *     The role refusals are SCRUM-67-TC14.
+   * Scenario: Nobody is signed in.
+   * Setup: No session cookie. The database is mocked.
+   * Expected: 401, before any database query.
+   * Type: error
+   */
+  // SCRUM-67-TC25
+  it('US67-R04: a request without a session is rejected with 401', async () => {
     const res = await request(app).get(url);
     expect(res.status).toBe(401);
     expect(fetchOne).not.toHaveBeenCalled();

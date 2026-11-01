@@ -14,6 +14,18 @@ export const ROLES = {
 };
 
 /**
+ * Purpose: the internal roles allowed to open venue availability.
+ * AC: SCRUM-66. Organisers and Attendees are outside this list (AC6).
+ */
+export const INTERNAL_ROLES = [
+  ROLES.EVENT_COORDINATOR,
+  ROLES.EVENT_COORDINATOR_LEAD,
+  ROLES.SAFETY_OFFICER,
+  ROLES.VENUE_STAFF,
+  ROLES.TECHNICAL_SUPPORT,
+];
+
+/**
  * Purpose: labels shown in the header and profile after a valid login so the
  * session is recognised as Lead or Safety Officer (and any other held roles).
  * AC: SCRUM-54 AC1

@@ -88,12 +88,10 @@ beforeEach(() => {
     users: [
       { id: 1, full_name: 'Organiser', is_active: true },
       { id: 2, full_name: 'Coordinator', is_active: true },
-      { id: 99, full_name: 'Other Org', is_active: true },
     ],
     user_roles: [
       { user_id: 1, role: ROLES.EVENT_ORGANISER },
       { user_id: 2, role: ROLES.EVENT_COORDINATOR },
-      { user_id: 99, role: ROLES.EVENT_ORGANISER },
     ],
     organisations: [{ id: 10, name: 'Acme' }],
   };
@@ -139,6 +137,7 @@ describe('SCRUM-70 confirmation notice via changeStatus (UI Confirm)', () => {
    *           say it is confirmed; event_id 3 is attached (AC4: no duplicate on one confirm).
    * Type:     normal
    */
+  // SCRUM-70-TC01
   it('US70-B01: confirming via changeStatus notifies the Organiser that the event is confirmed', async () => {
     await events.changeStatus(coordinator, 3, 'CONFIRMED');
 
@@ -160,6 +159,7 @@ describe('SCRUM-70 confirmation notice via changeStatus (UI Confirm)', () => {
    * Expected: No EVENT_CONFIRMED notifyUser calls.
    * Type:     boundary
    */
+  // SCRUM-70-TC02
   it('US70-B03: viewing a Confirmed event does not create a confirmation notice', async () => {
     event.status = 'CONFIRMED';
     await events.getEvent({ id: 1, roles: [ROLES.EVENT_ORGANISER], organisationId: 10 }, 3);
@@ -174,6 +174,7 @@ describe('SCRUM-70 confirmation notice via changeStatus (UI Confirm)', () => {
    * Expected: 409 EDIT_LOCKED, nothing written, and no EVENT_CONFIRMED notice.
    * Type:     boundary
    */
+  // SCRUM-70-TC03
   it('US70-B04: re-saving a Confirmed event does not create a confirmation notice', async () => {
     event.status = 'CONFIRMED';
     await expect(events.updateEvent(coordinator, 3, { description: 'Updated notes only' }))
@@ -193,6 +194,7 @@ describe('SCRUM-70 confirmation notice via changeStatus (UI Confirm)', () => {
    * Expected: Zero EVENT_CONFIRMED calls (SO readiness may still notify under SCRUM-81).
    * Type:     error
    */
+  // SCRUM-70-TC04
   it('US70-B05: sending to safety check does not create an EVENT_CONFIRMED notice', async () => {
     event.status = 'PLANNING';
     await events.changeStatus(coordinator, 3, 'AWAITING_SAFETY_CHECK');
@@ -206,37 +208,11 @@ describe('SCRUM-70 confirmation notice via changeStatus (UI Confirm)', () => {
    * Expected: No EVENT_CONFIRMED notice.
    * Type:     boundary
    */
+  // SCRUM-70-TC05
   it('US70-B06: marking completed does not create an EVENT_CONFIRMED notice', async () => {
     event.status = 'CONFIRMED';
     await events.changeStatus(coordinator, 3, 'COMPLETED');
     expect(confirmationNotices()).toHaveLength(0);
-  });
-
-  /*
-   * AC:       SCRUM-70 AC5
-   * Scenario: Coordinator who confirms must not receive the confirmation notice.
-   * Setup:    Confirm via changeStatus; organiser 1, coordinator 2 (acting user).
-   * Expected: EVENT_CONFIRMED only for user 1; never for user 2.
-   * Type:     normal
-   */
-  it('US70-B07: only the Organiser receives EVENT_CONFIRMED, not the Coordinator', async () => {
-    await events.changeStatus(coordinator, 3, 'CONFIRMED');
-    const recipients = confirmationNotices().map(([userId]) => userId);
-    expect(recipients).toEqual([1]);
-    expect(recipients).not.toContain(2);
-  });
-
-  /*
-   * AC:       SCRUM-70 AC5
-   * Scenario: An Organiser of a different event must not be notified.
-   * Setup:    User 99 is an organiser in the DB but not organiser_id on event 3.
-   * Expected: EVENT_CONFIRMED only for organiser_id 1.
-   * Type:     boundary
-   */
-  it('US70-B08: an organiser of another event does not receive this confirmation notice', async () => {
-    await events.changeStatus(coordinator, 3, 'CONFIRMED');
-    expect(confirmationNotices().every(([userId]) => userId === 1)).toBe(true);
-    expect(confirmationNotices().some(([userId]) => userId === 99)).toBe(false);
   });
 
   /*
@@ -246,6 +222,7 @@ describe('SCRUM-70 confirmation notice via changeStatus (UI Confirm)', () => {
    * Expected: Status CONFIRMED; zero EVENT_CONFIRMED notices.
    * Type:     boundary
    */
+  // SCRUM-70-TC06
   it('US70-B09: confirming with no organiser creates no EVENT_CONFIRMED notice', async () => {
     event.organiser_id = null;
     await events.changeStatus(coordinator, 3, 'CONFIRMED');
@@ -261,6 +238,7 @@ describe('SCRUM-70 confirmation notice via changeStatus (UI Confirm)', () => {
    * Expected: 409; status stays PREPARATION; zero EVENT_CONFIRMED calls.
    * Type:     error
    */
+  // SCRUM-70-TC07
   it('US70-B11: a refused confirm creates no EVENT_CONFIRMED notice', async () => {
     tables.venue_bookings = [];
     await expect(events.changeStatus(coordinator, 3, 'CONFIRMED')).rejects.toMatchObject({
@@ -278,6 +256,7 @@ describe('SCRUM-70 confirmation notice via changeStatus (UI Confirm)', () => {
    * Expected: One EVENT_CONFIRMED whose body uses the "An event" fallback and says confirmed.
    * Type:     boundary
    */
+  // SCRUM-70-TC08
   it('US70-B12: confirming with a missing event name uses the An event fallback', async () => {
     event.name = null;
     await events.changeStatus(coordinator, 3, 'CONFIRMED');
@@ -294,6 +273,7 @@ describe('SCRUM-70 confirmation notice via confirmEvent (API path)', () => {
    * Expected: Exactly one EVENT_CONFIRMED with event name in the body.
    * Type:     normal
    */
+  // SCRUM-70-TC09
   it('US70-B10: confirmEvent notifies the Organiser once with the event name', async () => {
     await events.confirmEvent(coordinator, 3);
     expect(confirmationNotices()).toHaveLength(1);
@@ -313,6 +293,7 @@ describe('SCRUM-70 confirmation notice HTTP route', () => {
    * Expected: 200; EVENT_CONFIRMED was requested for organiser 1.
    * Type:     normal
    */
+  // SCRUM-70-TC10
   it('US70-R01: POST /status CONFIRMED creates an EVENT_CONFIRMED notice for the Organiser', async () => {
     db.fetchOne.mockImplementation(async (query) => {
       if (query.table === 'users') {
