@@ -8,10 +8,11 @@ const {
   throwIf,
 } = require('../config/db');
 const { ROLES } = require('../constants/roles');
-const { BOOKING_STATUS } = require('../constants/statuses');
+const { BOOKING_STATUS, EVENT_STATUS } = require('../constants/statuses');
 const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
 const { writeAudit, notifyUser } = require('./audit.service');
+const { notifyVenueStaff } = require('./notifications.service');
 
 function mapVenue(row) {
   return {
@@ -797,6 +798,10 @@ async function listBookings(filters = {}) {
       event_name: row.events?.name,
       event_start_at: row.events?.start_at,
       event_end_at: row.events?.end_at,
+      // SCRUM-58 AC6: the Venues list needs this so an approved booking can be approved again.
+      needs_review: Boolean(row.needs_review),
+      // SCRUM-75: the Venues page shows when a Held booking expires.
+      hold_expires_at: row.hold_expires_at || null,
       has_conflict: hasConflict,
       conflict_details: conflictDetails,
     };
@@ -806,7 +811,9 @@ async function listBookings(filters = {}) {
 /**
  * Purpose: an Event Coordinator asks for a venue for an event. The request is saved as
  * PENDING for Venue Staff to decide, and an audit entry is written.
- * AC: SCRUM-78 AC6, no notice is sent here because nothing has been decided yet.
+ * AC: SCRUM-78 AC6, the Coordinator is not told yet because nothing has been decided.
+ *   SCRUM-46 AC1, every active Venue Staff member is told a request is waiting, except the
+ *   person who sent it.
  * Inputs: user (must have EVENT_COORDINATOR) and payload { eventId, venueId, startAt, endAt,
  * setupMinutes, teardownMinutes, notes }.
  * Output: the created booking row. Throws 403 if the user is not a Coordinator and 409 if
@@ -823,7 +830,7 @@ async function requestBooking(user, payload) {
     payload.endAt,
     payload.setupMinutes,
     payload.teardownMinutes,
-    { confirmedOnly: true }
+    { confirmedOnly: true, ownEventId: payload.eventId }
   );
   if (conflict) {
     throw httpError(409, 'This venue already has a confirmed booking in that window', 'BOOKING_CONFLICT');
@@ -843,6 +850,22 @@ async function requestBooking(user, payload) {
   });
 
   await writeAudit(user.id, 'BOOKING_REQUESTED', 'venue_booking', created.id, payload);
+
+  // SCRUM-46 AC1: Venue Staff need to know a request is waiting. SCRUM-78 AC6 still holds:
+  // this is not a decision notice, and the Coordinator is not a recipient.
+  const event = await fetchOne(
+    supabase.from('events').select('id, name').eq('id', payload.eventId)
+  );
+  const venue = await fetchOne(
+    supabase.from('venues').select('id, name').eq('id', payload.venueId)
+  );
+  await notifyVenueStaff({
+    eventId: payload.eventId,
+    type: 'BOOKING_REQUESTED',
+    title: 'New venue booking request',
+    body: `A venue booking was requested for ${event?.name || 'an event'} at ${venue?.name || 'a venue'}.`,
+    excludeUserId: user.id,
+  });
   return created;
 }
 
@@ -865,6 +888,15 @@ async function decideBooking(user, id, decision) {
   const booking = await fetchOne(supabase.from('venue_bookings').select('*').eq('id', id));
   if (!booking) throw httpError(404, 'Booking not found', 'NOT_FOUND');
 
+  // SCRUM-58 AC6: an approved booking marked for review can be approved again. That only
+  // clears the mark. Status, venue, date and time stay as they are, and no new notice is sent.
+  if (booking.status === BOOKING_STATUS.APPROVED && booking.needs_review && decision.approve) {
+    return updateById('venue_bookings', id, {
+      needs_review: false,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
   // SCRUM-18 AC4: only PENDING bookings can be decided.
   if (booking.status !== BOOKING_STATUS.PENDING) {
     throw httpError(
@@ -882,7 +914,7 @@ async function decideBooking(user, id, decision) {
       booking.end_at,
       booking.setup_minutes,
       booking.teardown_minutes,
-      { excludeBookingId: booking.id, confirmedOnly: true }
+      { excludeBookingId: booking.id, confirmedOnly: true, ownEventId: booking.event_id }
     );
     if (conflict) {
       throw httpError(
@@ -900,6 +932,7 @@ async function decideBooking(user, id, decision) {
     decision_reason: decision.reason || null,
     alternative_suggestion: decision.alternativeSuggestion || null,
     decided_at: new Date().toISOString(),
+    needs_review: false,
   });
 
   // SCRUM-78 AC5: only the event's assigned Coordinator is told, not whoever sent the
@@ -915,6 +948,229 @@ async function decideBooking(user, id, decision) {
       alternativeSuggestion: decision.alternativeSuggestion,
     });
     await notifyUser(event.coordinator_id, 'BOOKING_DECISION', notice.title, notice.body, event.id);
+  }
+
+  return updated;
+}
+
+/**
+ * Purpose: Venue Staff place a tentative hold on a venue for an event's date and time, so the
+ * venue stays reserved while the Coordinator finalises arrangements. The hold is stored as a
+ * venue booking with status TENTATIVE (shown as "Held") and an expiry in hold_expires_at.
+ * AC: SCRUM-75 AC1 (hold recorded as Held, linked to the event and its Coordinator),
+ *     AC2-AC4 (expiry required, not in the past, not after the event starts),
+ *     AC5 (no overlap with a confirmed booking or active hold, nothing saved),
+ *     AC9 (Venue Staff only, nothing saved).
+ * Business rule: W7 #4, a tentative hold has a mandatory expiry and is never a confirmed
+ *     booking. W7 #1, the occupied window includes the venue's setup and turnaround (SCRUM-59).
+ * Inputs: user (must have VENUE_STAFF), payload { eventId, venueId, expiresAt }, and `now`
+ *     (a parameter so tests can fix the time).
+ * Output: the created booking row plus coordinator_id (the event's assigned Coordinator).
+ * Failure: 403 FORBIDDEN, 400 VALIDATION_ERROR / HOLD_EXPIRY_REQUIRED / HOLD_EXPIRY_IN_PAST /
+ *     HOLD_EXPIRY_AFTER_EVENT_START, 404 NOT_FOUND, 409 BOOKING_CONFLICT. Nothing is saved on
+ *     any failure.
+ */
+// A hold only makes sense for an event that is still being planned. Matches the events the
+// Place a hold card offers; checked here too so a direct request can't hold a Draft,
+// Cancelled or Completed event and block the venue until the hold expires.
+const HOLDABLE_EVENT_STATUSES = [
+  EVENT_STATUS.SUBMITTED,
+  EVENT_STATUS.UNDER_REVIEW,
+  EVENT_STATUS.APPROVED,
+  EVENT_STATUS.PLANNING,
+];
+
+async function placeHold(user, payload = {}, now = new Date()) {
+  if (!hasRole(user, ROLES.VENUE_STAFF)) {
+    throw httpError(403, 'Only venue staff can place a hold on a venue', 'FORBIDDEN');
+  }
+  if (!payload.eventId || !payload.venueId) {
+    throw httpError(400, 'eventId and venueId are required', 'VALIDATION_ERROR');
+  }
+
+  // AC2: the expiry is mandatory.
+  if (payload.expiresAt === undefined || payload.expiresAt === null || payload.expiresAt === '') {
+    throw httpError(400, 'A hold needs an expiry date and time', 'HOLD_EXPIRY_REQUIRED');
+  }
+  const expiresAt = new Date(payload.expiresAt);
+  if (Number.isNaN(expiresAt.getTime())) {
+    throw httpError(400, 'The hold expiry must be a valid date and time', 'VALIDATION_ERROR');
+  }
+  // AC3: an expiry at or before now would leave a hold that is already expired.
+  if (expiresAt <= new Date(now)) {
+    throw httpError(400, 'The hold expiry cannot be in the past', 'HOLD_EXPIRY_IN_PAST');
+  }
+
+  const event = await fetchOne(
+    supabase.from('events').select('id, name, status, start_at, end_at, coordinator_id').eq('id', payload.eventId)
+  );
+  if (!event) throw httpError(404, 'Event not found', 'NOT_FOUND');
+  if (!HOLDABLE_EVENT_STATUSES.includes(event.status)) {
+    throw httpError(409, 'A venue can only be held for an event that is still being planned', 'EVENT_NOT_HOLDABLE');
+  }
+  if (!event.start_at || !event.end_at) {
+    throw httpError(400, 'The event needs a start and end time before a venue can be held', 'VALIDATION_ERROR');
+  }
+
+  // AC4: an expiry exactly at the event start is allowed; anything later is not.
+  if (expiresAt > new Date(event.start_at)) {
+    throw httpError(
+      400,
+      'The hold expiry cannot be later than the event start',
+      'HOLD_EXPIRY_AFTER_EVENT_START'
+    );
+  }
+
+  const venue = await fetchOne(
+    supabase.from('venues').select('id, name, setup_minutes, teardown_minutes').eq('id', payload.venueId)
+  );
+  if (!venue) throw httpError(404, 'Venue not found', 'NOT_FOUND');
+
+  // SCRUM-59: the hold records the venue's current setup/turnaround, like any booking, so its
+  // occupied window stays the same even if the venue's defaults change later.
+  const setupMinutes = venue.setup_minutes ?? 30;
+  const teardownMinutes = venue.teardown_minutes ?? 30;
+
+  // AC5: checked against confirmed bookings and active holds only (PENDING requests are not
+  // commitments). Touching windows are not a clash (windowsOverlap is strict).
+  const conflict = await findConflict(
+    venue.id,
+    event.start_at,
+    event.end_at,
+    setupMinutes,
+    teardownMinutes,
+    { confirmedOnly: true, now }
+  );
+  if (conflict) {
+    throw httpError(
+      409,
+      'This venue already has a confirmed booking or active hold in that window',
+      'BOOKING_CONFLICT'
+    );
+  }
+
+  // AC1 + AC8: stored as TENTATIVE (Held), never APPROVED, so it is never a confirmed booking.
+  const created = await insertOne('venue_bookings', {
+    event_id: event.id,
+    venue_id: venue.id,
+    requested_by: user.id,
+    status: BOOKING_STATUS.TENTATIVE,
+    start_at: event.start_at,
+    end_at: event.end_at,
+    setup_minutes: setupMinutes,
+    teardown_minutes: teardownMinutes,
+    hold_expires_at: expiresAt.toISOString(),
+  });
+
+  await writeAudit(user.id, 'HOLD_PLACED', 'venue_booking', created.id, {
+    eventId: event.id,
+    venueId: venue.id,
+    expiresAt: expiresAt.toISOString(),
+  });
+
+  // AC1: the event's Coordinator is who the hold is for (SCRUM-80 notifies them later).
+  return { ...created, coordinator_id: event.coordinator_id ?? null };
+}
+
+/*
+ * Purpose: cancel one venue booking and move its Confirmed event back to Planning when needed.
+ * AC: SCRUM-61 AC1–AC10 — assigned Coordinators may cancel eligible bookings except for Completed events.
+ * Inputs: signed-in user and booking id. Output: the updated cancelled booking row.
+ * Failure: throws authorization, missing-row, or conflict errors before mutation; status update failures report partial success.
+ */
+async function cancelBooking(user, bookingId) {
+  if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
+    throw httpError(403, 'Only coordinators can cancel venue bookings', 'FORBIDDEN');
+  }
+
+  const booking = await fetchOne(
+    supabase.from('venue_bookings').select('*').eq('id', bookingId)
+  );
+  if (!booking) throw httpError(404, 'Booking not found', 'NOT_FOUND');
+
+  const event = await fetchOne(
+    supabase.from('events').select('*').eq('id', booking.event_id)
+  );
+  if (!event) throw httpError(404, 'Event not found', 'NOT_FOUND');
+  if (event.coordinator_id !== user.id) {
+    throw httpError(403, 'Only the assigned coordinator can cancel a booking', 'FORBIDDEN');
+  }
+
+  /*
+   * Purpose: block changes to bookings that belong to a completed event.
+   * AC: SCRUM-61 AC10 — completed events are historical records and cannot be modified.
+   * Inputs: the assigned event row. Output: throws 409 before any database writes.
+   * Failure: the request is rejected with EVENT_COMPLETED and the booking remains unchanged.
+   */
+  if (event.status === EVENT_STATUS.COMPLETED) {
+    throw httpError(409, 'Cannot cancel bookings for completed events', 'EVENT_COMPLETED');
+  }
+
+  /*
+   * Purpose: block changes to bookings that belong to a cancelled event.
+   * AC: SCRUM-61 AC11 — cancelled events cannot have their bookings modified.
+   * Inputs: the assigned event row. Output: throws 409 before any database writes.
+   * Failure: the request is rejected with EVENT_CANCELLED and the booking remains unchanged.
+   */
+  if (event.status === EVENT_STATUS.CANCELLED) {
+    throw httpError(409, 'Cannot cancel bookings for cancelled events', 'EVENT_CANCELLED');
+  }
+
+  if (booking.status === BOOKING_STATUS.CANCELLED) {
+    throw httpError(409, 'This booking has already been cancelled', 'ALREADY_CANCELLED');
+  }
+  if (![BOOKING_STATUS.PENDING, BOOKING_STATUS.TENTATIVE, BOOKING_STATUS.APPROVED].includes(booking.status)) {
+    throw httpError(409, 'This booking cannot be cancelled in its current status', 'INVALID_STATUS');
+  }
+
+  const updated = await updateById('venue_bookings', bookingId, {
+    status: BOOKING_STATUS.CANCELLED,
+    updated_at: new Date().toISOString(),
+  });
+  await writeAudit(user.id, 'BOOKING_CANCELLED', 'venue_booking', bookingId, {
+    eventId: booking.event_id,
+    venueId: booking.venue_id,
+  });
+
+  /*
+   * Purpose: return a Confirmed event to Planning after losing a venue booking.
+   * AC: SCRUM-61 AC8/AC9 — Confirmed events permit booking cancellation and require re-planning afterward.
+   * Inputs: the previously loaded event and cancelled booking. Output: event status is set to PLANNING and the transition is audited.
+   * Failure: logs the event-update error and returns an explicit partial-success error; the booking remains cancelled.
+   */
+  if (event.status === EVENT_STATUS.CONFIRMED) {
+    try {
+      const eventUpdate = await updateById('events', event.id, {
+        status: EVENT_STATUS.PLANNING,
+        updated_at: new Date().toISOString(),
+      });
+      if (!eventUpdate) {
+        throw new Error(`Event ${event.id} was not updated after its venue booking was cancelled`);
+      }
+      // Inserts a record into event_status_history table when a cancellation for confirmed event occurs
+      // This to ensure the "status history" section of event page displays the status change
+      await insertOne('event_status_history', {
+        event_id: event.id,
+        actor_id: user.id,
+        from_status: EVENT_STATUS.CONFIRMED,
+        to_status: EVENT_STATUS.PLANNING,
+        note: 'Venue booking cancelled',
+      });
+    } catch (error) {
+      console.error(`Failed to move event ${event.id} to Planning after booking ${bookingId} was cancelled`, error);
+      throw httpError(
+        500,
+        'The booking was cancelled, but the event could not be moved to Planning. The cancellation has been saved.',
+        'EVENT_STATUS_UPDATE_FAILED'
+      );
+    }
+
+    await writeAudit(user.id, 'EVENT_STATUS_AUTO_CHANGED', 'event', event.id, {
+      from_status: EVENT_STATUS.CONFIRMED,
+      to_status: EVENT_STATUS.PLANNING,
+      reason: 'venue_booking_cancelled',
+      cancelled_booking_id: bookingId,
+    });
   }
 
   return updated;
@@ -963,7 +1219,12 @@ async function findConflict(
   teardownMinutes = 30,
   options = {}
 ) {
-  const { excludeBookingId = null, confirmedOnly = false, now = new Date() } = options;
+  const {
+    excludeBookingId = null,
+    confirmedOnly = false,
+    now = new Date(),
+    ownEventId = null,
+  } = options;
   const sMin = Number(setupMinutes !== undefined && setupMinutes !== null ? setupMinutes : 30);
   const tMin = Number(teardownMinutes !== undefined && teardownMinutes !== null ? teardownMinutes : 30);
   const { occupiedStart: newStart, occupiedEnd: newEnd } = computeOccupiedWindow(startAt, endAt, sMin, tMin);
@@ -993,6 +1254,11 @@ async function findConflict(
     if (row.status === BOOKING_STATUS.TENTATIVE) {
       const expiry = row.expires_at || row.hold_expires_at;
       if (expiry && new Date(expiry) <= new Date(now)) {
+        continue;
+      }
+      // SCRUM-75 AC6: a hold blocks requests from *another* event. The held event's own
+      // Coordinator can still request (and staff approve) the venue it is holding.
+      if (ownEventId && Number(row.event_id) === Number(ownEventId)) {
         continue;
       }
     }
@@ -1026,17 +1292,145 @@ async function listUnavailability(venueId) {
   return fetchMany(query);
 }
 
+/*
+ * Purpose: every confirmed booking or active tentative hold at one venue whose occupied
+ *   window overlaps a given period, so a recorded unavailability period can be matched
+ *   against what is already booked there.
+ * AC: SCRUM-60 AC2 (occupied window = start - setup to end + turnaround; holds keep their
+ *     held period, same as SCRUM-67), AC3 (a window that only touches the period's edge is
+ *     not an overlap -- windowsOverlap is strict), AC4 (only APPROVED bookings and active
+ *     TENTATIVE holds; PENDING/REJECTED/CANCELLED and expired holds are excluded), AC5 (only
+ *     this venue's bookings -- another venue booking of the same multi-venue event is a
+ *     separate row with its own venue_id and is filtered out), AC6 (a booking already in the
+ *     past, end_at at or before now, is excluded).
+ * Inputs: venueId, a period with startAt/endAt (accepts either camelCase or the
+ *   start_at/end_at shape a venue_unavailability row already has), and now (a parameter so
+ *   tests can fix the time).
+ * Output: [{ row, isHold, occupiedStart, occupiedEnd }] for each overlapping booking.
+ * Failure: a database error propagates.
+ */
+async function findBookingsOverlappingPeriod(venueId, period, now = new Date()) {
+  const periodStart = new Date(period.startAt ?? period.start_at);
+  const periodEnd = new Date(period.endAt ?? period.end_at);
+
+  const rows = await fetchMany(
+    supabase
+      .from('venue_bookings')
+      .select('*, events ( name )')
+      .eq('venue_id', venueId)
+      .in('status', [BOOKING_STATUS.APPROVED, BOOKING_STATUS.TENTATIVE])
+  );
+
+  return rows
+    .filter((row) => String(row.venue_id) === String(venueId))
+    .filter((row) => row.status === BOOKING_STATUS.APPROVED || row.status === BOOKING_STATUS.TENTATIVE)
+    .filter((row) => new Date(row.end_at) > now)
+    .map((row) => {
+      const isHold = row.status === BOOKING_STATUS.TENTATIVE;
+      if (isHold && !isActiveHold(row, now)) return null;
+      const occupied = isHold
+        ? { occupiedStart: new Date(row.start_at), occupiedEnd: new Date(row.end_at) }
+        : computeOccupiedWindow(row.start_at, row.end_at, row.setup_minutes, row.teardown_minutes);
+      return { row, isHold, ...occupied };
+    })
+    .filter((entry) => entry
+      && windowsOverlap(periodStart, periodEnd, entry.occupiedStart, entry.occupiedEnd));
+}
+
+// Shapes one overlapping booking entry for an API response (event, venue, date, time).
+function toAffectedBookingSummary({ row, isHold }) {
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    eventName: row.events?.name || null,
+    venueId: row.venue_id,
+    type: isHold ? AVAILABILITY_BLOCK.TENTATIVE_HOLD : AVAILABILITY_BLOCK.BOOKING,
+    status: row.status,
+    startAt: new Date(row.start_at).toISOString(),
+    endAt: new Date(row.end_at).toISOString(),
+  };
+}
+
+/*
+ * Purpose: when a venue unavailability period is recorded, find every booking it affects and
+ *   mark each one as needing alternative arrangements, reusing the same needs_review flag
+ *   SCRUM-42/58 already set -- so the Coordinator sees "Requires review" on the event page
+ *   with no new UI there.
+ * AC: SCRUM-60 AC1 (runs when the period is recorded), AC7 (marks needs_review; the
+ *     Coordinator already sees this flag on the event page via listVenueBookings), AC9 (marks
+ *     needs_review only -- status, venue, date and time are left exactly as they were).
+ * Inputs: venueId, the just-recorded period, and now (a parameter so tests can fix the time).
+ * Output: every affected booking (event, venue, date, time), whether newly marked here or
+ *   already marked from an earlier overlapping period -- the Venue Staff viewing the period
+ *   sees everything affected now, not just what changed this time.
+ * Failure: a database error propagates; the unavailability period has already been saved.
+ */
+async function identifyAndMarkAffectedBookings(venueId, period, now = new Date()) {
+  const overlapping = await findBookingsOverlappingPeriod(venueId, period, now);
+  const nowIso = now.toISOString();
+  for (const { row } of overlapping) {
+    if (!row.needs_review) {
+      await updateById('venue_bookings', row.id, { needs_review: true, updated_at: nowIso });
+    }
+  }
+  return overlapping.map(toAffectedBookingSummary);
+}
+
+/*
+ * Purpose: the Venue Staff who recorded a period can view the bookings it affects, any time
+ *   -- not only right after recording it.
+ * AC: SCRUM-60 AC8. Calls identifyAndMarkAffectedBookings again on every view, not just at
+ *     record time, so a booking made or approved after the period was recorded is marked
+ *     too -- the list and the needs_review mark never disagree (review finding).
+ * Inputs: the requesting user, and the unavailability period id.
+ * Output: every booking affected by that period (event, venue, date, time).
+ * Failure: 403 if not Venue Staff; 404 if the period doesn't exist.
+ */
+async function listBookingsAffectedByUnavailability(user, unavailabilityId, now = new Date()) {
+  if (!hasRole(user, ROLES.VENUE_STAFF)) {
+    throw httpError(403, 'Only venue staff can view affected bookings', 'FORBIDDEN');
+  }
+  const period = await fetchOne(
+    supabase.from('venue_unavailability').select('*').eq('id', unavailabilityId)
+  );
+  if (!period) throw httpError(404, 'Unavailability period not found', 'NOT_FOUND');
+
+  return identifyAndMarkAffectedBookings(period.venue_id, period, now);
+}
+
+/**
+ * Purpose: Venue Staff record a venue as unavailable for a period, with a reason.
+ * AC: SCRUM-72 AC1 (start, end, reason required); AC2 (missing start/end/reason rejected);
+ *     AC3 (end must be after start); AC4 (saved even when bookings overlap - checked
+ *     elsewhere, at availability-check time, not here); AC5 (no existing event/booking is
+ *     touched); AC8 (non-Venue-Staff rejected, nothing saved).
+ * Inputs: user, payload { venueId, startAt, endAt, reason }.
+ * Output: the inserted venue_unavailability row.
+ * Failure: 403 if not Venue Staff; 400 if start/end/reason missing or end is not after start.
+ */
 async function blockVenue(user, payload) {
   if (!hasRole(user, ROLES.VENUE_STAFF)) {
     throw httpError(403, 'Only venue staff can block venues', 'FORBIDDEN');
   }
-  return insertOne('venue_unavailability', {
+  if (!payload.startAt || !payload.endAt) {
+    throw httpError(400, 'startAt and endAt are required', 'VALIDATION_ERROR');
+  }
+  if (!payload.reason || !String(payload.reason).trim()) {
+    throw httpError(400, 'reason is required', 'VALIDATION_ERROR');
+  }
+  if (new Date(payload.endAt) <= new Date(payload.startAt)) {
+    throw httpError(400, 'endAt must be after startAt', 'VALIDATION_ERROR');
+  }
+  const period = await insertOne('venue_unavailability', {
     venue_id: payload.venueId,
-    reason: payload.reason || 'Maintenance',
+    reason: payload.reason,
     start_at: payload.startAt,
     end_at: payload.endAt,
     created_by: user.id,
   });
+  // SCRUM-60 AC1: identify and mark affected bookings as soon as the period is recorded.
+  const affectedBookings = await identifyAndMarkAffectedBookings(payload.venueId, period);
+  return { ...period, affectedBookings };
 }
 
 module.exports = {
@@ -1050,9 +1444,13 @@ module.exports = {
   listBookings,
   requestBooking,
   decideBooking,
+  placeHold,
+  cancelBooking,
   buildBookingDecisionNotice,
   listUnavailability,
   blockVenue,
+  identifyAndMarkAffectedBookings,
+  listBookingsAffectedByUnavailability,
   computeOccupiedWindow,
   windowsOverlap,
   findConflict,

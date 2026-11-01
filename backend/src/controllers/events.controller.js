@@ -1,4 +1,5 @@
 const eventsService = require('../services/events.service');
+const equipmentService = require('../services/equipment.service');
 const { asyncHandler } = require('../utils/asyncHandler');
 
 /**
@@ -58,6 +59,18 @@ const venueBookings = asyncHandler(async (req, res) => {
 const equipmentRequests = asyncHandler(async (req, res) => {
   const requests = await eventsService.listEquipmentRequests(req.user, req.params.id);
   res.json({ requests });
+});
+
+/**
+ * Purpose: POST /api/events/:id/equipment-requests — Coordinator records equipment needed for this event.
+ * AC: SCRUM-47
+ */
+const createEquipmentRequest = asyncHandler(async (req, res) => {
+  const request = await equipmentService.createRequest(req.user, {
+    ...req.body,
+    eventId: req.params.id,
+  });
+  res.status(201).json({ request });
 });
 
 const create = asyncHandler(async (req, res) => {
@@ -124,6 +137,12 @@ const history = asyncHandler(async (req, res) => {
   res.json({ history: historyRows });
 });
 
+/**
+ * Purpose: store a pending Coordinator handover for a Lead who currently holds the event.
+ * AC: SCRUM-33 AC1, AC2. The route already rejects anyone who is not a Lead.
+ * Inputs: event id, body.coordinatorId. Output: { ok: true }.
+ * Failure: 403 if the caller is not a Lead or does not hold the event. No row is written.
+ */
 const requestReassign = asyncHandler(async (req, res) => {
   const result = await eventsService.requestCoordinatorChange(
     req.user,
@@ -133,6 +152,13 @@ const requestReassign = asyncHandler(async (req, res) => {
   res.json(result);
 });
 
+/**
+ * Purpose: let a Lead accept a pending handover and return the updated event.
+ * AC: SCRUM-33 AC1, AC2, AC3. A Coordinator is rejected before the event changes.
+ * Inputs: event id. Output: { event }.
+ * Failure: 403 if the caller is not a Lead; 404 if nothing is pending. No audit entry
+ *   is written on failure.
+ */
 const acceptReassign = asyncHandler(async (req, res) => {
   const event = await eventsService.acceptCoordinatorChange(req.user, req.params.id);
   res.json({ event });
@@ -155,6 +181,21 @@ const listAssignableCoordinators = asyncHandler(async (req, res) => {
  */
 const assignCoordinator = asyncHandler(async (req, res) => {
   const event = await eventsService.assignPrimaryCoordinator(
+    req.user,
+    req.params.id,
+    req.body.coordinatorId
+  );
+  res.json({ event });
+});
+
+/**
+ * Purpose: replace the Coordinator on an event that already has one.
+ * AC: SCRUM-31 AC1–AC4
+ * Inputs: event id, body.coordinatorId. Output: { event }.
+ * Failure: 403/404/409 from the service. The event status is not changed.
+ */
+const reassignCoordinator = asyncHandler(async (req, res) => {
+  const event = await eventsService.reassignEventCoordinator(
     req.user,
     req.params.id,
     req.body.coordinatorId
@@ -256,9 +297,11 @@ module.exports = {
   acceptReassign,
   listAssignableCoordinators,
   assignCoordinator,
+  reassignCoordinator,
   requestClarification,
   respondClarification,
   listChangeRequests,
   createChangeRequest,
   decideChangeRequest,
+  createEquipmentRequest,
 };

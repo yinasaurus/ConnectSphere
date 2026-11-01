@@ -34,6 +34,19 @@ const REQUIRED_FOR_SUBMISSION = [
   { field: 'accessibilityNeeds', label: 'Accessibility requirements' },
 ];
 
+// SCRUM-40: fields the edit form may PATCH. The loaded event also carries registrationOpen /
+// registrationOpensAt / registrationClosesAt / registrationCapacity (SCRUM-63), which the
+// backend refuses on a general edit, so they must never be sent back.
+const EDITABLE_FIELDS = [
+  'name', 'description', 'purpose', 'category', 'startAt', 'endAt', 'expectedAttendance',
+  'accessibilityNeeds', 'layoutPreference', 'venueRequirements', 'equipmentNotes',
+  'specialRequests', 'registrationRequired',
+];
+
+function pickEditableFields(payload) {
+  return Object.fromEntries(EDITABLE_FIELDS.map((field) => [field, payload[field]]));
+}
+
 function findMissingFields(form) {
   return REQUIRED_FOR_SUBMISSION.filter(({ field }) => {
     const value = form[field];
@@ -50,6 +63,16 @@ function toDateTimeLocal(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/**
+ * Purpose: create a new event request, or edit an existing one when the caller is allowed.
+ * AC: SCUM-14 / SCUM-15 (required fields on submit; draft saves skip them).
+ *     SCRUM-28 AC1/AC4 (submit → unassigned queue).
+ *     SCRUM-40 1C / 2A / 3A — edit route opens only for Organiser Draft or clarification
+ *     ACTION_REQUIRED, or for the assigned Coordinator before Confirmed; Confirmed and
+ *     terminal statuses show a locked message (critical Confirmed changes use change requests).
+ * Inputs: optional `:id` route param; session user and roles.
+ * Failure: locked or unauthorised edit shows an error and no form.
+ */
 export default function NewEvent() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -65,6 +88,14 @@ export default function NewEvent() {
 
   const [eventData, setEventData] = useState(null);
 
+  // SCRUM-40 1C: the assigned Coordinator edits in place (no draft / submit flow). An organiser
+  // amending a clarification keeps the organiser flow even if they also hold the Coordinator role.
+  const isCoordinatorEdit = isEditing && Boolean(eventData)
+    && canCoordinate
+    && eventData.coordinatorId === user?.id
+    && eventData.status !== 'DRAFT'
+    && !(eventData.organiserId === user?.id && eventData.subState === 'ACTION_REQUIRED');
+
   useEffect(() => {
     api('/api/events').then((data) => setPrevious(data.events || []));
   }, []);
@@ -75,12 +106,21 @@ export default function NewEvent() {
     api('/api/events/' + id).then((res) => {
       const event = res.event || res;
       setEventData(event);
+      // SCRUM-40 3A: organiser Draft or clarification amend only.
       const ownsDraft = event.organiserId === user?.id && (
         event.status === 'DRAFT' || (event.status === 'UNDER_REVIEW' && event.subState === 'ACTION_REQUIRED')
       );
-      const assigned = canCoordinate && event.coordinatorId === user?.id;
+      // SCRUM-40 1C/2A: assigned Coord may edit only before Confirmed (not terminal).
+      const editLockedStatuses = ['CONFIRMED', 'COMPLETED', 'CANCELLED', 'REJECTED'];
+      const assigned = canCoordinate
+        && event.coordinatorId === user?.id
+        && !editLockedStatuses.includes(event.status);
       if (!ownsDraft && !assigned) {
-        setError('You do not have access to edit this event.');
+        setError(
+          editLockedStatuses.includes(event.status) && canCoordinate && event.coordinatorId === user?.id
+            ? 'Confirmed and closed events cannot be edited directly. Use a change request for critical fields.'
+            : 'You do not have access to edit this event.'
+        );
         return;
       }
       setEditable(true);
@@ -127,7 +167,7 @@ export default function NewEvent() {
   async function save(submitAfter) {
     setError('');
 
-    if (submitAfter) {
+    if (submitAfter && !isCoordinatorEdit) {
       const missing = findMissingFields(form);
       if (missing.length) {
         setFieldErrors(Object.fromEntries(missing.map((m) => [m.field, m.label])));
@@ -150,8 +190,15 @@ export default function NewEvent() {
       };
 
       const { event } = isEditing
-        ? await api(`/api/events/${id}`, { method: 'PATCH', body: payload })
+        ? await api(`/api/events/${id}`, { method: 'PATCH', body: pickEditableFields(payload) })
         : await api('/api/events', { method: 'POST', body: payload });
+
+      // SCRUM-40 1C: a Coordinator edit just saves and returns to the event; it never
+      // re-submits the request or sends it to the drafts list.
+      if (isCoordinatorEdit) {
+        navigate(`/app/events/${id}`);
+        return;
+      }
 
       if (submitAfter) {
         if (isActionRequired) {
@@ -191,12 +238,18 @@ export default function NewEvent() {
     <>
       <div className="topbar">
         <div>
-          <h1>{isEditing ? (eventData?.subState === 'ACTION_REQUIRED' ? 'Amend event request' : 'Edit event request') : 'New event request'}</h1>
+          <h1>
+            {isCoordinatorEdit
+              ? 'Edit event details'
+              : isEditing ? (eventData?.subState === 'ACTION_REQUIRED' ? 'Amend event request' : 'Edit event request') : 'New event request'}
+          </h1>
           <p>
-            {eventData?.subState === 'ACTION_REQUIRED'
-              ? 'Update the fields requested for clarification by the coordinator, then submit amendments.'
-              /* SCRUM-28 AC1/AC4: drafts stay local to the organiser; submit goes to the Lead's unassigned queue (W7 #5). */
-              : 'Save as draft anytime. Submitting places the request in the unassigned queue for the Event Coordinator Lead.'}
+            {isCoordinatorEdit
+              ? 'Changes save straight to the event. Once the event is Confirmed, date, time and attendance changes need a change request.'
+              : eventData?.subState === 'ACTION_REQUIRED'
+                ? 'Update the fields requested for clarification by the coordinator, then submit amendments.'
+                /* SCRUM-28 AC1/AC4: drafts stay local to the organiser; submit goes to the Lead's unassigned queue (W7 #5). */
+                : 'Save as draft anytime. Submitting places the request in the unassigned queue for the Event Coordinator Lead.'}
           </p>
         </div>
       </div>
@@ -290,12 +343,21 @@ export default function NewEvent() {
             {' '}Attendee registration required
           </label>
           <div className="actions">
-            <button className="btn secondary" disabled={busy} onClick={() => save(false)}>
-              {eventData?.subState === 'ACTION_REQUIRED' ? 'Save changes' : 'Save as draft'}
-            </button>
-            <button className="btn" disabled={busy} onClick={() => save(true)}>
-              {eventData?.subState === 'ACTION_REQUIRED' ? 'Submit amended request' : 'Submit for review'}
-            </button>
+            {isCoordinatorEdit ? (
+              <>
+                <button className="btn" disabled={busy} onClick={() => save(false)}>Save changes</button>
+                <button className="btn ghost" disabled={busy} onClick={() => navigate(`/app/events/${id}`)}>Cancel</button>
+              </>
+            ) : (
+              <>
+                <button className="btn secondary" disabled={busy} onClick={() => save(false)}>
+                  {eventData?.subState === 'ACTION_REQUIRED' ? 'Save changes' : 'Save as draft'}
+                </button>
+                <button className="btn" disabled={busy} onClick={() => save(true)}>
+                  {eventData?.subState === 'ACTION_REQUIRED' ? 'Submit amended request' : 'Submit for review'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

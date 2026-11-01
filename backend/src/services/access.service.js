@@ -1,4 +1,4 @@
-const { supabase, fetchOne, fetchMany, insertOne, updateByIdWhere } = require('../config/db');
+const { supabase, fetchOne, fetchMany, insertOne, updateById, updateByIdWhere } = require('../config/db');
 const {
   ROLES,
 } = require('../constants/roles');
@@ -176,12 +176,53 @@ async function listUnassignedQueue(user) {
   }));
 }
 
+const OVERVIEW_EXCLUDED_STATUSES = new Set([
+  EVENT_STATUS.COMPLETED,
+  EVENT_STATUS.CANCELLED,
+  EVENT_STATUS.REJECTED,
+  EVENT_STATUS.DRAFT,
+]);
+
 /**
- * Purpose: show which coordinator is assigned to each event, for the Lead only.
- * AC: SCRUM-54 AC3
- * Business rule: W7 #5
- * Inputs: authenticated user. Output: assignment rows.
- * Failure: 403 if the user is not a Lead; the error has no assignment or event list.
+ * Purpose: for each event, the Lead who made the current allocation.
+ *   Assign and reassign write COORDINATOR_ASSIGNED or COORDINATOR_REASSIGNED.
+ *   The newest of those rows is the current one. created_at is when, from the
+ *   audit_logs default. A later reassignment by another Lead replaces the earlier one.
+ * AC: SCRUM-57 AC2, AC4
+ * Inputs: audit_logs rows for events. Output: Map of event id to actor id.
+ *   Rows that are not an assignment or a reassignment are ignored.
+ */
+function latestAllocationLeadByEvent(audits) {
+  const ranked = [...audits]
+    .filter((row) => row.action === 'COORDINATOR_ASSIGNED' || row.action === 'COORDINATOR_REASSIGNED')
+    .sort((a, b) => {
+      const byTime = new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      if (byTime) return byTime;
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
+  const latest = new Map();
+  for (const row of ranked) {
+    const eventId = Number(row.entity_id);
+    if (!latest.has(eventId)) latest.set(eventId, Number(row.actor_id));
+  }
+  return latest;
+}
+
+/**
+ * Purpose: list the Coordinators this Lead assigned, and the events they still hold,
+ *   so the Lead can supervise their own allocations.
+ * AC: SCRUM-57 AC1 (each Coordinator this Lead allocated, with those events),
+ *     AC2 (an event whose latest allocation was by another Lead is left out),
+ *     AC3 (an event with no Coordinator is left out; that queue is SCRUM-65),
+ *     AC4 (the row shows the Coordinator now on the event, which is the new one
+ *     after this Lead assigns or reassigns),
+ *     AC5 (Completed, Cancelled, Rejected, and Draft are left out).
+ *     SCRUM-54 AC3 — a caller who is not a Lead is rejected before any row is read.
+ * Business rule: W7 #5. Week 9, Jin Hong — the Lead supervises the Coordinators
+ *   they allocated. Week 9, Joseph — every Lead's unassigned events stay on SCRUM-65.
+ *   Week 9 change: the old all-events list is replaced by this Lead's own allocations.
+ * Inputs: authenticated user. Output: assignment rows, Coordinators together.
+ * Failure: 403 if the user is not a Lead. The error has no assignment list.
  */
 async function listAssignmentOverview(user) {
   assertLead(user);
@@ -192,13 +233,33 @@ async function listAssignmentOverview(user) {
       .not('coordinator_id', 'is', null)
       .order('start_at', { ascending: true })
   );
-  return rows.map((row) => ({
-    eventId: row.id,
-    eventName: row.name,
-    status: row.status,
-    coordinatorId: row.coordinator_id,
-    coordinatorName: row.coordinator?.full_name || null,
-  }));
+  const active = rows.filter(
+    (row) => row.coordinator_id && !OVERVIEW_EXCLUDED_STATUSES.has(row.status)
+  );
+  if (!active.length) return [];
+
+  const audits = await fetchMany(
+    supabase
+      .from('audit_logs')
+      .select('id, entity_id, actor_id, action, created_at')
+      .eq('entity_type', 'event')
+      .order('created_at', { ascending: false })
+  );
+  const latestLeadByEvent = latestAllocationLeadByEvent(audits);
+
+  return active
+    .filter((row) => latestLeadByEvent.get(Number(row.id)) === Number(user.id))
+    .map((row) => ({
+      eventId: row.id,
+      eventName: row.name,
+      status: row.status,
+      coordinatorId: row.coordinator_id,
+      coordinatorName: row.coordinator?.full_name || null,
+    }))
+    .sort((a, b) => (
+      String(a.coordinatorName || '').localeCompare(String(b.coordinatorName || ''))
+      || String(a.eventName || '').localeCompare(String(b.eventName || ''))
+    ));
 }
 
 /**
@@ -260,6 +321,9 @@ async function listSafetyQueue(user) {
     // Belt-and-suspenders: status alone is not enough if arrangements slipped.
     const gate = await arrangementsReadyForSafetyCheck(row.id);
     if (!gate.ok) continue;
+    // SCRUM-58 AC5: a marked booking or equipment request keeps the event off this list
+    // until it is reviewed, even if the Coordinator has sent the event back.
+    if (await eventHasArrangementNeedingReview(row.id)) continue;
     ready.push({
       id: row.id,
       name: row.name,
@@ -269,6 +333,38 @@ async function listSafetyQueue(user) {
     });
   }
   return ready;
+}
+
+/**
+ * Purpose: whether this event still has a venue booking or equipment request marked for review.
+ * AC: SCRUM-58 AC5 and AC6. The mark is the shared needs_review flag (SCRUM-42), whatever set it.
+ * Inputs: event id. Output: true when any row is marked. Failure: a database error propagates.
+ */
+async function eventHasArrangementNeedingReview(eventId) {
+  const bookings = (await fetchMany(
+    supabase.from('venue_bookings').select('id, needs_review').eq('event_id', eventId)
+  )) || [];
+  const equipment = (await fetchMany(
+    supabase.from('equipment_requests').select('id, needs_review').eq('event_id', eventId)
+  )) || [];
+  return [...bookings, ...equipment].some((row) => row.needs_review);
+}
+
+/**
+ * Purpose: mark only the arrangements the Safety Officer selected when requesting changes.
+ * AC: SCRUM-58 AC2 (those selected are marked), AC3 (this writes nothing for the others),
+ *   AC4 (needs_review only; status and the rest of the row are not written).
+ * Inputs: cleaned [{ type, id }] from parseAffectedArrangements.
+ * Output: nothing. Failure: a database error propagates.
+ */
+async function markAffectedArrangementsForReview(affected) {
+  const now = new Date().toISOString();
+  for (const item of affected) {
+    const table = item.type === SAFETY_ARRANGEMENT_TYPE.VENUE_BOOKING
+      ? 'venue_bookings'
+      : 'equipment_requests';
+    await updateById(table, item.id, { needs_review: true, updated_at: now });
+  }
 }
 
 /**
@@ -603,6 +699,11 @@ async function recordSafetyCheck(user, eventId, payload = {}) {
       'A safety-check outcome can only be recorded while the event is awaiting a safety check',
       'INVALID_STATUS'
     );
+  }
+
+  // SCRUM-58 AC2–AC4: after the return to Planning is saved, mark only the selected rows.
+  if (outcome === SAFETY_CHECK_OUTCOME.REQUEST_CHANGES) {
+    await markAffectedArrangementsForReview(affected);
   }
 
   const created = await insertOne('safety_checks', {

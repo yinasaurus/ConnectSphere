@@ -79,6 +79,7 @@ describe('SCRUM-74 list registrations (service rules)', () => {
    *   counted), capacity 50.
    * Type: normal
    */
+  // SCRUM-74-TC01
   it('US74-B01: the Organiser sees every registration plus the active count against capacity', async () => {
     db.fetchMany.mockResolvedValueOnce([
       registrationRow({ id: 10, status: 'REGISTERED' }),
@@ -101,6 +102,7 @@ describe('SCRUM-74 list registrations (service rules)', () => {
    * Expected: same view as the Organiser gets.
    * Type: normal
    */
+  // SCRUM-74-TC02
   it('US74-B02: the assigned Coordinator sees the same registrations as the Organiser', async () => {
     db.fetchMany.mockResolvedValueOnce([registrationRow()]);
     db.fetchCount.mockResolvedValueOnce(1);
@@ -117,6 +119,7 @@ describe('SCRUM-74 list registrations (service rules)', () => {
    * Expected: an empty list and activeCount 0, not an error.
    * Type: boundary
    */
+  // SCRUM-74-TC03
   it('US74-B03: an event with no registrations shows a count of zero', async () => {
     db.fetchMany.mockResolvedValueOnce([]);
     db.fetchCount.mockResolvedValueOnce(0);
@@ -133,6 +136,7 @@ describe('SCRUM-74 list registrations (service rules)', () => {
    * Expected: capacity comes back null, not 0 — "no cap set" is not the same as "cap is zero".
    * Type: boundary
    */
+  // SCRUM-74-TC04
   it('US74-B03b: capacity is null, not zero, when registration was never enabled', async () => {
     event = withEvent({ registration_capacity: null });
     db.fetchMany.mockResolvedValueOnce([]);
@@ -149,6 +153,7 @@ describe('SCRUM-74 list registrations (service rules)', () => {
    * Expected: rejected with 403; no registration rows are fetched at all.
    * Type: error
    */
+  // SCRUM-74-TC05
   it('US74-B04: an Organiser who does not manage this event is rejected', async () => {
     await expect(service.listForEvent(otherOrganiser, 3)).rejects.toMatchObject({ status: 403 });
     expect(db.fetchMany).not.toHaveBeenCalled();
@@ -160,6 +165,7 @@ describe('SCRUM-74 list registrations (service rules)', () => {
    * Expected: rejected with 403, same as an unrelated Organiser.
    * Type: error
    */
+  // SCRUM-74-TC06
   it('US74-B05: a Coordinator who is not assigned to this event is rejected', async () => {
     await expect(service.listForEvent(otherCoordinator, 3)).rejects.toMatchObject({ status: 403 });
   });
@@ -171,6 +177,7 @@ describe('SCRUM-74 list registrations (service rules)', () => {
    *   activeCount/capacity summary (that belongs to the event's manager only).
    * Type: normal
    */
+  // SCRUM-74-TC07
   it('US74-B06: an Attendee only ever sees their own registration, never a summary', async () => {
     db.fetchMany.mockResolvedValueOnce([registrationRow({ attendee: undefined })]);
 
@@ -182,6 +189,7 @@ describe('SCRUM-74 list registrations (service rules)', () => {
     expect(call).toEqual(['attendee_id', 30]);
   });
 
+  // SCRUM-74-TC08
   it('US74-B07: a missing event is 404', async () => {
     db.fetchOne.mockResolvedValueOnce(null);
     await expect(service.listForEvent(organiser, 999)).rejects.toMatchObject({ status: 404 });
@@ -203,6 +211,7 @@ describe('SCRUM-74 list registrations route', () => {
    * Expected: 200 with registrations, activeCount and capacity in the body.
    * Type: normal
    */
+  // SCRUM-74-TC09
   it('US74-R01: the Organiser reads registrations through the API', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 1, is_active: true }); // auth: the signed-in user
     db.fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_ORGANISER }]); // auth: their roles
@@ -225,6 +234,7 @@ describe('SCRUM-74 list registrations route', () => {
    * Expected: 403, through the real middleware and service.
    * Type: error
    */
+  // SCRUM-74-TC10
   it('US74-R02: an unrelated Organiser gets 403 through the API', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 99, is_active: true }); // auth: the signed-in user
     db.fetchMany.mockResolvedValueOnce([{ role: ROLES.EVENT_ORGANISER }]); // auth: their roles
@@ -237,6 +247,7 @@ describe('SCRUM-74 list registrations route', () => {
     expect(res.status).toBe(403);
   });
 
+  // SCRUM-74-TC11
   it('US74-R03: the route needs a signed-in user', async () => {
     const res = await request(app).get('/api/events/3/registrations');
     expect(res.status).toBe(401);

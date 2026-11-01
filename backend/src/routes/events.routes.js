@@ -3,6 +3,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { ROLES } = require('../constants/roles');
 const { validateBody } = require('../middleware/validate');
 const { eventDecisionSchema, assignCoordinatorSchema } = require('../validators/events.validators');
+const { createEquipmentRequestSchema } = require('../validators/equipment.validators');
 const controller = require('../controllers/events.controller');
 const registrations = require('../controllers/registrations.controller');
 const access = require('../controllers/access.controller');
@@ -35,6 +36,17 @@ router.post(
   controller.assignCoordinator
 );
 /**
+ * Purpose: Lead replaces the Coordinator on an event that already has one.
+ * AC: SCRUM-31 AC1–AC4. SCRUM-33 AC1, AC2 — requireRole rejects anyone who is not a Lead.
+ *   Same body as assign. Not the old request/accept routes below.
+ */
+router.post(
+  '/:id/reassign-coordinator',
+  requireRole(ROLES.EVENT_COORDINATOR_LEAD),
+  validateBody(assignCoordinatorSchema),
+  controller.reassignCoordinator
+);
+/**
  * Purpose: Safety Officer queue of events awaiting a safety check.
  * AC: SCRUM-55 AC1, AC4. Registered before `/:id` so the path is not parsed as an id.
  */
@@ -54,6 +66,13 @@ router.post('/:id/safety-check', requireRole(ROLES.SAFETY_OFFICER), access.recor
 router.get('/:id/venue-bookings', controller.venueBookings);
 // SCRUM-39 AC2: access is decided per event in the service (same rules as GET /:id).
 router.get('/:id/equipment-requests', controller.equipmentRequests);
+// SCRUM-47: Event Coordinator records equipment request for an event.
+router.post(
+  '/:id/equipment-requests',
+  requireRole(ROLES.EVENT_COORDINATOR),
+  validateBody(createEquipmentRequestSchema),
+  controller.createEquipmentRequest
+);
 router.patch('/:id', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.update);
 router.post('/:id/submit', requireRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR), controller.submit);
 router.post('/:id/review', requireRole(ROLES.EVENT_COORDINATOR), controller.openForReview);
@@ -68,8 +87,13 @@ router.post('/:id/confirm', requireRole(ROLES.EVENT_COORDINATOR), controller.con
 router.post('/:id/clarification', requireRole(ROLES.EVENT_COORDINATOR), controller.requestClarification);
 router.post('/:id/clarification/respond', controller.respondClarification);
 router.get('/:id/history', controller.history);
-router.post('/:id/reassign', requireRole(ROLES.EVENT_COORDINATOR), controller.requestReassign);
-router.post('/:id/reassign/accept', requireRole(ROLES.EVENT_COORDINATOR), controller.acceptReassign);
+/**
+ * Purpose: the old Coordinator handover. SCRUM-33 allows it only for a Lead.
+ *   A Coordinator or an Organiser is rejected here, before the service reads the event.
+ * AC: SCRUM-33 AC1, AC2. The Lead's own reassignment is POST /:id/reassign-coordinator.
+ */
+router.post('/:id/reassign', requireRole(ROLES.EVENT_COORDINATOR_LEAD), controller.requestReassign);
+router.post('/:id/reassign/accept', requireRole(ROLES.EVENT_COORDINATOR_LEAD), controller.acceptReassign);
 // SCRUM-34 / SCRUM-35 / SCRUM-69: organiser change requests; assigned coordinator
 // approves (applies valid fields, notifies organiser) or rejects (event unchanged, notifies).
 router.get('/:id/change-requests', controller.listChangeRequests);

@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import ConflictModal from '../components/ConflictModal';
+import BlockVenueCard from '../components/BlockVenueCard';
+import UnavailabilityList from '../components/UnavailabilityList';
+import PlaceHoldCard from '../components/PlaceHoldCard';
+import AffectedBookingsCard from '../components/AffectedBookingsCard';
 import { LAYOUTS, ROLES } from '../constants';
 
 const emptyForm = {
@@ -45,6 +49,9 @@ const EMPTY_SEARCH = {
   facilities: '',
 };
 
+// SCRUM-75 AC1: a hold is stored as TENTATIVE and shown to users as Held.
+const STATUS_LABELS = { TENTATIVE: 'HELD' };
+
 /** SCRUM-18: per-booking status badge with colour-coded pill. */
 function BookingStatusBadge({ status }) {
   const colours = {
@@ -66,7 +73,7 @@ function BookingStatusBadge({ status }) {
         color: '#fff',
       }}
     >
-      {status}
+      {STATUS_LABELS[status] || status}
     </span>
   );
 }
@@ -199,20 +206,38 @@ function PendingBookingCard({ booking, onDecide }) {
 }
 
 /**
- * SCRUM-18 AC7/AC8: read-only row in the decided bookings table.
- * Shows status, booking window, and (for rejected bookings) the reason and alternative.
+ * SCRUM-18 AC7/AC8: row in the decided bookings table.
+ * SCRUM-58 AC6: an approved booking marked for review gets Approve only.
+ * Reject stays off that row so the booking is not cancelled.
  * SCRUM-77 AC5: a booking flagged for review shows "Requires review" beside its status;
  * the status itself is unchanged.
  */
-function BookingRow({ booking }) {
+function BookingRow({ booking, onApprove }) {
+  const [deciding, setDeciding] = useState(false);
+  const [localError, setLocalError] = useState('');
   const isRejected = booking.status === 'REJECTED';
+  const isHeld = booking.status === 'TENTATIVE';
+  const needsClear = booking.status === 'APPROVED' && booking.needs_review;
+
+  async function approveAgain() {
+    setDeciding(true);
+    setLocalError('');
+    try {
+      await onApprove(booking.id);
+    } catch (err) {
+      setLocalError(err.message);
+    } finally {
+      setDeciding(false);
+    }
+  }
+
   return (
-    <tr>
+    <tr data-testid={`booking-row-${booking.id}`}>
       <td>{booking.event_name || `Event #${booking.event_id}`}</td>
       <td>{booking.venue_name || `Venue #${booking.venue_id}`}</td>
       <td>
         <BookingStatusBadge status={booking.status} />
-        {booking.needs_review && <span className="needs-review-flag">Requires review</span>}
+        {needsClear && <span className="needs-review-flag">Requires review</span>}
       </td>
       <td>
         {booking.start_at ? new Date(booking.start_at).toLocaleString() : '—'}
@@ -229,7 +254,23 @@ function BookingRow({ booking }) {
             Alt: {booking.alternative_suggestion}
           </span>
         )}
-        {!isRejected && <span className="muted">—</span>}
+        {isHeld && booking.hold_expires_at && (
+          <span style={{ fontSize: '0.85rem' }} data-testid={`hold-expiry-${booking.id}`}>
+            Hold expires {new Date(booking.hold_expires_at).toLocaleString()}
+          </span>
+        )}
+        {needsClear && onApprove && (
+          <button
+            className="btn"
+            type="button"
+            disabled={deciding}
+            onClick={approveAgain}
+          >
+            {deciding ? 'Saving…' : 'Approve'}
+          </button>
+        )}
+        {localError && <div className="alert">{localError}</div>}
+        {!isRejected && !isHeld && !(needsClear && onApprove) && <span className="muted">—</span>}
       </td>
     </tr>
   );
@@ -248,6 +289,7 @@ function BookingRow({ booking }) {
 export default function Venues() {
   const { hasRole } = useAuth();
   const [venues, setVenues] = useState([]);
+  const [unavailabilityRefresh, setUnavailabilityRefresh] = useState(0);
   const [bookings, setBookings] = useState([]);
   const [form, setForm] = useState({
     name: '',
@@ -650,6 +692,29 @@ export default function Venues() {
         </div>
       )}
 
+      {/* SCRUM-72: Venue Staff record a venue as unavailable for a period, with a reason. */}
+      {isVenueStaff && (
+        <BlockVenueCard
+          venues={venues}
+          onRecorded={async () => {
+            await reload();
+            setUnavailabilityRefresh((n) => n + 1);
+          }}
+        />
+      )}
+      {/* SCRUM-72: shows recorded venue unavailability periods. */}
+      {isVenueStaff && (
+        <UnavailabilityList
+          venues={venues}
+          refreshKey={unavailabilityRefresh}
+        />
+      )}
+      {/* SCRUM-75: Venue Staff place a tentative hold with an expiry. */}
+      {isVenueStaff && <PlaceHoldCard venues={venues} onPlaced={reload} />}
+
+      {/* SCRUM-60 AC8: Venue Staff view the bookings a recorded unavailability period affects. */}
+      {isVenueStaff && <AffectedBookingsCard venues={venues} />}
+
       {/*
         SCRUM-18 AC1/AC2/AC3: Booking requests section.
         Venue Staff see pending requests as actionable cards (each with full details and
@@ -737,7 +802,11 @@ export default function Venues() {
               </thead>
               <tbody>
                 {(isVenueStaff ? decidedBookings : bookings).map((booking) => (
-                  <BookingRow key={booking.id} booking={booking} />
+                  <BookingRow
+                    key={booking.id}
+                    booking={booking}
+                    onApprove={isVenueStaff ? (id) => handleDecide(id, true) : undefined}
+                  />
                 ))}
               </tbody>
             </table>

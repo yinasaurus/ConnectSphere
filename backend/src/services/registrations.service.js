@@ -127,6 +127,15 @@ async function register(user, eventId) {
     status: REGISTRATION_STATUS.REGISTERED,
     waitlist_position: null,
   });
+
+  // SCRUM-46 AC2: the Attendee who just registered is told. Nobody else is (AC3).
+  await notifyUser(
+    user.id,
+    'REGISTRATION_CONFIRMED',
+    'Registration confirmed',
+    `You are registered for ${event.name}.`,
+    eventId
+  );
   return { registration, placesLeft: capacity - taken - 1 };
 }
 
@@ -186,6 +195,13 @@ async function getRegistrationStatus(user, eventId) {
   };
 }
 
+/**
+ * Purpose: an Attendee gives up their own place, and is told that it was withdrawn.
+ * AC: SCRUM-53 (their place is freed; a waitlisted person is told a place opened).
+ *   SCRUM-46 AC2 (the Attendee who withdrew gets their own notice).
+ * Inputs: the Attendee and the event id.
+ * Output: the updated registration. Failure: 404 when they have no active registration.
+ */
 async function withdraw(user, eventId) {
   const rows = await fetchMany(
     supabase
@@ -224,6 +240,17 @@ async function withdraw(user, eventId) {
       );
     }
   }
+
+  // SCRUM-46 AC2: the Attendee who withdrew is told. This is not a move off the waitlist
+  // onto the event; that step does not exist, so no second notice is sent for it.
+  const event = await fetchOne(supabase.from('events').select('id, name').eq('id', eventId));
+  await notifyUser(
+    user.id,
+    'REGISTRATION_WITHDRAWN',
+    'Registration withdrawn',
+    `Your registration for ${event?.name || 'the event'} was withdrawn.`,
+    eventId
+  );
 
   return updated;
 }

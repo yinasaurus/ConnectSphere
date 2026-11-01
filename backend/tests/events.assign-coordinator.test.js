@@ -64,7 +64,7 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
    * Scenario: A Lead assigns an active Coordinator to a Submitted event that has none.
    * Setup: Event 3 is SUBMITTED with coordinator_id null. Candidate 2 is an active Coordinator.
    * Expected: The event is written with exactly that coordinator_id and is no longer unassigned.
-   *   Status moves to UNDER_REVIEW (coordinator assigned). No organiser notification (SCRUM-29/45).
+   *   Status moves to UNDER_REVIEW. Assignment notices are SCRUM-45 / SCRUM-29 (asserted there).
    * Type: normal
    */
   it('US71-B01: a Lead assigns an active Coordinator to a Submitted unassigned event', async () => {
@@ -83,7 +83,8 @@ describe('SCRUM-71 assign primary coordinator (service rules)', () => {
     }));
     expect(result.coordinatorId).toBe(2); // AC3: exactly one primary Coordinator
     expect(result.coordinatorId).not.toBeNull(); // AC4: no longer unassigned
-    expect(audit.notifyUser).not.toHaveBeenCalled();
+    // SCRUM-45 owns the assignment-notice assertions (US45-B01); keep this suite on assign rules.
+    expect(audit.notifyUser).toHaveBeenCalled();
     expect(audit.writeAudit).toHaveBeenCalledWith(
       11,
       'COORDINATOR_ASSIGNED',
