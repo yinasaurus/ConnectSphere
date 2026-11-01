@@ -1404,19 +1404,46 @@ async function writeStatusHistory(eventId, actorId, fromStatus, toStatus, note) 
   });
 }
 
+/*
+ * Purpose: return event status history and related audit logs (including booking reschedules).
+ * AC: SCRUM-62 AC5 — previous date and time can still be viewed after a change.
+ * Inputs: user and event ID. Output: array combining event_status_history and audit_logs entries.
+ * Failure: throws if user lacks planning access; empty arrays if queries fail.
+ */
 async function listHistory(user, eventId) {
   await assertPlanningAccess(user, eventId);
-  const rows = await fetchMany(
+  const statusRows = await fetchMany(
     supabase
       .from('event_status_history')
       .select('*, actor:users!actor_id ( full_name )')
       .eq('event_id', eventId)
       .order('created_at', { ascending: false })
-  );
-  return rows.map((row) => ({
+  ).catch(() => []);
+  
+  const auditRows = await fetchMany(
+    supabase
+      .from('audit_logs')
+      .select('*')
+      .eq('entity_type', 'venue_booking')
+      .eq('action', 'BOOKING_RESCHEDULED')
+  ).catch(() => []);
+  
+  // Filter audit logs to only those for bookings of this event
+  const bookings = await fetchMany(
+    supabase
+      .from('venue_bookings')
+      .select('id')
+      .eq('event_id', eventId)
+  ).catch(() => []);
+  const bookingIds = bookings.map((b) => b.id);
+  const relevantAudits = auditRows.filter((a) => bookingIds.includes(a.entity_id));
+  
+  const statusHistory = statusRows.map((row) => ({
     ...row,
     actor_name: row.actor?.full_name || null,
   }));
+  
+  return [...statusHistory, ...relevantAudits];
 }
 
 async function requestClarification(user, id, remarks) {
