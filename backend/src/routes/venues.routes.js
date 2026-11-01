@@ -25,7 +25,18 @@ router.post('/bookings', requireRole(ROLES.EVENT_COORDINATOR), controller.reques
 // (SCRUM-78). Anyone else gets 403 here, before anything is saved or sent.
 router.post('/bookings/:id/decision', requireRole(ROLES.VENUE_STAFF), controller.decideBooking);
 
-// SCRUM-66: every internal role. Event Organisers and Attendees get 403 (AC6).
+// SCRUM-75 AC9: only Venue Staff place a hold. Anyone else gets 403 before anything is saved.
+router.post('/holds', requireRole(ROLES.VENUE_STAFF), controller.placeHold);
+
+/*
+ * Purpose: restrict the booking-cancellation handler to Event Coordinators.
+ * AC: SCRUM-61 AC7 — other roles are rejected before the service reads or writes data.
+ * Inputs: authenticated session and booking id. Output: delegates authorized requests to the controller.
+ * Failure: requireAuth or requireRole returns 401/403 without invoking the controller.
+ */
+router.post('/bookings/:id/cancel', requireRole(ROLES.EVENT_COORDINATOR), controller.cancelBooking);
+
+// SCRUM-66 AC6: internal users only; Event Organisers and Attendees get 403.
 router.get(
   '/:id/availability',
   requireRole(...INTERNAL_ROLES),
@@ -40,5 +51,11 @@ router.get(
 
 router.get('/unavailability', controller.unavailability);
 router.post('/unavailability', requireRole(ROLES.VENUE_STAFF), controller.block);
+// SCRUM-60 AC8: the Venue Staff who recorded a period can view the bookings it affects.
+router.get(
+  '/unavailability/:id/affected-bookings',
+  requireRole(ROLES.VENUE_STAFF),
+  controller.affectedBookings
+);
 
 module.exports = router;

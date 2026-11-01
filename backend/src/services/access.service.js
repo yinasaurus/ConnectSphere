@@ -153,11 +153,76 @@ function assertSafetyOfficer(user) {
 }
 
 /**
- * Purpose: show which coordinator is assigned to each event, for the Lead only.
+ * Purpose: list events that still have no assigned coordinator, for the Lead only.
  * AC: SCRUM-54 AC3
  * Business rule: W7 #5
- * Inputs: authenticated user. Output: assignment rows.
- * Failure: 403 if the user is not a Lead; the error has no assignment or event list.
+ * Inputs: authenticated user. Output: slim event rows (id, name, status, startAt).
+ * Failure: 403 if the user is not a Lead; does not include event rows in the error.
+ */
+async function listUnassignedQueue(user) {
+  assertLead(user);
+  const rows = await fetchMany(
+    supabase
+      .from('events')
+      .select('id, name, status, start_at, coordinator_id')
+      .is('coordinator_id', null)
+      .order('start_at', { ascending: true })
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    status: row.status,
+    startAt: row.start_at,
+  }));
+}
+
+const OVERVIEW_EXCLUDED_STATUSES = new Set([
+  EVENT_STATUS.COMPLETED,
+  EVENT_STATUS.CANCELLED,
+  EVENT_STATUS.REJECTED,
+  EVENT_STATUS.DRAFT,
+]);
+
+/**
+ * Purpose: for each event, the Lead who made the current allocation.
+ *   Assign and reassign write COORDINATOR_ASSIGNED or COORDINATOR_REASSIGNED.
+ *   The newest of those rows is the current one. created_at is when, from the
+ *   audit_logs default. A later reassignment by another Lead replaces the earlier one.
+ * AC: SCRUM-57 AC2, AC4
+ * Inputs: audit_logs rows for events. Output: Map of event id to actor id.
+ *   Rows that are not an assignment or a reassignment are ignored.
+ */
+function latestAllocationLeadByEvent(audits) {
+  const ranked = [...audits]
+    .filter((row) => row.action === 'COORDINATOR_ASSIGNED' || row.action === 'COORDINATOR_REASSIGNED')
+    .sort((a, b) => {
+      const byTime = new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      if (byTime) return byTime;
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
+  const latest = new Map();
+  for (const row of ranked) {
+    const eventId = Number(row.entity_id);
+    if (!latest.has(eventId)) latest.set(eventId, Number(row.actor_id));
+  }
+  return latest;
+}
+
+/**
+ * Purpose: list the Coordinators this Lead assigned, and the events they still hold,
+ *   so the Lead can supervise their own allocations.
+ * AC: SCRUM-57 AC1 (each Coordinator this Lead allocated, with those events),
+ *     AC2 (an event whose latest allocation was by another Lead is left out),
+ *     AC3 (an event with no Coordinator is left out; that queue is SCRUM-65),
+ *     AC4 (the row shows the Coordinator now on the event, which is the new one
+ *     after this Lead assigns or reassigns),
+ *     AC5 (Completed, Cancelled, Rejected, and Draft are left out).
+ *     SCRUM-54 AC3 — a caller who is not a Lead is rejected before any row is read.
+ * Business rule: W7 #5. Week 9, Jin Hong — the Lead supervises the Coordinators
+ *   they allocated. Week 9, Joseph — every Lead's unassigned events stay on SCRUM-65.
+ *   Week 9 change: the old all-events list is replaced by this Lead's own allocations.
+ * Inputs: authenticated user. Output: assignment rows, Coordinators together.
+ * Failure: 403 if the user is not a Lead. The error has no assignment list.
  */
 async function listAssignmentOverview(user) {
   assertLead(user);
@@ -168,13 +233,33 @@ async function listAssignmentOverview(user) {
       .not('coordinator_id', 'is', null)
       .order('start_at', { ascending: true })
   );
-  return rows.map((row) => ({
-    eventId: row.id,
-    eventName: row.name,
-    status: row.status,
-    coordinatorId: row.coordinator_id,
-    coordinatorName: row.coordinator?.full_name || null,
-  }));
+  const active = rows.filter(
+    (row) => row.coordinator_id && !OVERVIEW_EXCLUDED_STATUSES.has(row.status)
+  );
+  if (!active.length) return [];
+
+  const audits = await fetchMany(
+    supabase
+      .from('audit_logs')
+      .select('id, entity_id, actor_id, action, created_at')
+      .eq('entity_type', 'event')
+      .order('created_at', { ascending: false })
+  );
+  const latestLeadByEvent = latestAllocationLeadByEvent(audits);
+
+  return active
+    .filter((row) => latestLeadByEvent.get(Number(row.id)) === Number(user.id))
+    .map((row) => ({
+      eventId: row.id,
+      eventName: row.name,
+      status: row.status,
+      coordinatorId: row.coordinator_id,
+      coordinatorName: row.coordinator?.full_name || null,
+    }))
+    .sort((a, b) => (
+      String(a.coordinatorName || '').localeCompare(String(b.coordinatorName || ''))
+      || String(a.eventName || '').localeCompare(String(b.eventName || ''))
+    ));
 }
 
 /**
@@ -701,6 +786,7 @@ async function hasApprovedSafetyCheck(eventId) {
 module.exports = {
   assertLead,
   assertSafetyOfficer,
+  listUnassignedQueue,
   listAssignmentOverview,
   listSafetyQueue,
   openSafetyCheck,

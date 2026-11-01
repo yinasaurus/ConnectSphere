@@ -50,6 +50,30 @@ describe('SCRUM-54 assignment overview page', () => {
   });
 
   /*
+   * AC: SCRUM-57 AC1
+   * Scenario: The Lead opens the overview page.
+   * Setup: The API has already limited the rows to this Lead's allocations.
+   *   One of those rows is Workshop, held by Chloe Lim.
+   * Expected: The page says these are the Coordinators and events this Lead assigned,
+   *   and it shows Chloe with Workshop.
+   * Type: normal
+   */
+  // SCRUM-57-TC10
+  it('US57-F01: the page lists the Coordinators and events this Lead assigned', async () => {
+    api.mockResolvedValue({
+      assignments: [{ eventId: 3, eventName: 'Workshop', coordinatorName: 'Chloe Lim', status: 'PLANNING' }],
+    });
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <AssignmentOverview />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(/Coordinators you assigned, and the events you assigned them to/i)).toBeInTheDocument();
+    expect(screen.getByText('Workshop')).toBeInTheDocument();
+    expect(screen.getByText('Chloe Lim')).toBeInTheDocument();
+  });
+
+  /*
    * AC: SCRUM-54 AC3
    * Scenario: A Lead opens the overview of coordinator assignments.
    * Setup: One assignment for Workshop to Chloe Lim.

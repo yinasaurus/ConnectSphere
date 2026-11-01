@@ -21,15 +21,30 @@ export default function Events() {
     api(`/api/events?${params.toString()}`).then((data) => setEvents(data.events || []));
   }, [status, subState, q]);
 
-  // Purpose: let a Coordinator see every event assigned to them, past the 8-row home list.
-  // The Events page itself stays the full list. View all on the dashboard opens this filter.
-  // Inputs: ?assigned=me and the signed-in user. Output: that Coordinator's rows, or every row.
-  // Failure: none. A non-Coordinator with the query still sees the full list.
-  const assignedToMe = searchParams.get('assigned') === 'me' && hasRole(ROLES.EVENT_COORDINATOR);
+  // Purpose: a Coordinator sees only events assigned to them on this list.
+  // AC: SCRUM-84 AC3. A Lead, Safety Officer, Venue Staff, or Technical Support
+  //     who also holds Coordinator still sees the full list from the API.
+  // Business rule: Week 9 Q&A. Assigned to me stays for those broader roles so
+  // they can narrow the list. A Coordinator with none of those roles has no checkbox.
+  // Inputs: the signed-in roles, ?assigned=me, and GET /api/events.
+  // Output: that Coordinator's rows, or every row the API returned.
+  // Failure: none.
+  const seesOnlyAssigned = hasRole(ROLES.EVENT_COORDINATOR)
+    && !hasRole(
+      ROLES.EVENT_COORDINATOR_LEAD,
+      ROLES.SAFETY_OFFICER,
+      ROLES.VENUE_STAFF,
+      ROLES.TECHNICAL_SUPPORT,
+    );
+  const assignedToMe = seesOnlyAssigned
+    || (searchParams.get('assigned') === 'me' && hasRole(ROLES.EVENT_COORDINATOR));
   const visibleEvents = assignedToMe
     ? events.filter((event) => event.coordinatorId === user?.id)
     : events;
 
+  // Purpose: let a Lead, or another broad role who is also a Coordinator, narrow the list.
+  // AC: SCRUM-84 AC3. A Coordinator with no broader role has no checkbox, so this is unused for them.
+  // Inputs: whether Assigned to me is checked. Output: updates ?assigned=me. Failure: none.
   function toggleAssignedToMe(checked) {
     const next = new URLSearchParams(searchParams);
     if (checked) next.set('assigned', 'me');
@@ -42,7 +57,7 @@ export default function Events() {
       <div className="topbar">
         <div>
           <h1>Events</h1>
-          <p>Filtered by your role: organisers see their organisation, staff see the planning calendar.</p>
+          <p>Coordinators see events assigned to them. Leads and other staff see the planning list.</p>
         </div>
         {hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR) && (
           <Link className="btn" to="/app/events/new">Create</Link>
@@ -70,7 +85,7 @@ export default function Events() {
               <option key={key} value={key}>{STATUS_LABELS[key]}</option>
             ))}
           </select>
-          {hasRole(ROLES.EVENT_COORDINATOR) && (
+          {hasRole(ROLES.EVENT_COORDINATOR) && !seesOnlyAssigned && (
             <label>
               <input
                 type="checkbox"

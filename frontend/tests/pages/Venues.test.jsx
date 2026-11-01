@@ -1183,3 +1183,57 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
     expect(within(screen.getByTestId('booking-row-201')).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
   });
 });
+
+describe('SCRUM-75 holds on the Venues page', () => {
+  const held = {
+    id: 900,
+    event_id: 50,
+    venue_id: 1,
+    status: 'TENTATIVE',
+    start_at: '2026-11-20T10:00:00.000Z',
+    end_at: '2026-11-20T12:00:00.000Z',
+    hold_expires_at: '2026-11-18T09:00:00.000Z',
+    event_name: 'Tech Talk',
+    venue_name: 'Helix Hall',
+  };
+
+  function mockPage(bookings) {
+    api.mockImplementation(async (path) => {
+      if (path === '/api/venues') return { venues: clone(database.venues) };
+      if (path === '/api/venues/bookings') return { bookings: clone(bookings) };
+      if (path === '/api/events') return { events: [] };
+      return {};
+    });
+  }
+
+  beforeEach(() => {
+    api.mockReset();
+  });
+
+  it('US75-F07: Venue Staff see the Place a hold card', async () => {
+    useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
+    mockPage([]);
+    render(<Venues />);
+    expect(await screen.findByRole('heading', { name: 'Place a hold' })).toBeInTheDocument();
+  });
+
+  it('US75-F08: Coordinators do not see the Place a hold card', async () => {
+    useAuth.mockReturnValue({ hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
+    mockPage([]);
+    render(<Venues />);
+    await screen.findByRole('heading', { name: 'Booking requests' });
+    expect(screen.queryByRole('heading', { name: 'Place a hold' })).not.toBeInTheDocument();
+  });
+
+  it('US75-F09: a hold is shown as HELD with its expiry, not as approved', async () => {
+    useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
+    mockPage([held]);
+    render(<Venues />);
+    const row = await screen.findByTestId('booking-row-900');
+    expect(within(row).getByText('HELD')).toBeInTheDocument();
+    expect(within(row).queryByText('APPROVED')).not.toBeInTheDocument();
+    expect(within(row).getByTestId('hold-expiry-900')).toHaveTextContent(
+      new Date(held.hold_expires_at).toLocaleString()
+    );
+  });
+});

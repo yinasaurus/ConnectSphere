@@ -2,8 +2,18 @@ const accessService = require('../services/access.service');
 const { asyncHandler } = require('../utils/asyncHandler');
 
 /**
- * Purpose: HTTP wrapper for the Lead-only coordinator assignment overview.
+ * Purpose: HTTP wrapper for the Lead-only unassigned event queue.
  * AC: SCRUM-54 AC3
+ * Inputs: authenticated request. Output: `{ events }`. Failure: 403 from the service.
+ */
+const unassignedQueue = asyncHandler(async (req, res) => {
+  const events = await accessService.listUnassignedQueue(req.user);
+  res.json({ events });
+});
+
+/**
+ * Purpose: HTTP wrapper for the Lead's own coordinator assignment overview.
+ * AC: SCRUM-54 AC3. SCRUM-57 AC1–AC5 — the service decides which rows are returned.
  * Inputs: authenticated request. Output: `{ assignments }`. Failure: 403 from the service.
  */
 const assignmentOverview = asyncHandler(async (req, res) => {
@@ -49,6 +59,7 @@ const recordSafetyCheck = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  unassignedQueue,
   assignmentOverview,
   safetyQueue,
   openSafetyCheck,

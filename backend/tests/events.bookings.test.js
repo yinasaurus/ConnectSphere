@@ -33,7 +33,7 @@ describe('event-specific venue booking access', () => {
     mockUser = { id: 1, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] };
     query = { select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), order: jest.fn().mockReturnThis() };
     supabase.from.mockReturnValue(query);
-    fetchOne.mockResolvedValue({ id: 3, organisation_id: 10, status: 'PLANNING' });
+    fetchOne.mockResolvedValue({ id: 3, organisation_id: 10, coordinator_id: 1, status: 'PLANNING' });
     fetchMany.mockResolvedValue([
       // Include saved timing and creation data so the API can power occupied-window summaries.
       {
@@ -111,8 +111,9 @@ describe('event-specific venue booking access', () => {
    * AC:       SCRUM-26 AC7 (endpoint access)
    * Scenario: Venue Staff and Coordinators load the event's booking requests.
    * Setup:    The signed-in user has either the Event Coordinator or Venue Staff role.
-   * Expected: Both internal roles receive a successful response from the event-specific
-   *           booking endpoint; this assertion checks access, not the response contents.
+   *           The Coordinator is user 1, who is assigned to event 3.
+   * Expected: Both receive a successful response from the event-specific booking
+   *           endpoint; this assertion checks access, not the response contents.
    * Type:     normal
    */
   it.each([ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF])('allows existing internal event access for %s', async (role) => {
