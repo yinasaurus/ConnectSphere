@@ -320,7 +320,7 @@ export default function Venues() {
 
   const isVenueStaff = hasRole(ROLES.VENUE_STAFF);
   const pendingBookings = bookings.filter((b) => b.status === 'PENDING');
-  const decidedBookings = bookings.filter((b) => b.status !== 'PENDING');
+  const decidedBookings = bookings.filter((b) => b.status !== 'PENDING' && !b.needs_review);
   // SCRUM-77 AC5: bookings the backend marked as clashing under the venue's setup/turnaround times.
   const flaggedBookings = bookings.filter((b) => b.needs_review);
 
@@ -779,7 +779,7 @@ export default function Venues() {
               </thead>
               <tbody>
                 {flaggedBookings.map((booking) => (
-                  <BookingRow key={booking.id} booking={booking} />
+                  <BookingRow key={booking.id} booking={booking} onApprove={isVenueStaff ? (id) => handleDecide(id, true) : undefined}/>
                 ))}
               </tbody>
             </table>
