@@ -454,7 +454,7 @@ function renderEvent() {
 
 // AC1 + AC2 · Happy path: the assigned coordinator (id 2) rejects with a valid reason, and
 // the page sends it to POST /api/events/3/decision with the right body.
-// SCRUM-17-TC53
+// SCRUM-17-TC52
 it('US17-F12: the assigned coordinator rejects through the decision endpoint', async () => {
   useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2 });
@@ -471,7 +471,7 @@ it('US17-F12: the assigned coordinator rejects through the decision endpoint', a
 
 // Security (UI): the organiser (id 1, the default user in beforeEach) can view their
 // own event under review but must not see the decision buttons.
-// SCRUM-17-TC54
+// SCRUM-17-TC53
 it('US17-F13: the organiser does not see approve or reject buttons', async () => {
   mockEvent({ coordinatorId: 2 });
   renderEvent();
@@ -482,7 +482,7 @@ it('US17-F13: the organiser does not see approve or reject buttons', async () =>
 
 // Security (UI): a coordinator who isn't assigned (id 9) can view the event for planning
 // but doesn't get the decision buttons. The backend blocks this too (US17-B09).
-// SCRUM-17-TC55
+// SCRUM-17-TC54
 it('US17-F14: a coordinator who is not assigned does not see approve or reject buttons', async () => {
   useAuth.mockReturnValue({ user: { id: 9 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2 });
@@ -493,7 +493,7 @@ it('US17-F14: a coordinator who is not assigned does not see approve or reject b
 
 // AC5 · Negative (UI): a Draft request cannot be decided, so even the assigned coordinator
 // gets no decision buttons; the general coordinator note box is shown instead.
-// SCRUM-17-TC56
+// SCRUM-17-TC55
 it('US17-F17: the assigned coordinator does not see approve or reject buttons on a draft', async () => {
   useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2, status: 'DRAFT' });
@@ -506,7 +506,7 @@ it('US17-F17: the assigned coordinator does not see approve or reject buttons on
 
 // Error handling: if the server refuses the decision (e.g. someone already decided, so the
 // event is no longer under review), the coordinator sees the server's message on the page.
-// SCRUM-17-TC57
+// SCRUM-17-TC56
 it('US17-F15: a decision refused by the server shows the error to the coordinator', async () => {
   useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2, decisionError: 'Only event requests under review can be approved or rejected' });
@@ -518,7 +518,7 @@ it('US17-F15: a decision refused by the server shows the error to the coordinato
 
 // C1 + C2 · The organiser can see why their request was rejected, so they know what to
 // fix before resubmitting (Customer Briefing, Step 5: keep a record of the decision).
-// SCRUM-17-TC58
+// SCRUM-17-TC57
 it('US17-F16: the organiser sees the rejection reason on a rejected event', async () => {
   mockEvent({ coordinatorId: 2, status: 'REJECTED', rejectionReason: 'Attendance numbers are missing' });
   renderEvent();

@@ -218,6 +218,7 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
    * Expected: description patch is written.
    * Type:     normal
    */
+  // SCRUM-40-TC16
   it('AC/3A: Organiser can amend while Under Review + ACTION_REQUIRED', async () => {
     event.status = EVENT_STATUS.UNDER_REVIEW;
     event.sub_state = EVENT_SUB_STATE.ACTION_REQUIRED;
