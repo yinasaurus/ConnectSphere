@@ -13,6 +13,7 @@ const { httpError } = require('../middleware/errorHandler');
 const { hasRole } = require('../middleware/auth');
 const { writeAudit, notifyUser } = require('./audit.service');
 const { notifyVenueStaff } = require('./notifications.service');
+const { env } = require('../config/env');
 
 function mapVenue(row) {
   return {
@@ -940,6 +941,86 @@ async function placeHold(user, payload = {}, now = new Date()) {
 }
 
 /*
+ * Purpose: deliver a hold warning within the configured lead window and an expiry notice
+ *   after expiry, each at most once for a hold.
+ * AC: SCRUM-80 AC1-AC6. Only TENTATIVE holds are considered; a converted booking is ignored.
+ * Inputs: now (injectable clock) and warningLeadMinutes (defaults to environment config).
+ * Output: counts of warnings and expiry notices successfully delivered.
+ * Failure: query, claim, or notification database errors propagate to the scheduler.
+ */
+async function processDueHoldNotifications(now = new Date(), warningLeadMinutes = env.holdWarningLeadMinutes) {
+  const nowIso = new Date(now).toISOString();
+  const warningBoundary = new Date(new Date(now).getTime() + warningLeadMinutes * 60_000).toISOString();
+  const selection = 'id, event_id, venue_id, status, hold_expires_at, hold_warning_sent_at, hold_expiry_notice_sent_at, events ( name, coordinator_id ), venues ( name )';
+  const warnings = await fetchMany(
+    supabase
+      .from('venue_bookings')
+      .select(selection)
+      .eq('status', BOOKING_STATUS.TENTATIVE)
+      .gt('hold_expires_at', nowIso)
+      .lte('hold_expires_at', warningBoundary)
+      .is('hold_warning_sent_at', null)
+  );
+  const expired = await fetchMany(
+    supabase
+      .from('venue_bookings')
+      .select(selection)
+      .eq('status', BOOKING_STATUS.TENTATIVE)
+      .lte('hold_expires_at', nowIso)
+      .is('hold_expiry_notice_sent_at', null)
+  );
+
+  async function sendOnce(booking, marker, type, title, body) {
+    const coordinatorId = booking.events?.coordinator_id;
+    if (coordinatorId == null) return false;
+
+    const { data, error } = await supabase
+      .from('venue_bookings')
+      .update({ [marker]: nowIso })
+      .eq('id', booking.id)
+      .eq('status', BOOKING_STATUS.TENTATIVE)
+      .is(marker, null)
+      .select('id')
+      .maybeSingle();
+    throwIf(error);
+    if (!data) return false;
+
+    await notifyUser(coordinatorId, type, title, body, booking.event_id);
+    return true;
+  }
+
+  let warningsSent = 0;
+  for (const booking of warnings) {
+    const eventName = booking.events?.name || 'Event';
+    const venueName = booking.venues?.name || `venue #${booking.venue_id}`;
+    const body = `The hold for ${eventName} at ${venueName} expires at ${booking.hold_expires_at}. Confirm the booking or choose another venue before it expires.`;
+    if (await sendOnce(
+      booking,
+      'hold_warning_sent_at',
+      'HOLD_EXPIRING',
+      'Venue hold expiring soon',
+      body
+    )) warningsSent += 1;
+  }
+
+  let expiryNoticesSent = 0;
+  for (const booking of expired) {
+    const eventName = booking.events?.name || 'Event';
+    const venueName = booking.venues?.name || `venue #${booking.venue_id}`;
+    const body = `The venue hold for ${eventName} at ${venueName} expired at ${booking.hold_expires_at}. Please choose another venue if needed.`;
+    if (await sendOnce(
+      booking,
+      'hold_expiry_notice_sent_at',
+      'HOLD_EXPIRED',
+      'Venue hold expired',
+      body
+    )) expiryNoticesSent += 1;
+  }
+
+  return { warningsSent, expiryNoticesSent };
+}
+
+/*
  * Purpose: cancel one venue booking and move its Confirmed event back to Planning when needed.
  * AC: SCRUM-61 AC1–AC10 — assigned Coordinators may cancel eligible bookings except for Completed events.
  * Inputs: signed-in user and booking id. Output: the updated cancelled booking row.
@@ -1311,6 +1392,7 @@ module.exports = {
   requestBooking,
   decideBooking,
   placeHold,
+  processDueHoldNotifications,
   cancelBooking,
   buildBookingDecisionNotice,
   listUnavailability,
