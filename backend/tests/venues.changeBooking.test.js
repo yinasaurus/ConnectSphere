@@ -279,6 +279,26 @@ describe('SCRUM-62 change one venue booking', () => {
   });
 
   /*
+   * AC: SCRUM-62 AC2
+   * Scenario: The caller provides an endAt that is earlier than startAt.
+   * Setup: No fetchOne is called because the guard runs before any database read.
+   * Expected: 400 with error code INVALID_TIME_RANGE; updateById and fetchOne are never called.
+   * Type: error
+   */
+  it('rejects a payload where endAt is before startAt with 400', async () => {
+    const invalidPayload = {
+      startAt: '2026-10-21T13:00:00.000Z',
+      endAt:   '2026-10-21T10:00:00.000Z',
+    };
+
+    await expect(
+      venuesService.changeBooking(COORDINATOR, PENDING_BOOKING.id, invalidPayload)
+    ).rejects.toMatchObject({ status: 400, code: 'INVALID_TIME_RANGE' });
+    expect(fetchOne).not.toHaveBeenCalled();
+    expect(updateById).not.toHaveBeenCalled();
+  });
+
+  /*
    * AC: SCRUM-62 AC7
    * Scenario: An Organiser attempts to change a venue booking.
    * Setup: The caller has EVENT_ORGANISER but not EVENT_COORDINATOR role.

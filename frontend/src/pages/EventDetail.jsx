@@ -36,9 +36,17 @@ function BookingStatusBadge({ status }) {
   );
 }
 
-// Format each saved booking window and submitted date for the event's request list.
+/*
+ * Purpose: format a booking's start or end time with day, month, and time so dates are visible.
+ * AC: SCRUM-62 feedback fix — show date on both ends to prevent hiding cross-day bookings.
+ * Inputs: ISO timestamp. Output: formatted string like "31 Oct 13:45".
+ * Failure: returns an empty string for invalid dates.
+ */
 function formatBookingTime(value) {
-  return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const d = new Date(value);
+  const datePart = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const timePart = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return `${datePart} ${timePart}`;
 }
 
 function formatSubmittedDate(value) {
@@ -836,6 +844,18 @@ export default function EventDetail() {
                     : 'Occupied window unavailable'}
                   {booking.created_at && ` · Submitted ${formatSubmittedDate(booking.created_at)}`}
                 </p>
+                {/* SCRUM-62 AC5: show the previous booking window after a reschedule. */}
+                {(() => {
+                  const reschedule = (history || []).slice().reverse().find(
+                    (e) => e.action === 'BOOKING_RESCHEDULED' && String(e.entity_id) === String(booking.id)
+                  );
+                  if (!reschedule?.metadata?.previousStartAt || !reschedule?.metadata?.previousEndAt) return null;
+                  return (
+                    <p style={{margin: '2px 0', fontSize: '0.85rem', color: '#6b7280'}}>
+                      Previous time: {formatBookingTime(new Date(reschedule.metadata.previousStartAt).getTime())} to {formatBookingTime(new Date(reschedule.metadata.previousEndAt).getTime())}
+                    </p>
+                  );
+                })()}
                 {/* SCRUM-18 AC7: Coordinator sees the rejection reason and suggested alternative. */}
                 {booking.status === 'REJECTED' && booking.decision_reason && (
                   <p style={{ margin: '2px 0', fontSize: '0.88rem', color: '#ef4444' }}>

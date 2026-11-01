@@ -915,12 +915,30 @@ async function cancelBooking(user, bookingId) {
 /*
  * Purpose: reschedule one venue booking and return a Confirmed event to Planning when needed.
  * AC: SCRUM-62 AC1–AC8, AC10–AC12 — assigned Coordinators may change eligible bookings without affecting siblings.
+ *     SCRUM-62 AC2 — startAt and endAt must both be present and endAt must be after startAt.
  * Inputs: authenticated user, booking id, and new startAt/endAt values. Output: the updated booking row.
- * Failure: throws authorization, missing-row, cancellation, or venue-conflict errors before changing state.
+ * Failure: throws authorization, missing-row, cancellation, or venue-conflict errors before changing state;
+ *   throws 400 MISSING_START, MISSING_END, or INVALID_TIME_RANGE when payload validation fails.
  */
 async function changeBooking(user, bookingId, payload) {
   if (!hasRole(user, ROLES.EVENT_COORDINATOR)) {
     throw httpError(403, 'Only the assigned coordinator can change a booking', 'FORBIDDEN');
+  }
+
+  /*
+   * Purpose: validate required date/time fields and check that the end is after the start.
+   * AC: SCRUM-62 AC2 — startAt and endAt must both be present and endAt must be after startAt.
+   * Inputs: payload.startAt and payload.endAt. Output: throws 400 if validation fails.
+   * Failure: rejects with MISSING_START, MISSING_END, or INVALID_TIME_RANGE before any database reads.
+   */
+  if (!payload.startAt) {
+    throw httpError(400, 'startAt is required', 'MISSING_START');
+  }
+  if (!payload.endAt) {
+    throw httpError(400, 'endAt is required', 'MISSING_END');
+  }
+  if (new Date(payload.endAt) <= new Date(payload.startAt)) {
+    throw httpError(400, 'endAt must be after startAt', 'INVALID_TIME_RANGE');
   }
 
   const booking = await fetchOne(
