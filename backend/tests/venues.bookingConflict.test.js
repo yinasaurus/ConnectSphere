@@ -72,7 +72,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
 
   describe('AC1: Booking request conflict checking', () => {
     /*
-     * AC:       AC1 & AC3
+     * AC:       SCRUM-19 AC1 & AC3
      * Scenario: Coordinator requests a booking that overlaps an existing confirmed booking
      * Setup:    POST /api/venues/bookings with occupied window overlapping confirmed booking at same venue
      * Expected: HTTP 409 BOOKING_CONFLICT returned, booking is not created
@@ -112,7 +112,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
     });
 
     /*
-     * AC:       AC1
+     * AC:       SCRUM-19 AC1
      * Scenario: Coordinator requests a booking for a free slot
      * Setup:    POST /api/venues/bookings when no confirmed bookings overlap
      * Expected: HTTP 201 Created, booking saved as PENDING
@@ -148,7 +148,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
 
   describe('AC2: Occupied window computation', () => {
     /*
-     * AC:       AC2
+     * AC:       SCRUM-19 AC2
      * Scenario: Compute occupied window given start, end, setup, and turnaround minutes
      * Setup:    Event 10:00 to 12:00 with 30m setup and 45m turnaround
      * Expected: Occupied window is 09:30 to 12:45
@@ -168,7 +168,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
 
   describe('AC3, AC4 & AC5: Overlapping occupied windows & boundary abutment', () => {
     /*
-     * AC:       AC3 & AC5
+     * AC:       SCRUM-19 AC3 & AC5
      * Scenario: New booking occupied window overlaps existing confirmed booking occupied window
      * Setup:    Confirmed booking occupied 09:30-12:45; new request 13:00-15:00 with 30m setup (occupied 12:30-15:30)
      * Expected: findConflict returns the conflicting confirmed booking
@@ -200,7 +200,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
     });
 
     /*
-     * AC:       AC4
+     * AC:       SCRUM-19 AC4
      * Scenario: One occupied window ends exactly when the other begins (abutting boundaries)
      * Setup:    Confirmed booking occupied 09:30-12:45; new request 13:00-15:00 with 15m setup (occupied 12:45-15:30)
      * Expected: findConflict returns null (no conflict for abutting windows)
@@ -233,7 +233,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
 
   describe('AC6: Refusing booking approval when conflict exists with confirmed booking', () => {
     /*
-     * AC:       AC6
+     * AC:       SCRUM-19 AC6
      * Scenario: Venue Staff attempts to approve a pending booking that conflicts with a confirmed booking
      * Setup:    POST /api/venues/bookings/:id/decision with approve: true on conflicting pending booking
      * Expected: HTTP 409 BOOKING_CONFLICT returned, status not updated to APPROVED
@@ -278,7 +278,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
     });
 
     /*
-     * AC:       AC6
+     * AC:       SCRUM-19 AC6
      * Scenario: Venue Staff approves a pending booking that does not conflict with any confirmed booking
      * Setup:    POST /api/venues/bookings/:id/decision with approve: true on non-conflicting booking
      * Expected: HTTP 200 OK, status updated to APPROVED
@@ -321,7 +321,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
 
   describe('AC7: Informing Venue Staff about detected conflicts in booking list', () => {
     /*
-     * AC:       AC7
+     * AC:       SCRUM-19 AC7
      * Scenario: Venue Staff fetches booking list containing both conflicting and non-conflicting pending requests
      * Setup:    GET /api/venues/bookings returns list with confirmed booking and two pending requests
      * Expected: Items annotated with has_conflict and conflict_details
@@ -388,7 +388,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
 
   describe('AC8: Multi-booking events checked separately per venue', () => {
     /*
-     * AC:       AC8
+     * AC:       SCRUM-19 AC8
      * Scenario: Event has bookings on Venue 1 and Venue 2; Venue 1 has a conflict, Venue 2 is free
      * Setup:    Seed conflict on Venue 1 and empty bookings on Venue 2
      * Expected: Approving booking 102 (Venue 2) succeeds with 200, approving booking 101 (Venue 1) returns 409
@@ -464,7 +464,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
     const now = new Date('2026-10-20T08:00:00.000Z');
 
     /*
-     * AC:       AC9
+     * AC:       SCRUM-19 AC9
      * Scenario: Active tentative hold occupies venue
      * Setup:    Hold expires at 09:00:00 (future relative to 08:00:00)
      * Expected: findConflict returns the active tentative hold
@@ -498,7 +498,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
     });
 
     /*
-     * AC:       AC9
+     * AC:       SCRUM-19 AC9
      * Scenario: Expired tentative hold does not occupy venue
      * Setup:    Hold expired at 07:00:00 (past relative to 08:00:00)
      * Expected: findConflict returns null

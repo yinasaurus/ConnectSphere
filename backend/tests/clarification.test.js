@@ -119,44 +119,72 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
   });
 
   // ─── Sub-state Machine ──────────────────────────────────────────────────────
-  /*
-   * AC:       AC7 (Sub-state machine validation)
-   * Scenario: Validate allowed state transitions in statusMachine.js
-   * Setup:    Call assertSubStateTransition with various sub-states
-   * Expected: Allowed transitions pass cleanly, invalid ones throw an error
-   * Type:     normal / boundary
-   */
   describe('Sub-state Machine', () => {
+    /*
+     * AC: SCRUM-16 AC7
+     * Scenario: Move an event from IN_REVIEW to ACTION_REQUIRED.
+     * Setup: Call assertSubStateTransition with IN_REVIEW and ACTION_REQUIRED.
+     * Expected: The transition is accepted without throwing.
+     * Type: normal
+     */
     it('US16-M01: allows IN_REVIEW -> ACTION_REQUIRED', () => {
       expect(() => assertSubStateTransition(EVENT_SUB_STATE.IN_REVIEW, EVENT_SUB_STATE.ACTION_REQUIRED)).not.toThrow();
     });
 
+    /*
+     * AC: SCRUM-16 AC7
+     * Scenario: Move an event from ACTION_REQUIRED to CLARIFICATION_PROVIDED.
+     * Setup: Call assertSubStateTransition with ACTION_REQUIRED and CLARIFICATION_PROVIDED.
+     * Expected: The transition is accepted without throwing.
+     * Type: normal
+     */
     it('US16-M02: allows ACTION_REQUIRED -> CLARIFICATION_PROVIDED', () => {
       expect(() => assertSubStateTransition(EVENT_SUB_STATE.ACTION_REQUIRED, EVENT_SUB_STATE.CLARIFICATION_PROVIDED)).not.toThrow();
     });
 
+    /*
+     * AC: SCRUM-16 AC7
+     * Scenario: Move an event from CLARIFICATION_PROVIDED back to ACTION_REQUIRED.
+     * Setup: Call assertSubStateTransition with CLARIFICATION_PROVIDED and ACTION_REQUIRED.
+     * Expected: The transition is accepted without throwing.
+     * Type: normal
+     */
     it('US16-M03: allows CLARIFICATION_PROVIDED -> ACTION_REQUIRED', () => {
       expect(() => assertSubStateTransition(EVENT_SUB_STATE.CLARIFICATION_PROVIDED, EVENT_SUB_STATE.ACTION_REQUIRED)).not.toThrow();
     });
 
+    /*
+     * AC: SCRUM-16 AC7
+     * Scenario: Apply an ACTION_REQUIRED transition when the current sub-state is unset.
+     * Setup: Call assertSubStateTransition with a null current sub-state.
+     * Expected: The transition is accepted using the default IN_REVIEW sub-state.
+     * Type: boundary
+     */
     it('US16-M04: defaults from null to IN_REVIEW and allows ACTION_REQUIRED', () => {
       expect(() => assertSubStateTransition(null, EVENT_SUB_STATE.ACTION_REQUIRED)).not.toThrow();
     });
 
+    /*
+     * AC: SCRUM-16 AC7
+     * Scenario: Attempt to transition an event from ACTION_REQUIRED to itself.
+     * Setup: Call assertSubStateTransition with ACTION_REQUIRED as both sub-states.
+     * Expected: The invalid transition throws an error.
+     * Type: negative
+     */
     it('US16-M05: rejects invalid transitions like ACTION_REQUIRED -> ACTION_REQUIRED', () => {
       expect(() => assertSubStateTransition(EVENT_SUB_STATE.ACTION_REQUIRED, EVENT_SUB_STATE.ACTION_REQUIRED)).toThrow();
     });
   });
 
   // ─── POST /api/events/:id/clarification ────────────────────────────────────
-  /*
-   * AC:       AC1 & AC2 (HTTP Route: Request Clarification)
-   * Scenario: Coordinator requests clarification via HTTP POST
-   * Setup:    Event in UNDER_REVIEW assigned to coordinator id 10
-   * Expected: Returns 200, updates sub_state to ACTION_REQUIRED, notifies organiser
-   * Type:     normal
-   */
   describe('POST /api/events/:id/clarification (Request Clarification HTTP)', () => {
+    /*
+     * AC: SCRUM-16 AC1 & AC2
+     * Scenario: The assigned coordinator requests clarification for an event under review.
+     * Setup: Event is UNDER_REVIEW and assigned to coordinator 10, with organiser 20.
+     * Expected: Returns 200, sets ACTION_REQUIRED, and notifies the organiser.
+     * Type: normal
+     */
     it('US16-R01 (AC1+AC2): assigned coordinator requests clarification successfully', async () => {
       seedEvent(1, {
         name: 'Tech Conference',
@@ -185,7 +213,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
     });
 
     /*
-     * AC:       AC1 (Validation)
+     * AC: SCRUM-16 AC1 (Validation)
      * Scenario: Request clarification with blank remarks
      * Setup:    Post whitespace string as remarks
      * Expected: Returns 400 VALIDATION_ERROR
@@ -210,7 +238,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
     });
 
     /*
-     * AC:       AC1 (Permissions)
+     * AC: SCRUM-16 AC1 (Permissions)
      * Scenario: Non-assigned coordinator attempts to request clarification
      * Setup:    Auth header for coordinator id 99 (event assigned to id 10)
      * Expected: Returns 403 FORBIDDEN
@@ -234,7 +262,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
     });
 
     /*
-     * AC:       AC1 (Status constraint)
+     * AC: SCRUM-16 AC1 (Status constraint)
      * Scenario: Attempt clarification on an event in PLANNING status
      * Setup:    Event status is PLANNING
      * Expected: Returns 409 INVALID_STATUS
@@ -258,14 +286,14 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
   });
 
   // ─── POST /api/events/:id/clarification/respond ────────────────────────────
-  /*
-   * AC:       AC4 & AC5 (HTTP Route: Respond Clarification)
-   * Scenario: Organiser responds to clarification request via HTTP POST
-   * Setup:    Event in ACTION_REQUIRED
-   * Expected: Returns 200, updates sub_state to CLARIFICATION_PROVIDED, notifies coordinator
-   * Type:     normal
-   */
   describe('POST /api/events/:id/clarification/respond (Respond Clarification HTTP)', () => {
+    /*
+     * AC: SCRUM-16 AC4 & AC5
+     * Scenario: The organiser responds to an outstanding clarification request with text.
+     * Setup: Event is UNDER_REVIEW and ACTION_REQUIRED, assigned to coordinator 10 and organiser 20.
+     * Expected: Returns 200, sets CLARIFICATION_PROVIDED, and notifies the coordinator.
+     * Type: normal
+     */
     it('US16-R05 (AC4+AC5): organiser responds with text response successfully', async () => {
       seedEvent(1, {
         name: 'Tech Conference',
@@ -295,7 +323,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
     });
 
     /*
-     * AC:       AC4 (Amendments)
+     * AC: SCRUM-16 AC4 (Amendments)
      * Scenario: Organiser submits clarification response with field amendments
      * Setup:    Pass payload with amendments object
      * Expected: Returns 200, applies allowed event request amendments
@@ -325,7 +353,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
     });
 
     /*
-     * AC:       AC5 (Permissions)
+     * AC: SCRUM-16 AC5 (Permissions)
      * Scenario: Non-organiser (e.g. coordinator) attempts to respond to clarification
      * Setup:    Auth header for coordinator (not organiser)
      * Expected: Returns 403 FORBIDDEN
@@ -349,7 +377,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
     });
 
     /*
-     * AC:       AC5 (Validation)
+     * AC: SCRUM-16 AC5 (Validation)
      * Scenario: Organiser submits an empty response with no text and no amendments
      * Setup:    Pass blank string for response and empty amendments
      * Expected: Returns 400 VALIDATION_ERROR
@@ -375,14 +403,14 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
   });
 
   // ─── History Trail ──────────────────────────────────────────────────────────
-  /*
-   * AC:       AC5 & AC8 (History Listing)
-   * Scenario: Multiple clarification rounds occur and history records each note in order
-   * Setup:    Execute request -> respond -> request -> respond (via service directly)
-   * Expected: History list contains every request and response note sequentially
-   * Type:     normal
-   */
   describe('History Trail for Clarification Rounds', () => {
+    /*
+     * AC: SCRUM-16 AC5 & AC8
+     * Scenario: Multiple clarification rounds are completed for an event.
+     * Setup: Run two request-and-response rounds for the same event.
+     * Expected: History contains every request and response note in sequence.
+     * Type: normal
+     */
     it('US16-H01 (AC5): records and lists every clarification request and response note in order', async () => {
       seedEvent(1, {
         name: 'Tech Conference',
