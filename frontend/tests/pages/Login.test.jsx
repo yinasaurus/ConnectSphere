@@ -55,17 +55,26 @@ describe('Login page', () => {
     expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled();
   });
 
+  // SCRUM-92-TC01
   it('shows a validation error when fields are empty', async () => {
     const user = userEvent.setup();
     renderLogin();
     await readyForm();
     await user.click(screen.getByRole('button', { name: /continue/i }));
 
-    expect(screen.getByText('Email is required')).toBeInTheDocument();
-    expect(screen.getByText('Password is required')).toBeInTheDocument();
+    const email = screen.getByLabelText(/^email$/i);
+    const emailError = screen.getByText('Email is required');
+    expect(emailError).toHaveClass('field-error');
+    expect(email.compareDocumentPosition(emailError) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const password = screen.getByLabelText(/^password$/i);
+    const passwordError = screen.getByText('Password is required');
+    expect(passwordError).toHaveClass('field-error');
+    expect(password.compareDocumentPosition(passwordError) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.querySelector('.alert')).toBeNull();
     expect(api).not.toHaveBeenCalledWith('/api/auth/login', expect.anything());
   });
 
+  // SCRUM-92-TC02
   it('shows an error message on invalid credentials', async () => {
     const user = userEvent.setup();
     api.mockImplementation((path) => {
@@ -85,7 +94,10 @@ describe('Login page', () => {
     await user.type(screen.getByLabelText(/^password$/i), 'wrong-password');
     await user.click(screen.getByRole('button', { name: /continue/i }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid email or password.');
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent('Invalid email or password.');
+    expect(banner).toHaveClass('alert');
+    expect(banner).not.toHaveClass('field-error');
     expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument();
   });
 
@@ -116,6 +128,7 @@ describe('Login page', () => {
     expect(await screen.findByText('Organiser dashboard')).toBeInTheDocument();
   });
 
+  // SCRUM-92-TC03
   it('shows a loading state while the request is pending', async () => {
     const user = userEvent.setup();
     let resolveLogin;
