@@ -48,6 +48,7 @@ describe('SCRUM-76 server starts and stops the expiry timer', () => {
     jest.restoreAllMocks();
   });
 
+  // SCRUM-76-TC25
   it('US76-S01: starting the server starts the hold expiry timer once, with no user action', () => {
     expect(mockListen).toHaveBeenCalledWith(4999, expect.any(Function));
     expect(logSpy).toHaveBeenCalledWith('ConnectSphere API listening on http://localhost:4999');
@@ -55,6 +56,7 @@ describe('SCRUM-76 server starts and stops the expiry timer', () => {
     expect(startHoldExpiryJob).toHaveBeenCalledWith();
   });
 
+  // SCRUM-76-TC26
   it.each(['SIGINT', 'SIGTERM'])('US76-S02: %s stops the timer, then closes the server', (signal) => {
     mockStop.mockClear();
     mockClose.mockClear();

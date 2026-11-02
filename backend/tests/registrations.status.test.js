@@ -78,6 +78,7 @@ describe('SCRUM-51 registration status (service rules)', () => {
    * Expected: state OPEN, the window, capacity 50, 40 places left, and no registration of their own.
    * Type: normal
    */
+  // SCRUM-51-TC01
   it('US51-B01: shows an open event with its window, places left and "not registered"', async () => {
     const result = await service.getRegistrationStatus(attendee, 3);
     expect(result).toEqual({
@@ -97,6 +98,7 @@ describe('SCRUM-51 registration status (service rules)', () => {
    * Expected: their status is returned with when they registered (and withdrew).
    * Type: normal
    */
+  // SCRUM-51-TC02
   it('US51-B02: shows the Attendee as registered, with when they registered', async () => {
     db.fetchMany.mockResolvedValue([{ status: 'REGISTERED', created_at: '2026-11-02T10:00:00.000Z', withdrawn_at: null }]);
     const result = await service.getRegistrationStatus(attendee, 3);
@@ -105,6 +107,7 @@ describe('SCRUM-51 registration status (service rules)', () => {
     });
   });
 
+  // SCRUM-51-TC03
   it('US51-B03: shows the Attendee as withdrawn, with when they withdrew', async () => {
     db.fetchMany.mockResolvedValue([{
       status: 'WITHDRAWN', created_at: '2026-11-02T10:00:00.000Z', withdrawn_at: '2026-11-03T10:00:00.000Z',
@@ -115,6 +118,7 @@ describe('SCRUM-51 registration status (service rules)', () => {
     });
   });
 
+  // SCRUM-51-TC04
   it('US51-B04: shows statuses set after the event, such as Attended', async () => {
     db.fetchMany.mockResolvedValue([{ status: 'ATTENDED', created_at: '2026-11-02T10:00:00.000Z' }]);
     const result = await service.getRegistrationStatus(attendee, 3);
@@ -127,6 +131,7 @@ describe('SCRUM-51 registration status (service rules)', () => {
    * Expected: the query filters by this event and this Attendee, newest first, one row.
    * Type: normal
    */
+  // SCRUM-51-TC05
   it('US51-B05: looks up only the caller\'s own latest registration', async () => {
     await service.getRegistrationStatus(attendee, 3);
     expect(builder.eq).toHaveBeenCalledWith('event_id', 3);
@@ -141,11 +146,13 @@ describe('SCRUM-51 registration status (service rules)', () => {
    * Expected: NOT_YET_OPEN, CLOSED, FULL; places left never goes below 0.
    * Type: boundary
    */
+  // SCRUM-51-TC06
   it('US51-B06: shows "not yet open" before the window opens', async () => {
     jest.setSystemTime(new Date('2026-11-01T08:59:59.999Z'));
     expect((await service.getRegistrationStatus(attendee, 3)).state).toBe('NOT_YET_OPEN');
   });
 
+  // SCRUM-51-TC07
   it('US51-B07: shows "closed" from the close time on', async () => {
     jest.setSystemTime(new Date(CLOSES));
     expect((await service.getRegistrationStatus(attendee, 3)).state).toBe('CLOSED');
@@ -158,6 +165,7 @@ describe('SCRUM-51 registration status (service rules)', () => {
    * Expected: STARTED from the start time on, even if places are left; OPEN one millisecond before.
    * Type: boundary
    */
+  // SCRUM-51-TC12
   it.each([
     ['exactly at the start time', '2026-11-05T09:00:00.000Z', 'STARTED'],
     ['after the start time', '2026-11-05T08:00:00.000Z', 'STARTED'],
@@ -167,6 +175,7 @@ describe('SCRUM-51 registration status (service rules)', () => {
     expect((await service.getRegistrationStatus(attendee, 3)).state).toBe(state);
   });
 
+  // SCRUM-51-TC08
   it.each([[50, 0], [51, 0]])('US51-B08: with %i of 50 taken it shows "full" and %i places left', async (taken, left) => {
     db.fetchCount.mockResolvedValue(taken);
     const result = await service.getRegistrationStatus(attendee, 3);
@@ -180,6 +189,7 @@ describe('SCRUM-51 registration status (service rules)', () => {
    * Expected: NOT_OPEN with no window, capacity or places; places are not counted.
    * Type: normal
    */
+  // SCRUM-51-TC09
   it('US51-B09: shows "not open" with no details before registration is enabled', async () => {
     event = openEvent({ registration_open: false, registration_opens_at: null, registration_closes_at: null, registration_capacity: null });
     const result = await service.getRegistrationStatus(attendee, 3);
@@ -193,6 +203,7 @@ describe('SCRUM-51 registration status (service rules)', () => {
    * Expected: 404, the same as opening the event page; no registrations are read.
    * Type: error
    */
+  // SCRUM-51-TC10
   it('US51-B10: an event the Attendee cannot see returns 404', async () => {
     event = openEvent({ status: 'PLANNING' });
     await expect(service.getRegistrationStatus(attendee, 3)).rejects.toMatchObject({ status: 404, code: 'NOT_FOUND' });
@@ -205,6 +216,7 @@ describe('SCRUM-51 registration status (service rules)', () => {
    * Expected: NOT_OPEN, matching what register() refuses.
    * Type: error
    */
+  // SCRUM-51-TC11
   it.each([
     'DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'PLANNING',
     'AWAITING_SAFETY_CHECK', 'PREPARATION', 'COMPLETED', 'CANCELLED', 'REJECTED',
@@ -224,6 +236,7 @@ describe('SCRUM-51 registration status route', () => {
    * Expected: 200 with the status.
    * Type: normal
    */
+  // SCRUM-51-TC13
   it('US51-R01: an Attendee can read the registration status through the API', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 30, is_active: true });
     db.fetchMany.mockResolvedValueOnce([{ role: ROLES.ATTENDEE }]);
