@@ -60,6 +60,11 @@ const requestBooking = asyncHandler(async (req, res) => {
   res.status(201).json({ booking });
 });
 
+const requestReplacementBooking = asyncHandler(async (req, res) => {
+  const booking = await venuesService.requestReplacementBooking(req.user, req.params.id, req.body);
+  res.status(201).json({ booking });
+});
+
 /**
  * Purpose: POST /api/venues/bookings/:id/decision. Passes the signed-in Venue Staff member,
  * the booking id and the JSON body { approve, reason, alternativeSuggestion } to the service.
@@ -123,6 +128,7 @@ module.exports = {
   update,
   bookings,
   requestBooking,
+  requestReplacementBooking,
   decideBooking,
   placeHold,
   cancelBooking,
