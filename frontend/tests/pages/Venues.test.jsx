@@ -1210,3 +1210,36 @@ describe('SCRUM-75 holds on the Venues page', () => {
     );
   });
 });
+
+describe('SCRUM-76 expired holds on the Venues page', () => {
+  it('US76-F01: an expired hold shows as EXPIRED with when it expired', async () => {
+    useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
+    api.mockReset();
+    api.mockImplementation(async (path) => {
+      if (path === '/api/venues') return { venues: clone(database.venues) };
+      if (path === '/api/venues/bookings') {
+        return {
+          bookings: [{
+            id: 903,
+            event_id: 50,
+            venue_id: 1,
+            status: 'EXPIRED',
+            start_at: '2026-11-20T10:00:00.000Z',
+            end_at: '2026-11-20T12:00:00.000Z',
+            hold_expires_at: '2026-11-18T09:00:00.000Z',
+            event_name: 'Tech Talk',
+            venue_name: 'Helix Hall',
+          }],
+        };
+      }
+      if (path === '/api/events') return { events: [] };
+      return {};
+    });
+    render(<Venues />);
+    const row = await screen.findByTestId('booking-row-903');
+    expect(within(row).getByText('EXPIRED')).toBeInTheDocument();
+    expect(within(row).getByTestId('hold-expiry-903')).toHaveTextContent(
+      `Hold expired ${new Date('2026-11-18T09:00:00.000Z').toLocaleString()}`
+    );
+  });
+});

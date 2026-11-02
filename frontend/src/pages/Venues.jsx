@@ -60,6 +60,7 @@ function BookingStatusBadge({ status }) {
     REJECTED: '#b91c1c',
     TENTATIVE: '#1d4ed8',
     CANCELLED: '#6b7280',
+    EXPIRED: '#6b7280',
   };
   return (
     <span
@@ -215,6 +216,7 @@ function BookingRow({ booking, onApprove }) {
   const [localError, setLocalError] = useState('');
   const isRejected = booking.status === 'REJECTED';
   const isHeld = booking.status === 'TENTATIVE';
+  const isExpired = booking.status === 'EXPIRED';
   const needsClear = booking.status === 'APPROVED' && booking.needs_review;
 
   async function approveAgain() {
@@ -257,6 +259,11 @@ function BookingRow({ booking, onApprove }) {
             Hold expires {new Date(booking.hold_expires_at).toLocaleString()}
           </span>
         )}
+        {isExpired && booking.hold_expires_at && (
+          <span className="muted" style={{ fontSize: '0.85rem' }} data-testid={`hold-expiry-${booking.id}`}>
+            Hold expired {new Date(booking.hold_expires_at).toLocaleString()}
+          </span>
+        )}
         {needsClear && onApprove && (
           <button
             className="btn"
@@ -268,7 +275,7 @@ function BookingRow({ booking, onApprove }) {
           </button>
         )}
         {localError && <div className="alert">{localError}</div>}
-        {!isRejected && !isHeld && !(needsClear && onApprove) && <span className="muted">—</span>}
+        {!isRejected && !isHeld && !isExpired && !(needsClear && onApprove) && <span className="muted">—</span>}
       </td>
     </tr>
   );
