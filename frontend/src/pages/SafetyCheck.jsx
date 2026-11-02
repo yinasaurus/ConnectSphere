@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
+import { displayError } from '../displayError';
 
 /**
  * Purpose: Safety Officer reviews an awaiting event and records approve / reject / request changes.
@@ -34,7 +35,7 @@ export default function SafetyCheck() {
           );
           return;
         }
-        setError(err.message);
+        setError(displayError(err));
       });
   }, [id]);
 
@@ -71,7 +72,7 @@ export default function SafetyCheck() {
       }));
       setMessage('Safety check outcome recorded.');
     } catch (err) {
-      setError(err.message);
+      setError(displayError(err));
     } finally {
       setSaving(false);
     }

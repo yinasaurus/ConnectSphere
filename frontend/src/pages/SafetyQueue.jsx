@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { displayError } from '../displayError';
 
 /**
  * Purpose: Safety Officer list of events awaiting a safety check.
@@ -17,7 +18,7 @@ export default function SafetyQueue() {
   useEffect(() => {
     api('/api/events/safety-queue')
       .then((data) => setEvents(data.events || []))
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(displayError(err)));
   }, []);
 
   return (

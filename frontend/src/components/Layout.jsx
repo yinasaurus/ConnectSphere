@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { LIVE_REFRESH_MS, ROLE_LABELS, ROLES } from '../constants';
 import { api } from '../api';
+import { displayError } from '../displayError';
 
 /**
  * Purpose: signed-in chrome: nav links limited to roles the session holds, and
@@ -47,7 +48,7 @@ export default function Layout() {
         }
       } catch (error) {
         if (active) {
-          setNotificationError(error.message || 'Unread notification count could not be loaded.');
+          setNotificationError(displayError(error) || 'Unread notification count could not be loaded.');
         }
       }
     }

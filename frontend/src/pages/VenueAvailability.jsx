@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import { displayError } from '../displayError';
 import { useAuth } from '../auth';
 import { ROLES } from '../constants';
 
@@ -40,7 +41,7 @@ export default function VenueAvailability() {
   useEffect(() => {
     api('/api/venues')
       .then((res) => setVenues(res.venues || []))
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(displayError(err)));
   }, []);
 
   async function check(e) {
@@ -72,14 +73,14 @@ export default function VenueAvailability() {
           setBookingsVenue(res.venue.name);
         })
         .catch((err) => {
-          if (searchId === latestSearch.current) setBookingsError(err.message);
+          if (searchId === latestSearch.current) setBookingsError(displayError(err));
         });
     }
     try {
       setResult(await api(`/api/venues/${venueId}/availability?${params.toString()}`));
     } catch (err) {
       setResult(null);
-      setError(err.message);
+      setError(displayError(err));
     } finally {
       setLoading(false);
     }

@@ -127,7 +127,7 @@ describe('SCRUM-72 BlockVenueCard', () => {
    * Scenario: Venue Staff submits a period the server rejects (e.g. end not after start).
    * Setup:    api() mocked to throw a VALIDATION_ERROR with message 'endAt must be after
    *           startAt'.
-   * Expected: that message is shown on the card.
+   * Expected: the card shows that sentence in plain words.
    * Type:     error
    */
   // SCRUM-72-TC15
@@ -138,6 +138,6 @@ describe('SCRUM-72 BlockVenueCard', () => {
     await fillForm();
     await userEvent.click(screen.getByRole('button', { name: 'Mark unavailable' }));
 
-    expect(await screen.findByText('endAt must be after startAt')).toBeInTheDocument();
+    expect(await screen.findByText('The end must be after the start.')).toBeInTheDocument();
   });
 });

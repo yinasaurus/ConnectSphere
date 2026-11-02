@@ -153,7 +153,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
       method: 'POST',
       body: { eventId: undefined, venueId: undefined, expiresAt: undefined },
     });
-    expect(await screen.findByText('eventId and venueId are required')).toBeInTheDocument();
+    expect(await screen.findByText('Choose an event and a venue.')).toBeInTheDocument();
   });
 
   it('US75-F14: works with no venues passed in', async () => {

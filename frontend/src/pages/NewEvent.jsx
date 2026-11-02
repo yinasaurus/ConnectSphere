@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
+import { displayError } from '../displayError';
 import { useAuth } from '../auth';
 import { CATEGORIES, LAYOUTS, ROLES } from '../constants';
 
@@ -141,7 +142,7 @@ export default function NewEvent() {
         endAt: toDateTimeLocal(event.endAt),
         clonedFromEventId: event.clonedFromEventId || '',
       });
-    }).catch((err) => setError(err.message));
+    }).catch((err) => setError(displayError(err)));
   }, [id, isEditing, user?.id, canCoordinate]);
 
   function set(field, value) {
@@ -218,7 +219,7 @@ export default function NewEvent() {
         }
       }
     } catch (err) {
-      setError(err.message);
+      setError(displayError(err));
       if (err.details?.fields) {
         setFieldErrors(Object.fromEntries(
           err.details.fields.map((field) => {

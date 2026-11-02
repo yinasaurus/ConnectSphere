@@ -235,14 +235,14 @@ describe('Venues page inputs', () => {
    *           Update venue form and save.
    * Setup:    Helix Hall selected. A cleared number box is sent as '', and the mocked API
    *           answers with the same messages the real validator gives for a non-number.
-   * Expected: The form shows which field is wrong and why, and the saved venue is unchanged,
-   *           because an empty value is not a number and is rejected rather than saved.
+   * Expected: The form shows why the value was rejected, without the raw field name, and the
+   *           saved venue is unchanged, because an empty value is not a number and is rejected.
    * Type:     error
    */
   it.each([
-    ['capacity', 'Capacity', 'capacity: Capacity must be a number'],
-    ['setup minutes', 'Setup (mins)', 'setupMinutes: Setup minutes must be a number'],
-    ['teardown minutes', 'Teardown (mins)', 'teardownMinutes: Teardown minutes must be a number'],
+    ['capacity', 'Capacity', 'Capacity must be a number'],
+    ['setup minutes', 'Setup (mins)', 'Setup minutes must be a number.'],
+    ['teardown minutes', 'Teardown (mins)', 'Teardown minutes must be a number.'],
   ])('shows the rejection when the %s box is cleared', async (_field, label, expectedMessage) => {
     const user = userEvent.setup();
     mockDatabaseApi({ validateUpdate: true });
@@ -268,7 +268,7 @@ describe('Venues page inputs', () => {
     await user.type(hoursInput, 'AbCd');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
-    expect(await screen.findByText('operatingHours: Use HH:MM - HH:MM format')).toBeInTheDocument();
+    expect(await screen.findByText('Use HH:MM - HH:MM format')).toBeInTheDocument();
     expect(database.venues[0].operatingHours).toBe('08:00 - 22:00');
   });
 
@@ -343,7 +343,7 @@ describe('Venues page inputs', () => {
     await user.clear(add.getByLabelText('Capacity'));
     await user.click(add.getByRole('button', { name: 'Save venue' }));
 
-    expect(await screen.findByText('capacity: Capacity is required')).toBeInTheDocument();
+    expect(await screen.findByText('Capacity is required')).toBeInTheDocument();
     // The empty box is sent as '' so the server, not the browser, decides it's invalid.
     expect(api).toHaveBeenCalledWith('/api/venues', expect.objectContaining({
       body: expect.objectContaining({ capacity: '' }),
@@ -497,7 +497,7 @@ describe('Venues page inputs', () => {
    * Scenario: Venue Staff type a negative setup time and save.
    * Setup:    Helix Hall saved at 30/30. The API answers the PATCH the way the real
    *           validator does for -5 (400 with the setupMinutes field and message).
-   * Expected: The form shows which field is wrong, nothing is saved, and reopening the
+   * Expected: The form shows why the value was rejected, nothing is saved, and reopening the
    *           venue shows the saved 30, not the rejected -5.
    * Type:     error
    */
@@ -520,7 +520,7 @@ describe('Venues page inputs', () => {
     await user.type(update.getByLabelText('Setup (mins)'), '-5');
     await user.click(update.getByRole('button', { name: 'Save changes' }));
 
-    expect(await update.findByText('setupMinutes: Setup minutes must be at least 0')).toBeInTheDocument();
+    expect(await update.findByText('Setup minutes must be at least 0')).toBeInTheDocument();
     expect(database.venues[0].setupMinutes).toBe(30);
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { displayError } from '../displayError';
 
 /**
  * Purpose: show recorded venue unavailability periods.
@@ -16,7 +17,7 @@ export default function UnavailabilityList({ venues, refreshKey }) {
       const res = await api('/api/venues/unavailability');
       setPeriods(res?.unavailability || []);
     } catch (err) {
-      setError(err.message);
+      setError(displayError(err));
     }
   }
 

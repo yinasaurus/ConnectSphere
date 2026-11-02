@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { displayError } from '../displayError';
 
 /**
  * Purpose: Venue Staff view the bookings identified as affected by a recorded venue
@@ -34,7 +35,7 @@ export default function AffectedBookingsCard({ venues }) {
       const res = await api(`/api/venues/unavailability/${periodId}/affected-bookings`);
       setBookings(res?.bookings || []);
     } catch (err) {
-      setError(err.message);
+      setError(displayError(err));
     } finally {
       setLoading(false);
     }

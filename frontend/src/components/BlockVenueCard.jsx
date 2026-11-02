@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { displayError } from '../displayError';
 
 // <input type="datetime-local"> gives local time without a zone; send it as ISO (UTC).
 function toIso(localValue) {
@@ -47,7 +48,7 @@ export default function BlockVenueCard({ venues, onRecorded }) {
       setCustomReason('');
       await onRecorded?.();
     } catch (err) {
-      setError(err.message);
+      setError(displayError(err));
     } finally {
       setSaving(false);
     }

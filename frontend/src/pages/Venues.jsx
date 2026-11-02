@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import { displayError, displayFieldErrors } from '../displayError';
 import { useAuth } from '../auth';
 import ConflictModal from '../components/ConflictModal';
 import BlockVenueCard from '../components/BlockVenueCard';
@@ -99,7 +100,7 @@ function PendingBookingCard({ booking, onDecide }) {
       setReason('');
       setAlternative('');
     } catch (err) {
-      if (err.code !== 'BOOKING_CONFLICT') setLocalError(err.message);
+      if (err.code !== 'BOOKING_CONFLICT') setLocalError(displayError(err));
     } finally {
       setDeciding(false);
     }
@@ -225,7 +226,7 @@ function BookingRow({ booking, onApprove }) {
     try {
       await onApprove(booking.id);
     } catch (err) {
-      setLocalError(err.message);
+      setLocalError(displayError(err));
     } finally {
       setDeciding(false);
     }
@@ -327,7 +328,7 @@ export default function Venues() {
   }
 
   useEffect(() => {
-    reload().catch((err) => setError(err.message));
+    reload().catch((err) => setError(displayError(err)));
   }, []);
 
   function selectVenue(venue) {
@@ -402,7 +403,7 @@ export default function Venues() {
       setSaveToast(`${updatePayload.name} updated`);
       window.setTimeout(() => setSaveToast(''), 2500);
     } catch (err) {
-      setUpdateError(err.details?.map((detail) => `${detail.field}: ${detail.message}`).join(' ') || err.message);
+      setUpdateError(displayFieldErrors(err));
     } finally {
       setSaving(false);
     }
@@ -437,7 +438,7 @@ export default function Venues() {
     } catch (err) {
       if (searchId !== latestSearchId.current) return;
       setSearchResults(null);
-      setSearchError(err.message);
+      setSearchError(displayError(err));
     } finally {
       if (searchId === latestSearchId.current) setSearching(false);
     }
@@ -466,7 +467,7 @@ export default function Venues() {
       await reload();
     } catch (err) {
       if (err.code === 'BOOKING_CONFLICT') {
-        setConflictModalMsg(err.message);
+        setConflictModalMsg(displayError(err));
       }
       throw err;
     }
@@ -667,7 +668,7 @@ export default function Venues() {
                   setForm({ ...form, name: '' });
                   await reload();
                 } catch (err) {
-                  setError(err.details?.map((detail) => `${detail.field}: ${detail.message}`).join(' ') || err.message);
+                  setError(displayFieldErrors(err));
                 }
               }}
               >

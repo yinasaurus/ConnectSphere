@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { displayError } from '../displayError';
 import StatusBadge from '../components/StatusBadge';
 
 /**
@@ -17,7 +18,7 @@ export default function AssignmentOverview() {
   useEffect(() => {
     api('/api/assignments/overview')
       .then((data) => setAssignments(data.assignments || []))
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(displayError(err)));
   }, []);
 
   return (

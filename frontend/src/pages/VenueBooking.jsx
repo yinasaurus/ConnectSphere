@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
+import { displayError } from '../displayError';
 
 // Keep date/time output consistent between the live window and saved requests.
 function formatTime(value) {
@@ -175,7 +176,7 @@ export default function VenueBooking() {
       setVenues(venueResult.venues || []);
       setBookings(bookingResult.bookings || []);
     }).catch((err) => {
-      if (active) setError(err.message);
+      if (active) setError(displayError(err));
     }).finally(() => {
       if (active) setLoading(false);
     });
@@ -257,7 +258,7 @@ export default function VenueBooking() {
           : { venueBookingSubmitted: true },
       });
     } catch (err) {
-      setError(err.message);
+      setError(displayError(err));
       setSubmitting(false);
     }
   }

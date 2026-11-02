@@ -115,8 +115,8 @@ describe('SCRUM-66 VenueAvailability page', () => {
    * Scenario: The server rejects the availability request.
    * Setup:    The availability call throws "from must be before to", as the backend does
    *           for a backwards range.
-   * Expected: The server's message is shown and no results table is rendered, so the user
-   *           never sees stale or empty data presented as a real result.
+   * Expected: The screen shows that sentence in plain words, and no results table is
+   *           rendered, so the user never sees stale or empty data presented as a real result.
    * Type:     error
    */
   it('US66-F03: shows the server error, e.g. a refused or invalid range', async () => {
@@ -125,7 +125,7 @@ describe('SCRUM-66 VenueAvailability page', () => {
     await screen.findByRole('option', { name: 'Helix Hall' });
     await fillForm();
     await userEvent.setup().click(screen.getByRole('button', { name: 'Check availability' }));
-    expect(await screen.findByText('from must be before to')).toBeInTheDocument();
+    expect(await screen.findByText('The start must be before the end.')).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 });

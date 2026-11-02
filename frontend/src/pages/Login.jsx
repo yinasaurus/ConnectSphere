@@ -5,6 +5,7 @@ import AlertBanner from '../components/AlertBanner';
 import Button from '../components/Button';
 import FieldError from '../components/FieldError';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD, homePathForRoles } from '../constants';
+import { displayError } from '../displayError';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -25,7 +26,7 @@ function messageForLoginError(err) {
     return 'Invalid email or password.';
   }
   if (err.status === 400) {
-    return err.message || 'Check your email and password and try again.';
+    return displayError(err) || 'Check your email and password and try again.';
   }
   return 'Something went wrong. Please try again.';
 }

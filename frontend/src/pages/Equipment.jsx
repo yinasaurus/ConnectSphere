@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
+import { displayError } from '../displayError';
 import { useAuth } from '../auth';
 import { ROLES } from '../constants';
 
@@ -64,7 +65,7 @@ export default function Equipment() {
           const result = await api(`/api/equipment/requests/${row.id}/availability`);
           return [row.id, { ok: true, ...result }];
         } catch (err) {
-          return [row.id, { ok: false, message: err.message }];
+          return [row.id, { ok: false, message: displayError(err) }];
         }
       })
     );
@@ -87,7 +88,7 @@ export default function Equipment() {
   }, [loadAvailability]);
 
   useEffect(() => {
-    reload().catch((err) => setError(err.message));
+    reload().catch((err) => setError(displayError(err)));
   }, [reload]);
 
   /**
@@ -102,7 +103,7 @@ export default function Equipment() {
       await api(`/api/equipment/requests/${requestId}/decision`, { method: 'POST', body: { approve: true } });
       await reload();
     } catch (err) {
-      setError(err.message);
+      setError(displayError(err));
     }
   }, [reload]);
 
@@ -123,7 +124,7 @@ export default function Equipment() {
       setSuccessMsg(`Request #${requestId} status updated to ${targetStatus}`);
       await reload();
     } catch (err) {
-      setError(err.message);
+      setError(displayError(err));
     }
   }, [statusUpdates, notesUpdates, reload]);
 
@@ -172,7 +173,7 @@ export default function Equipment() {
                 setForm({ ...form, name: '' });
                 await reload();
               } catch (err) {
-                setError(err.message);
+                setError(displayError(err));
               }
             }}
             >
@@ -303,7 +304,7 @@ export default function Equipment() {
                     type="button"
                     onClick={() => api(`/api/equipment/requests/${request.id}/availability`)
                       .then((result) => setChecks((current) => ({ ...current, [request.id]: { ok: true, ...result } })))
-                      .catch((err) => setChecks((current) => ({ ...current, [request.id]: { ok: false, message: err.message } })))}
+                      .catch((err) => setChecks((current) => ({ ...current, [request.id]: { ok: false, message: displayError(err) } })))}
                   >
                     Check availability
                   </button>

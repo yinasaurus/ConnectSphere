@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { displayError } from '../displayError';
 
 // <input type="datetime-local"> gives local time without a zone; send it as ISO (UTC).
 function toIso(localValue) {
@@ -31,7 +32,7 @@ export default function PlaceHoldCard({ venues, onPlaced }) {
       .then((res) => setEvents((res?.events || []).filter((event) => (
         HOLDABLE_STATUSES.includes(event.status) && event.startAt
       ))))
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(displayError(err)));
   }, []);
 
   const selectedEvent = events.find((event) => String(event.id) === String(eventId));
@@ -54,7 +55,7 @@ export default function PlaceHoldCard({ venues, onPlaced }) {
       setExpiresAt('');
       await onPlaced?.();
     } catch (err) {
-      setError(err.message);
+      setError(displayError(err));
     } finally {
       setSaving(false);
     }

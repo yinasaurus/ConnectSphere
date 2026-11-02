@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { displayError } from '../displayError';
 import { useAuth } from '../auth';
 
 export default function Drafts() {
@@ -12,7 +13,7 @@ export default function Drafts() {
   useEffect(() => {
     api('/api/events?status=DRAFT')
       .then((data) => setDrafts((data.events || []).filter((event) => event.organiserId === user.id)))
-      .catch((err) => setError(err.message))
+      .catch((err) => setError(displayError(err)))
       .finally(() => setLoading(false));
   }, [user.id]);
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { api } from '../api';
+import { displayError } from '../displayError';
 import { useAuth } from '../auth';
 import ConflictModal from '../components/ConflictModal';
 import EventDecisionPanel from '../components/EventDecisionPanel';
@@ -141,7 +142,7 @@ export default function EventDetail() {
       // SCRUM-39 AC1: a failure here is shown in the equipment card only, so it can't stop
       // the user from viewing the rest of the event.
       canViewPlanning
-        ? api(`/api/events/${id}/equipment-requests`).catch((err) => ({ requests: [], loadError: err.message }))
+        ? api(`/api/events/${id}/equipment-requests`).catch((err) => ({ requests: [], loadError: displayError(err) }))
         : Promise.resolve({ requests: [] }),
       // SCRUM-51: an Attendee's registration details and own status; a failure only hides that card's details.
       isAttendee
@@ -179,7 +180,7 @@ export default function EventDetail() {
     } else {
       const changeRes = await api(`/api/events/${id}/change-requests`).catch((err) => ({
         changeRequests: [],
-        loadError: err.message,
+        loadError: displayError(err),
       }));
       setChangeRequests(changeRes.changeRequests || []);
       setChangeRequestError(changeRes.loadError || '');
@@ -195,7 +196,7 @@ export default function EventDetail() {
   }, [id, canViewPlanning, isLead, isAttendee, user]);
 
   useEffect(() => {
-    const refresh = () => reload().catch((err) => setError(err.message));
+    const refresh = () => reload().catch((err) => setError(displayError(err)));
     refresh();
     const timer = setInterval(refresh, LIVE_REFRESH_MS);
     return () => clearInterval(timer);
@@ -215,9 +216,9 @@ export default function EventDetail() {
       await reload();
     } catch (err) {
       if (err.code === 'BOOKING_CONFLICT') {
-        setConflictModalMsg(err.message);
+        setConflictModalMsg(displayError(err));
       } else {
-        showError(err.message);
+        showError(displayError(err));
       }
     }
   }

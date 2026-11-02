@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { displayError } from '../displayError';
 
 /**
  * Purpose: format start/end so the Lead can compare request times at a glance.
@@ -39,7 +40,7 @@ export default function UnassignedQueue() {
   useEffect(() => {
     api('/api/events/unassigned-queue')
       .then((data) => setEvents(data.events || []))
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(displayError(err)));
   }, []);
 
   return (
