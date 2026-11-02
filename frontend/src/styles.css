@@ -123,6 +123,7 @@ input.field-error, select.field-error, textarea.field-error {
   color: white;
   cursor: pointer;
   font-weight: 600;
+  text-decoration: none;
 }
 .btn.secondary { background: var(--sand); color: var(--ink); }
 .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
