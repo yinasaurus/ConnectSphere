@@ -2070,13 +2070,9 @@ async function decideChangeRequest(user, eventId, requestId, { approve, reason }
         'Reverted to Planning: approved critical change on Confirmed event'
       );
     }
-    // Flag before APPROVED so a DB error here leaves the request PENDING (retryable).
-    // For Confirmed events: only flag when a revert-trigger field changed (AC2 — venue/
-    // equipment-only changes on a Confirmed event do not flag arrangements).
-    // For all other statuses (Planning, etc.): always flag when any critical field changed.
-    if (revertTriggered || event.status !== EVENT_STATUS.CONFIRMED) {
-      await flagArrangementsForReview(user, event, approvedNextRow);
-    }
+    
+    // Always flag arrangements for review (SCRUM-41/42); only status reversion is gated above
+    await flagArrangementsForReview(user, event, approvedNextRow);
   }
 
   const crPatch = {
