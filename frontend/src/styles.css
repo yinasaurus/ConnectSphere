@@ -332,22 +332,6 @@ input.field-error, select.field-error, textarea.field-error {
 .card.attention-card { border-left: 4px solid #f59e0b; background: #fffdf5; }
 .card.review-panel { border-left: 4px solid var(--teal); background: #fbfdfc; }
 .card.review-panel.stack { gap: 20px; }
-.review-decision {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 20px;
-  width: 100%;
-}
-.review-approval {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-}
-.review-approval label { margin: 0; }
-.review-approval textarea { width: 100%; }
 
 .table {
   width: 100%;

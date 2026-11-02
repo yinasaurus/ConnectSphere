@@ -7,7 +7,7 @@ import { MIN_REJECTION_REASON_LENGTH } from '../constants';
 const REASON_ERROR = `Rejection reason must be at least ${MIN_REJECTION_REASON_LENGTH} characters`;
 
 export default function EventDecisionPanel({ onDecide }) {
-  const [rejecting, setRejecting] = useState(false);
+  const [mode, setMode] = useState(null);
   const [comment, setComment] = useState('');
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState('');
@@ -21,6 +21,7 @@ export default function EventDecisionPanel({ onDecide }) {
       await onDecide(decision, text);
     } finally {
       setSubmitting(false);
+      setMode(null);
     }
   }
 
@@ -33,35 +34,47 @@ export default function EventDecisionPanel({ onDecide }) {
     decide('REJECT', reason.trim());
   }
 
-  function cancelRejection() {
-    setRejecting(false);
+  function closeDialog() {
+    setMode(null);
+    setComment('');
     setReason('');
     setReasonError('');
   }
 
   return (
-    <div className="review-decision">
-      <div className="review-approval">
-        <label htmlFor="approval-comment">Comment for the organiser (sent with Approve)</label>
-        <textarea
-          id="approval-comment"
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-        />
-        <Button disabled={submitting} onClick={() => decide('APPROVE', comment.trim())}>
-          {submitting ? 'Approving…' : 'Approve'}
-        </Button>
-      </div>
-      <Button variant="danger" disabled={submitting} onClick={() => setRejecting(true)}>
+    <div className="actions">
+      <Button disabled={submitting} onClick={() => setMode('approve')}>
+        Approve
+      </Button>
+      <Button variant="danger" disabled={submitting} onClick={() => setMode('reject')}>
         Reject
       </Button>
       <ConfirmModal
-        open={rejecting}
+        open={mode === 'approve'}
+        title="Approve this event?"
+        confirmLabel={submitting ? 'Approving…' : 'Confirm approval'}
+        confirmVariant="primary"
+        busy={submitting}
+        onConfirm={() => decide('APPROVE', comment.trim())}
+        onCancel={closeDialog}
+      >
+        <div className="confirm-modal-body">
+          <label htmlFor="approval-comment">Comment for the organiser (optional)</label>
+          <textarea
+            id="approval-comment"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Add a note for the organiser"
+          />
+        </div>
+      </ConfirmModal>
+      <ConfirmModal
+        open={mode === 'reject'}
         title="Reject this event?"
         confirmLabel={submitting ? 'Rejecting…' : 'Confirm rejection'}
         busy={submitting}
         onConfirm={confirmRejection}
-        onCancel={cancelRejection}
+        onCancel={closeDialog}
       >
         <div className="confirm-modal-body">
           <label htmlFor="rejection-reason">Rejection reason</label>
