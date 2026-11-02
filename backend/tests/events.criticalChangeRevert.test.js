@@ -272,6 +272,68 @@ describe('SCRUM-85 confirmed-event reversion', () => {
   });
 
   /*
+   * Purpose: verify venue/equipment-only changes preserve Confirmed status and flag active arrangements.
+   * AC: SCRUM-85 AC2; SCRUM-42 AC5 — non-revert fields still trigger arrangement review.
+   * Inputs: confirmed event, venue/equipment-only request, approved booking, and pending equipment request.
+   * Output: event fields update, active arrangements need review, and approval audit is written.
+   * Failure: test fails if status/history changes, arrangements are not flagged, or statuses are mutated.
+   */
+  it('AC2: approving venue or equipment changes leaves status Confirmed but flags arrangements for review', async () => {
+    configureDecision(confirmedEvent(), nonCriticalRequest());
+    db.fetchMany
+      .mockResolvedValueOnce([{
+        id: 7,
+        event_id: 3,
+        venue_id: 8,
+        status: 'APPROVED',
+        start_at: '2026-11-10T09:00:00.000Z',
+        end_at: '2026-11-10T17:00:00.000Z',
+      }])
+      .mockResolvedValueOnce([{ id: 12, event_id: 3, status: 'PENDING' }]);
+
+    const result = await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
+
+    expect(result.status).toBe('APPROVED');
+    expect(eventPatches()).toEqual([expect.objectContaining({
+      venue_requirements: 'Banquet hall',
+      equipment_notes: '4 mics',
+    })]);
+    expect(eventPatches().some((patch) => patch.status === 'PLANNING')).toBe(false);
+    expect(db.insertOne).not.toHaveBeenCalledWith('event_status_history', expect.anything());
+    expect(db.updateById).toHaveBeenCalledWith(
+      'venue_bookings',
+      7,
+      expect.objectContaining({ needs_review: true })
+    );
+    expect(db.updateById).toHaveBeenCalledWith(
+      'equipment_requests',
+      12,
+      expect.objectContaining({ needs_review: true })
+    );
+    const arrangementPatches = db.updateById.mock.calls
+      .filter(([table]) => ['venue_bookings', 'equipment_requests'].includes(table))
+      .map(([, , patch]) => patch);
+    arrangementPatches.forEach((patch) => expect(patch.status).toBeUndefined());
+    expect(db.updateById).toHaveBeenCalledWith(
+      'event_change_requests',
+      50,
+      expect.objectContaining({ status: 'APPROVED' })
+    );
+    expect(audit.writeAudit).toHaveBeenCalledWith(
+      2,
+      'CHANGE_REQUEST_APPROVED',
+      'event_change_request',
+      50,
+      expect.objectContaining({
+        fields: expect.arrayContaining([
+          expect.objectContaining({ field: 'venueRequirements', next: 'Banquet hall' }),
+          expect.objectContaining({ field: 'equipmentNotes', next: '4 mics' }),
+        ]),
+      })
+    );
+  });
+
+  /*
    * Purpose: verify a mixed request reverts when any one revert-trigger field changes.
    * AC: SCRUM-85 AC1/AC2 — attendance triggers even alongside venue requirements.
    * Inputs: confirmed event and request changing attendance and venue requirements.
