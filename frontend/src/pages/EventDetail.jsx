@@ -628,12 +628,12 @@ export default function EventDetail() {
                       method: 'POST',
                       body: { decision, reason: text },
                     }))}
+                    extra={(
+                      <button className="btn secondary" type="button" onClick={() => setShowClarificationInput(!showClarificationInput)}>
+                        {event.subState === 'ACTION_REQUIRED' ? 'Update Clarification' : 'Request Clarification / Amendments'}
+                      </button>
+                    )}
                   />
-                  <div className="actions">
-                    <button className="btn secondary" onClick={() => setShowClarificationInput(!showClarificationInput)}>
-                      {event.subState === 'ACTION_REQUIRED' ? 'Update Clarification' : 'Request Clarification / Amendments'}
-                    </button>
-                  </div>
 
                   {showClarificationInput && (
                     <div className="stack" style={{ marginTop: 8, padding: 12, background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 12 }}>

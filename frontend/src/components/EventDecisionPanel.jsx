@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import ConfirmModal from './ConfirmModal';
 import Button from './Button';
 import FieldError from './FieldError';
 import { MIN_REJECTION_REASON_LENGTH } from '../constants';
 
 const REASON_ERROR = `Rejection reason must be at least ${MIN_REJECTION_REASON_LENGTH} characters`;
 
-export default function EventDecisionPanel({ onDecide }) {
+export default function EventDecisionPanel({ onDecide, extra = null }) {
   const [mode, setMode] = useState(null);
   const [comment, setComment] = useState('');
   const [reason, setReason] = useState('');
@@ -34,7 +33,7 @@ export default function EventDecisionPanel({ onDecide }) {
     decide('REJECT', reason.trim());
   }
 
-  function closeDialog() {
+  function closeForm() {
     setMode(null);
     setComment('');
     setReason('');
@@ -42,23 +41,16 @@ export default function EventDecisionPanel({ onDecide }) {
   }
 
   return (
-    <div className="actions">
+    <div className="review-actions">
       <Button disabled={submitting} onClick={() => setMode('approve')}>
         Approve
       </Button>
       <Button variant="danger" disabled={submitting} onClick={() => setMode('reject')}>
         Reject
       </Button>
-      <ConfirmModal
-        open={mode === 'approve'}
-        title="Approve this event?"
-        confirmLabel={submitting ? 'Approving…' : 'Confirm approval'}
-        confirmVariant="primary"
-        busy={submitting}
-        onConfirm={() => decide('APPROVE', comment.trim())}
-        onCancel={closeDialog}
-      >
-        <div className="confirm-modal-body">
+      {extra}
+      {mode === 'approve' && (
+        <div className="review-inline">
           <label htmlFor="approval-comment">Comment for the organiser (optional)</label>
           <textarea
             id="approval-comment"
@@ -66,17 +58,18 @@ export default function EventDecisionPanel({ onDecide }) {
             onChange={(e) => setComment(e.target.value)}
             placeholder="Add a note for the organiser"
           />
+          <div className="actions">
+            <Button disabled={submitting} onClick={() => decide('APPROVE', comment.trim())}>
+              {submitting ? 'Approving…' : 'Confirm approval'}
+            </Button>
+            <Button variant="ghost" disabled={submitting} onClick={closeForm}>
+              Cancel
+            </Button>
+          </div>
         </div>
-      </ConfirmModal>
-      <ConfirmModal
-        open={mode === 'reject'}
-        title="Reject this event?"
-        confirmLabel={submitting ? 'Rejecting…' : 'Confirm rejection'}
-        busy={submitting}
-        onConfirm={confirmRejection}
-        onCancel={closeDialog}
-      >
-        <div className="confirm-modal-body">
+      )}
+      {mode === 'reject' && (
+        <div className="review-inline">
           <label htmlFor="rejection-reason">Rejection reason</label>
           <textarea
             id="rejection-reason"
@@ -93,8 +86,16 @@ export default function EventDecisionPanel({ onDecide }) {
             {reasonLength} / {MIN_REJECTION_REASON_LENGTH} characters minimum
           </p>
           <FieldError>{reasonError}</FieldError>
+          <div className="actions">
+            <Button variant="danger" disabled={submitting} onClick={confirmRejection}>
+              {submitting ? 'Rejecting…' : 'Confirm rejection'}
+            </Button>
+            <Button variant="ghost" disabled={submitting} onClick={closeForm}>
+              Cancel
+            </Button>
+          </div>
         </div>
-      </ConfirmModal>
+      )}
     </div>
   );
 }
