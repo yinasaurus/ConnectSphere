@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import ConfirmModal from './ConfirmModal';
+import Button from './Button';
+import FieldError from './FieldError';
 import { MIN_REJECTION_REASON_LENGTH } from '../constants';
 
 const REASON_ERROR = `Rejection reason must be at least ${MIN_REJECTION_REASON_LENGTH} characters`;
@@ -36,9 +39,30 @@ export default function EventDecisionPanel({ onDecide }) {
     setReasonError('');
   }
 
-  if (rejecting) {
-    return (
-      <div className="stack">
+  return (
+    <div className="stack">
+      <label htmlFor="approval-comment">Comment for the organiser (optional)</label>
+      <textarea
+        id="approval-comment"
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+      />
+      <div className="actions">
+        <Button disabled={submitting} onClick={() => decide('APPROVE', comment.trim())}>
+          {submitting ? 'Approving…' : 'Approve'}
+        </Button>
+        <Button variant="danger" disabled={submitting} onClick={() => setRejecting(true)}>
+          Reject
+        </Button>
+      </div>
+      <ConfirmModal
+        open={rejecting}
+        title="Reject this event?"
+        confirmLabel={submitting ? 'Rejecting…' : 'Confirm rejection'}
+        busy={submitting}
+        onConfirm={confirmRejection}
+        onCancel={cancelRejection}
+      >
         <label htmlFor="rejection-reason">Rejection reason</label>
         <textarea
           id="rejection-reason"
@@ -54,35 +78,8 @@ export default function EventDecisionPanel({ onDecide }) {
         <p className="muted">
           {reasonLength} / {MIN_REJECTION_REASON_LENGTH} characters minimum
         </p>
-        {reasonError && <p className="field-error" role="alert">{reasonError}</p>}
-        <div className="actions">
-          <button className="btn danger" disabled={submitting} onClick={confirmRejection}>
-            {submitting ? 'Rejecting…' : 'Confirm rejection'}
-          </button>
-          <button className="btn ghost" disabled={submitting} onClick={cancelRejection}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="stack">
-      <label htmlFor="approval-comment">Comment for the organiser (optional)</label>
-      <textarea
-        id="approval-comment"
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-      />
-      <div className="actions">
-        <button className="btn" disabled={submitting} onClick={() => decide('APPROVE', comment.trim())}>
-          {submitting ? 'Approving…' : 'Approve'}
-        </button>
-        <button className="btn danger" disabled={submitting} onClick={() => setRejecting(true)}>
-          Reject
-        </button>
-      </div>
+        <FieldError>{reasonError}</FieldError>
+      </ConfirmModal>
     </div>
   );
 }

@@ -10,33 +10,6 @@ import EventRegistrationsCard from '../components/EventRegistrationsCard';
 import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
 
-/** SCRUM-18: colour-coded booking status badge. */
-function BookingStatusBadge({ status }) {
-  const colours = {
-    PENDING: '#b45309',
-    APPROVED: '#15803d',
-    REJECTED: '#b91c1c',
-    TENTATIVE: '#1d4ed8',
-    CANCELLED: '#6b7280',
-    EXPIRED: '#6b7280',
-  };
-  return (
-    <span style={{
-      display: 'inline-block',
-      padding: '2px 10px',
-      borderRadius: 12,
-      fontSize: '0.78rem',
-      fontWeight: 600,
-      background: colours[status] || '#374151',
-      color: '#fff',
-      marginLeft: 6,
-    }}>
-      {/* SCRUM-75 AC1: a hold is stored as TENTATIVE and shown as Held. */}
-      {status === 'TENTATIVE' ? 'HELD' : status}
-    </span>
-  );
-}
-
 // Format each saved booking window and submitted date for the event's request list.
 function formatBookingTime(value) {
   return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -739,7 +712,7 @@ export default function EventDetail() {
                   <p style={{ fontWeight: 600, marginBottom: 4 }}>
                     {event.name && <span style={{ marginRight: 6 }}>{event.name} —</span>}
                     {booking.venue_name || `Venue #${booking.venue_id}`}
-                    <BookingStatusBadge status={booking.status} />
+                    <StatusBadge kind="booking" status={booking.status} />
                   </p>
                   {booking.needs_review && booking.status === 'APPROVED' && (
                     <p className="muted">Approving again clears Requires review. The booking stays approved.</p>
@@ -875,7 +848,7 @@ export default function EventDetail() {
                       {booking.venue_name || `Venue #${booking.venue_id}`}: {booking.status === 'TENTATIVE' ? 'HELD' : booking.status}
                     </span>
                     <strong>{booking.venue_name || `Venue #${booking.venue_id}`}</strong>
-                    <BookingStatusBadge status={booking.status} />
+                    <StatusBadge kind="booking" status={booking.status} />
                     {booking.needs_review && <span className="needs-review-flag">Requires review</span>}
                   </p>
                   {/* SCRUM-75 AC1: a hold already shows HELD in its badge, so the stored
