@@ -40,6 +40,7 @@ describe('venue catalogue unit behavior', () => {
    *           the database. 0 counts as incomplete (team decision: at least 1).
    * Type:     error
    */
+  // SCRUM-7-TC01
   it('requires a capacity of at least 1 when creating a venue', () => {
     const issue = (body) => createVenueSchema.safeParse(body).error.issues[0].message;
     expect(issue({ name: 'Studio' })).toBe('Capacity is required');
@@ -55,6 +56,7 @@ describe('venue catalogue unit behavior', () => {
    * Expected: The repeat is removed, so the venue doesn't end up with duplicate layouts.
    * Type:     boundary
    */
+  // SCRUM-7-TC02
   it('removes repeated layouts from a new venue', () => {
     expect(createVenueSchema.parse({ name: 'Studio', capacity: 5, layouts: ['THEATRE', 'THEATRE', 'BANQUET'] }).layouts)
       .toEqual(['THEATRE', 'BANQUET']);
@@ -68,6 +70,7 @@ describe('venue catalogue unit behavior', () => {
    *           capacity keeps the saved value instead of being forced to resend it.
    * Type:     boundary
    */
+  // SCRUM-7-TC03
   it('accepts capacity 1 and lets an update leave capacity out', () => {
     expect(createVenueSchema.parse({ name: 'Studio', capacity: 1 })).toEqual({ name: 'Studio', capacity: 1 });
     expect(updateVenueSchema.parse({ facilities: 'Projector' })).toEqual({ facilities: 'Projector' });
@@ -80,6 +83,7 @@ describe('venue catalogue unit behavior', () => {
    * Expected: Rejected, so an edit can't make a complete venue incomplete.
    * Type:     error
    */
+  // SCRUM-7-TC04
   it('rejects capacity below 1 on update', () => {
     expect(() => updateVenueSchema.parse({ capacity: 0 })).toThrow('Capacity must be at least 1');
     expect(() => updateVenueSchema.parse({ capacity: -1 })).toThrow('Capacity must be at least 1');
@@ -93,6 +97,7 @@ describe('venue catalogue unit behavior', () => {
    *           delete, which needs no name.
    * Type:     error
    */
+  // SCRUM-7-TC05
   it('requires a layout name unless the layout is being deleted', () => {
     expect(() => updateVenueSchema.parse({ layouts: [{ id: 3 }] }))
       .toThrow('A layout name is required unless the layout is being deleted');
@@ -100,6 +105,7 @@ describe('venue catalogue unit behavior', () => {
       .toEqual({ layouts: [{ id: 3, deleted: true }] });
   });
 
+  // SCRUM-7-TC06
   it('normalizes cleared optional text and rejects cleared mandatory text', () => {
     expect(updateVenueSchema.parse({
       name: 'Studio',
@@ -113,6 +119,7 @@ describe('venue catalogue unit behavior', () => {
     expect(() => updateVenueSchema.parse({ name: '' })).toThrow(/too small|Venue name is required/i);
   });
 
+  // SCRUM-7-TC07
   it('rejects a duplicate venue name and location while allowing different locations', async () => {
     const query = { select: jest.fn().mockReturnThis() };
     db.supabase.from.mockReturnValue(query);
@@ -128,6 +135,7 @@ describe('venue catalogue unit behavior', () => {
     expect(db.insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-7-TC08
   it('returns 404 without updating a missing venue', async () => {
     const query = { select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis() };
     db.supabase.from.mockReturnValue(query);
@@ -138,6 +146,7 @@ describe('venue catalogue unit behavior', () => {
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
+  // SCRUM-7-TC09
   it('updates, deletes, and adds only the requested layout rows', async () => {
     const query = {
       select: jest.fn().mockReturnThis(),
@@ -215,6 +224,7 @@ describe('SCUM-7 venue create and update (service)', () => {
    *           returned as the catalogue now shows it.
    * Type:     normal
    */
+  // SCRUM-7-TC10
   it('saves a new venue with all its details, layouts and an audit record', async () => {
     db.fetchMany
       .mockResolvedValueOnce([])
@@ -259,6 +269,7 @@ describe('SCUM-7 venue create and update (service)', () => {
    *           layout rows are written, so "not recorded" is distinguishable from a value.
    * Type:     boundary
    */
+  // SCRUM-7-TC11
   it('saves a venue with only a name and capacity', async () => {
     db.fetchMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 6, name: 'Studio', capacity: 1 }]).mockResolvedValueOnce([]);
     db.insertOne.mockResolvedValue({ id: 6 });
@@ -278,6 +289,7 @@ describe('SCUM-7 venue create and update (service)', () => {
    * Expected: 400 "Venue name is required" and nothing is inserted.
    * Type:     error
    */
+  // SCRUM-7-TC12
   it('refuses to save a new venue without a name', async () => {
     await expect(createVenue(STAFF, { capacity: 10 }))
       .rejects.toMatchObject({ status: 400, message: 'Venue name is required' });
@@ -291,6 +303,7 @@ describe('SCUM-7 venue create and update (service)', () => {
    * Expected: 400, and nothing is inserted, so the database never holds an incomplete venue.
    * Type:     error
    */
+  // SCRUM-7-TC13
   it('refuses to save a new venue without a capacity', async () => {
     await expect(createVenue(STAFF, { name: 'Studio' }))
       .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
@@ -306,6 +319,7 @@ describe('SCUM-7 venue create and update (service)', () => {
    *           keep their saved values, and the updated venue is returned.
    * Type:     normal
    */
+  // SCRUM-7-TC14
   it('updates only the fields that were sent', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 7, name: 'Studio', location: 'A', capacity: 20 });
     db.fetchMany
@@ -335,6 +349,7 @@ describe('SCUM-7 venue create and update (service)', () => {
    * Expected: 400 and no update, so the saved capacity stays 20.
    * Type:     error
    */
+  // SCRUM-7-TC15
   it('refuses an update that sets capacity to 0', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 7, name: 'Studio', location: 'A', capacity: 20 });
     await expect(updateVenue(STAFF, 7, { capacity: 0 }))
@@ -350,6 +365,7 @@ describe('SCUM-7 venue create and update (service)', () => {
    *           changed by other roles even if the route check were bypassed.
    * Type:     error
    */
+  // SCRUM-7-TC16
   it.each([
     ['add', () => createVenue({ id: 2, roles: ['EVENT_COORDINATOR'] }, { name: 'Studio', capacity: 10 })],
     ['edit', () => updateVenue({ id: 2, roles: ['EVENT_COORDINATOR'] }, 7, { capacity: 10 })],
@@ -369,6 +385,7 @@ describe('SCUM-7 venue create and update (service)', () => {
    * Expected: 404 "Venue layout not found", and no layout is changed or added.
    * Type:     error
    */
+  // SCRUM-7-TC17
   it('returns 404 for a layout that does not belong to the venue', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 7, name: 'Studio', location: 'A', capacity: 20 });
     db.fetchMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);

@@ -120,12 +120,13 @@ beforeEach(() => {
 
 describe('SCRUM-44 Event Notifications — Happy Path', () => {
   /*
-   * AC: SCRUM-44 AC1b
+   * AC: SCRUM-44 AC1
    * Scenario: Happy Path — Organiser updates expectedAttendance
    * Setup: Event 5 with organiser 1 and coordinator 2; organiser changes attendance 150 -> 200
    * Expected: notifyUser called for coordinator (not organiser due to self-exclusion)
    * Type: normal
    */
+  // SCRUM-44-TC01
   it('US44-N01: updating expectedAttendance emits notification to coordinator', async () => {
     await service.updateEvent(organiser, 5, { expectedAttendance: 200 });
 
@@ -140,12 +141,13 @@ describe('SCRUM-44 Event Notifications — Happy Path', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC1b
+   * AC: SCRUM-44 AC1
    * Scenario: Happy Path — Coordinator updates startAt and endAt
    * Setup: Event 5 with organiser 1 and coordinator 2; coordinator changes both times
    * Expected: notifyUser called for organiser (not coordinator due to self-exclusion)
    * Type: normal
    */
+  // SCRUM-44-TC02
   it('US44-N02: updating startAt and endAt emits notification to organiser', async () => {
     await service.updateEvent(coordinator, 5, {
       startAt: '2026-11-16T10:00:00Z',
@@ -163,12 +165,13 @@ describe('SCRUM-44 Event Notifications — Happy Path', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC1b
+   * AC: SCRUM-44 AC1
    * Scenario: Happy Path — Update all three critical fields at once
    * Setup: Event 5; organiser updates start_at, end_at, and expected_attendance together
    * Expected: Single notification mentions all three changed fields; coordinator notified
    * Type: normal
    */
+  // SCRUM-44-TC03
   it('US44-N03: updating all critical fields emits one notification listing all changes', async () => {
     await service.updateEvent(organiser, 5, {
       startAt: '2026-12-01T09:00:00Z',
@@ -187,12 +190,13 @@ describe('SCRUM-44 Event Notifications — Happy Path', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC1a
+   * AC: SCRUM-44 AC1
    * Scenario: Happy Path — Coordinator changes event status to APPROVED
    * Setup: Event 5 under review; coordinator approves it
    * Expected: Organiser receives notification; coordinator self-excluded (actor)
    * Type: normal
    */
+  // SCRUM-44-TC04
   it('US44-N04: changing status emits notification to organiser (coordinator self-excluded)', async () => {
     event.status = 'UNDER_REVIEW';
     await service.changeStatus(coordinator, 5, 'APPROVED', 'All requirements met');
@@ -211,12 +215,13 @@ describe('SCRUM-44 Event Notifications — Happy Path', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC1a
+   * AC: SCRUM-44 AC1
    * Scenario: Happy Path — Coordinator rejects event from SUBMITTED status
    * Setup: Event 5 submitted with coordinator assigned yet
    * Expected: Organiser receives rejection notice (no coordinator to notify)
    * Type: normal
    */
+  // SCRUM-44-TC05
   it('US44-N05: rejecting event emits notification with rejection reason', async () => {
     event.status = 'SUBMITTED';
     event.coordinator_id = 2;
@@ -235,12 +240,13 @@ describe('SCRUM-44 Event Notifications — Happy Path', () => {
 
 describe('SCRUM-44 Event Notifications — Sad Path', () => {
   /*
-   * AC: SCRUM-44 AC1b (negative test)
+   * AC: SCRUM-44 AC1 (negative test)
    * Scenario: Sad Path — Updating non-critical field does NOT emit notification
    * Setup: Event 5; organiser updates description and specialRequests only
    * Expected: No notifyUser calls (only writeAudit for the update action)
    * Type: error
    */
+  // SCRUM-44-TC06
   it('US44-E01: updating non-critical fields does NOT emit notifications', async () => {
     await service.updateEvent(organiser, 5, {
       description: 'Updated quarterly innovation showcase with breakout sessions',
@@ -258,12 +264,13 @@ describe('SCRUM-44 Event Notifications — Sad Path', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC2 (authorization)
+   * AC: SCRUM-44 AC5 (authorization)
    * Scenario: Sad Path — Unassigned coordinator cannot edit event
    * Setup: Event 5 assigned to coordinator 2; coordinator 3 attempts edit
    * Expected: 403 FORBIDDEN, no notifications emitted, event unchanged
    * Type: error
    */
+  // SCRUM-44-TC07
   it('US44-E02: unassigned coordinator edit throws 403 and emits no notifications', async () => {
     await expect(
       service.updateEvent(otherCoordinator, 5, { expectedAttendance: 300 })
@@ -274,12 +281,13 @@ describe('SCRUM-44 Event Notifications — Sad Path', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC1b, AC2 (robustness)
+   * AC: SCRUM-44 AC1 (robustness)
    * Scenario: Sad Path — Event has no coordinator assigned (null)
    * Setup: Event with coordinator_id = null; organiser updates critical field
    * Expected: Notification safely skipped for null coordinator, no crash
    * Type: error
    */
+  // SCRUM-44-TC08
   it('US44-E03: updating critical field with no coordinator does not crash', async () => {
     event.coordinator_id = null;
 
@@ -291,12 +299,13 @@ describe('SCRUM-44 Event Notifications — Sad Path', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC1a (robustness)
+   * AC: SCRUM-44 AC1 (robustness)
    * Scenario: Sad Path — Event has organiser_id = null (edge case)
    * Setup: Event with no organiser assigned; coordinator changes status
    * Expected: No crash; coordinator notification works, organiser notification skipped
    * Type: error
    */
+  // SCRUM-44-TC09
   it('US44-E04: changing status with no organiser does not crash', async () => {
     event.organiser_id = null;
     event.status = 'UNDER_REVIEW';
@@ -311,12 +320,13 @@ describe('SCRUM-44 Event Notifications — Sad Path', () => {
 
 describe('SCRUM-44 Event Notifications — Boundary Cases', () => {
   /*
-   * AC: SCRUM-44 AC1b (boundary)
+   * AC: SCRUM-44 AC1 (boundary)
    * Scenario: Boundary — Updating critical field to same value does NOT emit
    * Setup: Event 5 with expected_attendance = 150; organiser sets it to 150 again
    * Expected: No notification because value did not actually change
    * Type: boundary
    */
+  // SCRUM-44-TC10
   it('US44-B01: updating critical field to same value does NOT emit notification', async () => {
     await service.updateEvent(organiser, 5, { expectedAttendance: 150 });
 
@@ -324,12 +334,13 @@ describe('SCRUM-44 Event Notifications — Boundary Cases', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC2 (self-exclusion)
+   * AC: SCRUM-44 AC5 (self-exclusion)
    * Scenario: Boundary — Organiser edits, organiser must NOT receive notification
    * Setup: Event 5; organiser updates start time
    * Expected: Only coordinator receives notification (organiser self-excluded)
    * Type: boundary
    */
+  // SCRUM-44-TC11
   it('US44-B02: organiser editing does NOT notify organiser (self-exclusion)', async () => {
     await service.updateEvent(organiser, 5, { startAt: '2026-11-20T10:00:00Z', endAt: '2026-11-20T18:00:00Z' });
 
@@ -352,12 +363,13 @@ describe('SCRUM-44 Event Notifications — Boundary Cases', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC2 (self-exclusion)
+   * AC: SCRUM-44 AC5 (self-exclusion)
    * Scenario: Boundary — Coordinator edits, coordinator must NOT receive notification
    * Setup: Event 5; coordinator updates expected attendance
    * Expected: Only organiser receives notification (coordinator self-excluded)
    * Type: boundary
    */
+  // SCRUM-44-TC12
   it('US44-B03: coordinator editing does NOT notify coordinator (self-exclusion)', async () => {
     await service.updateEvent(coordinator, 5, { expectedAttendance: 200 });
 
@@ -380,12 +392,13 @@ describe('SCRUM-44 Event Notifications — Boundary Cases', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC1b (boundary)
+   * AC: SCRUM-44 AC1 (boundary)
    * Scenario: Boundary — Mixed critical and non-critical fields updated
    * Setup: Event 5; organiser updates expected_attendance (critical) and description (non-critical)
    * Expected: Notification emitted mentioning only expected attendance
    * Type: boundary
    */
+  // SCRUM-44-TC13
   it('US44-B04: mixed critical/non-critical update mentions only critical fields', async () => {
     await service.updateEvent(organiser, 5, {
       expectedAttendance: 175,
@@ -404,12 +417,13 @@ describe('SCRUM-44 Event Notifications — Boundary Cases', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC1a (self-exclusion for status)
+   * AC: SCRUM-44 AC1 (self-exclusion for status)
    * Scenario: Boundary — Coordinator changes status, coordinator self-excluded
    * Setup: Event 5 under review; coordinator 2 moves to PLANNING
    * Expected: Organiser notified; coordinator NOT notified (self-excluded)
    * Type: boundary
    */
+  // SCRUM-44-TC14
   it('US44-B05: coordinator changing status does NOT notify themselves', async () => {
     event.status = 'APPROVED';
 
@@ -434,12 +448,13 @@ describe('SCRUM-44 Event Notifications — Boundary Cases', () => {
 
 describe('SCRUM-44 Event Notifications — Cross-Cutting (Security & Isolation)', () => {
   /*
-   * AC: SCRUM-44 AC4 (cross-event isolation)
+   * AC: SCRUM-44 AC5 (cross-event isolation)
    * Scenario: Cross-Cutting — Notifications use event-specific user IDs
    * Setup: Two events with different organisers and coordinators
    * Expected: Event 5 update notifies only event 5's coordinator
    * Type: security
    */
+  // SCRUM-44-TC15
   it('US44-C01: notifications target only event-specific organiser and coordinator', async () => {
     // Add a second event to verify isolation
     const event2 = {
@@ -466,12 +481,13 @@ describe('SCRUM-44 Event Notifications — Cross-Cutting (Security & Isolation)'
   });
 
   /*
-   * AC: SCRUM-44 AC2, AC4 (authorization + isolation)
+   * AC: SCRUM-44 AC5 (authorization + isolation)
    * Scenario: Cross-Cutting — Organiser changes status emits to coordinator
    * Setup: Create test where coordinator (who is also the assigned one) changes status
    * Expected: Organiser notified, coordinator (actor) self-excluded
    * Type: security
    */
+  // SCRUM-44-TC16
   it('US44-C02: coordinator changing status notifies organiser only (self-excluded)', async () => {
     event.status = 'UNDER_REVIEW';
 
@@ -491,12 +507,13 @@ describe('SCRUM-44 Event Notifications — Cross-Cutting (Security & Isolation)'
   });
 
   /*
-   * AC: SCRUM-44 AC1b (multiple recipients)
+   * AC: SCRUM-44 AC5 (multiple recipients)
    * Scenario: Cross-Cutting — Critical update notifies all relevant parties
    * Setup: Event with different organiser and coordinator; third party has no role
    * Expected: Only organiser and coordinator notified (via self-exclusion logic)
    * Type: security
    */
+  // SCRUM-44-TC17
   it('US44-C03: critical detail update notifies correct party based on actor', async () => {
     // Organiser updates
     await service.updateEvent(organiser, 5, { startAt: '2026-11-25T14:00:00Z', endAt: '2026-11-25T20:00:00Z' });
