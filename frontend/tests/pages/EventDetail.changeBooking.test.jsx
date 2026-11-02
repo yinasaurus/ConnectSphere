@@ -5,7 +5,7 @@
  * Output: passing assertions for form visibility, PATCH request payload, and keyboard operation.
  * Failure: Jest reports missing/incorrect UI controls or API requests.
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import EventDetail from '../../src/pages/EventDetail';
@@ -22,7 +22,7 @@ jest.mock('../../src/auth', () => ({ useAuth: jest.fn() }));
  * Output: a rendered EventDetail page with mocked supporting endpoints.
  * Failure: unexpected API paths throw and fail the test.
  */
-function renderBookingPage(status, assigned = true, eventStatus = 'PLANNING') {
+function renderBookingPage(status, assigned = true, eventStatus = 'PLANNING', history = []) {
   api.mockImplementation(async (path) => {
     if (path === '/api/events/3') {
       return {
@@ -34,7 +34,7 @@ function renderBookingPage(status, assigned = true, eventStatus = 'PLANNING') {
         },
       };
     }
-    if (path === '/api/events/3/history') return { history: [] };
+    if (path === '/api/events/3/history') return { history };
     if (path === '/api/comments/3') return { comments: [] };
     if (path === '/api/venues') return { venues: [] };
     if (path === '/api/events/3/venue-bookings') {
@@ -159,6 +159,44 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
 
     expect(screen.queryByRole('form', { name: /reschedule booking/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /save new time/i })).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-62 AC5
+   * Scenario: Reschedule audit history is displayed separately from event status history.
+   * Setup: History contains a status transition and a booking reschedule without from_status.
+   * Expected: The status card shows PLANNING → CONFIRMED only, and the booking shows its previous time.
+   * Type: boundary
+   */
+  it('shows previous booking times without including reschedule audits in Status history', async () => {
+    const history = [
+      {
+        id: 1,
+        from_status: 'PLANNING',
+        to_status: 'CONFIRMED',
+        actor_name: 'Jane Doe',
+      },
+      {
+        id: 2,
+        action: 'BOOKING_RESCHEDULED',
+        entity_id: 10,
+        actor_name: 'Coordinator Jane',
+        metadata: {
+          previousStartAt: '2026-10-20T00:00:00.000Z',
+          previousEndAt: '2026-10-20T03:00:00.000Z',
+        },
+      },
+    ];
+    renderBookingPage('PENDING', true, 'CONFIRMED', history);
+
+    const statusHistoryHeading = await screen.findByRole('heading', { name: 'Status history' });
+    const statusHistory = statusHistoryHeading.closest('.card');
+    expect(statusHistory).not.toBeNull();
+    expect(within(statusHistory).getByText('PLANNING → CONFIRMED')).toBeInTheDocument();
+    expect(statusHistory).not.toHaveTextContent('BOOKING_RESCHEDULED');
+    expect(statusHistory).not.toHaveTextContent('Coordinator Jane');
+    expect(await screen.findByText(/Previous time: 20 Oct 08:00 to 20 Oct 11:00/))
+      .toBeInTheDocument();
   });
 
   /*

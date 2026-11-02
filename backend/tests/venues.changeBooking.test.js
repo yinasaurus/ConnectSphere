@@ -35,7 +35,7 @@ jest.mock('../src/middleware/auth', () => {
   };
 });
 
-const { supabase, fetchOne, fetchMany, updateById } = require('../src/config/db');
+const { supabase, fetchOne, fetchMany, insertOne, updateById } = require('../src/config/db');
 const { writeAudit } = require('../src/services/audit.service');
 const venuesService = require('../src/services/venues.service');
 const { createApp } = require('../src/app');
@@ -434,6 +434,64 @@ describe('SCRUM-62 change one venue booking', () => {
       CONFIRMED_EVENT_ROW.id,
       expect.objectContaining({ status: 'PLANNING' })
     );
+  });
+
+  /*
+   * AC: SCRUM-62 AC8 and error handling
+   * Scenario: The event update returns no row after a booking is rescheduled.
+   * Setup: The booking update and reschedule audit succeed; the CONFIRMED event update returns null.
+   * Expected: The service logs and throws EVENT_STATUS_UPDATE_FAILED without inserting status history.
+   * Type: error
+   */
+  it('reports partial success when the Confirmed event status update returns no row', async () => {
+    setupChange(PENDING_BOOKING, CONFIRMED_EVENT_ROW);
+    const updatedBooking = {
+      ...PENDING_BOOKING,
+      start_at: NEW_PAYLOAD.startAt,
+      end_at: NEW_PAYLOAD.endAt,
+    };
+    updateById
+      .mockResolvedValueOnce(updatedBooking)
+      .mockResolvedValueOnce(null);
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(
+      venuesService.changeBooking(COORDINATOR, PENDING_BOOKING.id, NEW_PAYLOAD)
+    ).rejects.toMatchObject({
+      status: 500,
+      code: 'EVENT_STATUS_UPDATE_FAILED',
+      message: 'The booking was rescheduled, but the event could not be moved to Planning. The change has been saved.',
+    });
+
+    expect(updateById).toHaveBeenNthCalledWith(
+      1,
+      'venue_bookings',
+      PENDING_BOOKING.id,
+      expect.objectContaining({
+        start_at: NEW_PAYLOAD.startAt,
+        end_at: NEW_PAYLOAD.endAt,
+        status: BOOKING_STATUS.PENDING,
+      })
+    );
+    expect(writeAudit).toHaveBeenCalledWith(
+      COORDINATOR.id,
+      'BOOKING_RESCHEDULED',
+      'venue_booking',
+      PENDING_BOOKING.id,
+      expect.any(Object)
+    );
+    expect(updateById.mock.invocationCallOrder[0]).toBeLessThan(
+      writeAudit.mock.invocationCallOrder[0]
+    );
+    expect(writeAudit.mock.invocationCallOrder[0]).toBeLessThan(
+      updateById.mock.invocationCallOrder[1]
+    );
+    expect(insertOne).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      `Failed to move event ${CONFIRMED_EVENT_ROW.id} to Planning after booking ${PENDING_BOOKING.id} was rescheduled`,
+      expect.any(Error)
+    );
+    consoleErrorSpy.mockRestore();
   });
 
   /*
