@@ -169,6 +169,14 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
    * Type: boundary
    */
   it('shows previous booking times without including reschedule audits in Status history', async () => {
+    const previousStartAt = '2026-10-20T00:00:00.000Z';
+    const previousEndAt = '2026-10-20T03:00:00.000Z';
+    const formatExpectedTime = (value) => {
+      const date = new Date(value);
+      const datePart = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      const timePart = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      return `${datePart} ${timePart}`;
+    };
     const history = [
       {
         id: 1,
@@ -182,8 +190,8 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
         entity_id: 10,
         actor_name: 'Coordinator Jane',
         metadata: {
-          previousStartAt: '2026-10-20T00:00:00.000Z',
-          previousEndAt: '2026-10-20T03:00:00.000Z',
+          previousStartAt,
+          previousEndAt,
         },
       },
     ];
@@ -195,8 +203,11 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
     expect(within(statusHistory).getByText('PLANNING → CONFIRMED')).toBeInTheDocument();
     expect(statusHistory).not.toHaveTextContent('BOOKING_RESCHEDULED');
     expect(statusHistory).not.toHaveTextContent('Coordinator Jane');
-    expect(await screen.findByText(/Previous time: 20 Oct 08:00 to 20 Oct 11:00/))
-      .toBeInTheDocument();
+    const expectedPreviousTime = `Previous time: ${formatExpectedTime(previousStartAt)} to ${formatExpectedTime(previousEndAt)}`;
+    expect(await screen.findByText((_, element) => (
+      element?.tagName === 'P'
+      && element.textContent.replace(/\s+/g, ' ').trim() === expectedPreviousTime
+    ))).toBeInTheDocument();
   });
 
   /*
