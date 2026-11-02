@@ -624,8 +624,6 @@ export default function EventDetail() {
                     )}
                   </div>
                   <EventDecisionPanel
-                    collapsed={showClarificationInput}
-                    onOpen={() => setShowClarificationInput(false)}
                     onDecide={(decision, text) => runCoordinatorAction(() => api(`/api/events/${id}/decision`, {
                       method: 'POST',
                       body: { decision, reason: text },
@@ -634,7 +632,7 @@ export default function EventDetail() {
                       <button
                         className="btn secondary"
                         type="button"
-                        onClick={() => setShowClarificationInput((open) => !open)}
+                        onClick={() => setShowClarificationInput(true)}
                       >
                         {event.subState === 'ACTION_REQUIRED' ? 'Update Clarification' : 'Request Clarification / Amendments'}
                       </button>
