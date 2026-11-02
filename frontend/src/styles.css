@@ -354,6 +354,10 @@ input.field-error, select.field-error, textarea.field-error {
   flex-direction: column;
   gap: 12px;
   margin-top: 8px;
+  padding: 12px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
 }
 .review-inline label,
 .review-inline .muted,

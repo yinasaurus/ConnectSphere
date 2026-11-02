@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Button from './Button';
 import FieldError from './FieldError';
 import { MIN_REJECTION_REASON_LENGTH } from '../constants';
 
 const REASON_ERROR = `Rejection reason must be at least ${MIN_REJECTION_REASON_LENGTH} characters`;
 
-export default function EventDecisionPanel({ onDecide, extra = null }) {
+export default function EventDecisionPanel({ onDecide, onOpen, collapsed = false, extra = null }) {
   const [mode, setMode] = useState(null);
   const [comment, setComment] = useState('');
   const [reason, setReason] = useState('');
@@ -13,6 +13,19 @@ export default function EventDecisionPanel({ onDecide, extra = null }) {
   const [submitting, setSubmitting] = useState(false);
 
   const reasonLength = reason.trim().length;
+
+  useEffect(() => {
+    if (!collapsed) return;
+    setMode(null);
+    setComment('');
+    setReason('');
+    setReasonError('');
+  }, [collapsed]);
+
+  function openMode(next) {
+    setMode(next);
+    onOpen?.();
+  }
 
   async function decide(decision, text) {
     setSubmitting(true);
@@ -42,10 +55,10 @@ export default function EventDecisionPanel({ onDecide, extra = null }) {
 
   return (
     <div className="review-actions">
-      <Button disabled={submitting} onClick={() => setMode('approve')}>
+      <Button disabled={submitting} onClick={() => openMode('approve')}>
         Approve
       </Button>
-      <Button variant="danger" disabled={submitting} onClick={() => setMode('reject')}>
+      <Button variant="danger" disabled={submitting} onClick={() => openMode('reject')}>
         Reject
       </Button>
       {extra}

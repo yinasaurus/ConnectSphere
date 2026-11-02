@@ -624,21 +624,28 @@ export default function EventDetail() {
                     )}
                   </div>
                   <EventDecisionPanel
+                    collapsed={showClarificationInput}
+                    onOpen={() => setShowClarificationInput(false)}
                     onDecide={(decision, text) => runCoordinatorAction(() => api(`/api/events/${id}/decision`, {
                       method: 'POST',
                       body: { decision, reason: text },
                     }))}
                     extra={(
-                      <button className="btn secondary" type="button" onClick={() => setShowClarificationInput(!showClarificationInput)}>
+                      <button
+                        className="btn secondary"
+                        type="button"
+                        onClick={() => setShowClarificationInput((open) => !open)}
+                      >
                         {event.subState === 'ACTION_REQUIRED' ? 'Update Clarification' : 'Request Clarification / Amendments'}
                       </button>
                     )}
                   />
 
                   {showClarificationInput && (
-                    <div className="stack" style={{ marginTop: 8, padding: 12, background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 12 }}>
-                      <label style={{ margin: 0 }}><strong>Review remarks / requested amendments *</strong></label>
+                    <div className="review-inline">
+                      <label htmlFor="clarification-remarks">Review remarks / requested amendments *</label>
                       <textarea
+                        id="clarification-remarks"
                         value={clarificationNotes}
                         onChange={(e) => setClarificationNotes(e.target.value)}
                         placeholder="State incomplete details or amendments needed from the organizer..."
@@ -658,7 +665,7 @@ export default function EventDetail() {
                         >
                           Send Clarification Request
                         </button>
-                        <button className="btn ghost" onClick={() => setShowClarificationInput(false)}>Cancel</button>
+                        <button className="btn ghost" type="button" onClick={() => setShowClarificationInput(false)}>Cancel</button>
                       </div>
                     </div>
                   )}
