@@ -761,7 +761,7 @@ export default function EventDetail() {
                         body: { approve: true },
                       }))}
                     >
-                      Approve venue
+                Approve venue
                     </Button>
                     {booking.status === 'PENDING' && (
                       <Button variant="danger"
@@ -775,7 +775,7 @@ export default function EventDetail() {
                           },
                         }))}
                       >
-                        Reject venue
+                Reject venue
                       </Button>
                     )}
                   </div>
