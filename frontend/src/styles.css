@@ -331,6 +331,23 @@ input.field-error, select.field-error, textarea.field-error {
 .alert.info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
 .card.attention-card { border-left: 4px solid #f59e0b; background: #fffdf5; }
 .card.review-panel { border-left: 4px solid var(--teal); background: #fbfdfc; }
+.card.review-panel.stack { gap: 20px; }
+.review-decision {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+  width: 100%;
+}
+.review-approval {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+}
+.review-approval label { margin: 0; }
+.review-approval textarea { width: 100%; }
 
 .table {
   width: 100%;
@@ -484,7 +501,16 @@ input.field-error, select.field-error, textarea.field-error {
   padding: 24px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
 }
-.confirm-modal h3 { margin: 0 0 12px; }
+.confirm-modal h3 { margin: 0 0 16px; }
+.confirm-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.confirm-modal-body label,
+.confirm-modal-body .muted,
+.confirm-modal-body .field-error { margin: 0; }
+.confirm-modal .actions { margin-top: 20px; }
 .conflict-modal-card {
   border: 1px solid var(--line);
 }

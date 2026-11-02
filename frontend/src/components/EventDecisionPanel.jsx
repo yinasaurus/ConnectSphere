@@ -40,21 +40,21 @@ export default function EventDecisionPanel({ onDecide }) {
   }
 
   return (
-    <div className="stack">
-      <label htmlFor="approval-comment">Comment for the organiser (optional)</label>
-      <textarea
-        id="approval-comment"
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-      />
-      <div className="actions">
+    <div className="review-decision">
+      <div className="review-approval">
+        <label htmlFor="approval-comment">Comment for the organiser (sent with Approve)</label>
+        <textarea
+          id="approval-comment"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+        />
         <Button disabled={submitting} onClick={() => decide('APPROVE', comment.trim())}>
           {submitting ? 'Approving…' : 'Approve'}
         </Button>
-        <Button variant="danger" disabled={submitting} onClick={() => setRejecting(true)}>
-          Reject
-        </Button>
       </div>
+      <Button variant="danger" disabled={submitting} onClick={() => setRejecting(true)}>
+        Reject
+      </Button>
       <ConfirmModal
         open={rejecting}
         title="Reject this event?"
@@ -63,22 +63,24 @@ export default function EventDecisionPanel({ onDecide }) {
         onConfirm={confirmRejection}
         onCancel={cancelRejection}
       >
-        <label htmlFor="rejection-reason">Rejection reason</label>
-        <textarea
-          id="rejection-reason"
-          value={reason}
-          aria-invalid={Boolean(reasonError)}
-          className={reasonError ? 'field-error' : ''}
-          onChange={(e) => {
-            setReason(e.target.value);
-            if (reasonError) setReasonError('');
-          }}
-          placeholder="Tell the organiser what needs to change before resubmitting"
-        />
-        <p className="muted">
-          {reasonLength} / {MIN_REJECTION_REASON_LENGTH} characters minimum
-        </p>
-        <FieldError>{reasonError}</FieldError>
+        <div className="confirm-modal-body">
+          <label htmlFor="rejection-reason">Rejection reason</label>
+          <textarea
+            id="rejection-reason"
+            value={reason}
+            aria-invalid={Boolean(reasonError)}
+            className={reasonError ? 'field-error' : ''}
+            onChange={(e) => {
+              setReason(e.target.value);
+              if (reasonError) setReasonError('');
+            }}
+            placeholder="Tell the organiser what needs to change before resubmitting"
+          />
+          <p className="muted">
+            {reasonLength} / {MIN_REJECTION_REASON_LENGTH} characters minimum
+          </p>
+          <FieldError>{reasonError}</FieldError>
+        </div>
       </ConfirmModal>
     </div>
   );
