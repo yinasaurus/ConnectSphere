@@ -349,7 +349,6 @@ input.field-error, select.field-error, textarea.field-error {
   gap: 10px;
 }
 .review-inline {
-  flex: 1 0 100%;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -359,6 +358,7 @@ input.field-error, select.field-error, textarea.field-error {
   border: 1px solid var(--line);
   border-radius: 12px;
 }
+.review-actions .review-inline { flex: 1 0 100%; }
 .review-inline label,
 .review-inline .muted,
 .review-inline .field-error { margin: 0; }
