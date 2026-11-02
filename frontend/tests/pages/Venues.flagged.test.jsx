@@ -6,12 +6,12 @@
  */
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { api } from '../api';
-import { useAuth } from '../auth';
-import Venues from './Venues';
+import { api } from '../../src/api';
+import { useAuth } from '../../src/auth';
+import Venues from '../../src/pages/Venues';
 
-jest.mock('../api', () => ({ api: jest.fn() }));
-jest.mock('../auth', () => ({ useAuth: jest.fn() }));
+jest.mock('../../src/api', () => ({ api: jest.fn() }));
+jest.mock('../../src/auth', () => ({ useAuth: jest.fn() }));
 
 const VENUE = {
   id: 1,
