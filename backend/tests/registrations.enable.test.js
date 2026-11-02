@@ -106,6 +106,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
    * Expected: The event is written as open with exactly the window and capacity given, and audited.
    * Type: normal
    */
+  // SCRUM-63-TC01
   it('US63-B01: the assigned Coordinator enables registration with a window and capacity', async () => {
     const result = await service.enableRegistration(assigned, 3, valid());
 
@@ -137,6 +138,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
    * Expected: 409 NOT_CONFIRMED and nothing written.
    * Type: error
    */
+  // SCRUM-63-TC02
   it.each([
     'DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'PLANNING',
     'AWAITING_SAFETY_CHECK', 'PREPARATION', 'COMPLETED', 'CANCELLED', 'REJECTED',
@@ -152,6 +154,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
    * Expected: 400 MISSING_SETTINGS naming the missing value; registration is not enabled.
    * Type: error
    */
+  // SCRUM-63-TC03
   it.each([
     ['opensAt', 'open date and time'],
     ['closesAt', 'close date and time'],
@@ -174,6 +177,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
    * Expected: treated as missing.
    * Type: boundary
    */
+  // SCRUM-63-TC04
   it('US63-B04: an empty capacity counts as missing', async () => {
     await expectRejected(
       service.enableRegistration(assigned, 3, { ...valid(), capacity: '' }),
@@ -188,6 +192,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
    * Expected: 400 INVALID_WINDOW.
    * Type: boundary / error
    */
+  // SCRUM-63-TC05
   it('US63-B05: a close time equal to the open time is rejected', async () => {
     await expectRejected(
       service.enableRegistration(assigned, 3, { ...valid(), closesAt: OPENS }),
@@ -196,6 +201,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
     );
   });
 
+  // SCRUM-63-TC06
   it('US63-B06: a close time before the open time is rejected', async () => {
     await expectRejected(
       service.enableRegistration(assigned, 3, { ...valid(), closesAt: '2026-10-31T09:00:00.000Z' }),
@@ -210,6 +216,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
    * Expected: accepted.
    * Type: boundary
    */
+  // SCRUM-63-TC07
   it('US63-B07: a close time one minute after the open time is accepted', async () => {
     const closesAt = '2026-11-01T09:01:00.000Z';
     await service.enableRegistration(assigned, 3, { ...valid(), closesAt });
@@ -224,6 +231,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
    * Expected: 400 INVALID_DATE.
    * Type: error
    */
+  // SCRUM-63-TC08
   it('US63-B08: an open time that is not a date is rejected', async () => {
     await expectRejected(
       service.enableRegistration(assigned, 3, { ...valid(), opensAt: 'next week' }),
@@ -238,6 +246,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
    * Expected: 400 INVALID_CAPACITY.
    * Type: boundary / error
    */
+  // SCRUM-63-TC09
   it.each([0, -1, 2.5, 'abc'])('US63-B09: a capacity of %p is rejected', async (capacity) => {
     await expectRejected(
       service.enableRegistration(assigned, 3, { ...valid(), capacity }),
@@ -252,6 +261,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
    * Expected: accepted and stored as a number.
    * Type: boundary
    */
+  // SCRUM-63-TC10
   it.each([1, '1'])('US63-B10: a capacity of %p is accepted', async (capacity) => {
     await service.enableRegistration(assigned, 3, { ...valid(), capacity });
     expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
@@ -265,6 +275,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
    * Expected: 409 CAPACITY_BELOW_REGISTRATIONS.
    * Type: error
    */
+  // SCRUM-63-TC11
   it('US63-B11: enabling with a capacity below the active registrations is rejected', async () => {
     db.fetchCount.mockResolvedValue(10);
     await expectRejected(
@@ -280,6 +291,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
    * Expected: 409 ALREADY_ENABLED; the existing settings are unchanged.
    * Type: error
    */
+  // SCRUM-63-TC12
   it('US63-B12: enabling twice is rejected and the settings are unchanged', async () => {
     event = enabledEvent();
     await expectRejected(
@@ -296,6 +308,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
    * Expected: 403 NOT_ASSIGNED; registration is not enabled.
    * Type: error
    */
+  // SCRUM-63-TC13
   it.each([
     ['another Coordinator', otherCoordinator],
     ['an Attendee', attendee],
@@ -311,6 +324,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
    * Expected: 403 NOT_ASSIGNED.
    * Type: boundary
    */
+  // SCRUM-63-TC14
   it('US63-B14: the assigned user without the Coordinator role is rejected', async () => {
     await expectRejected(
       service.enableRegistration({ id: 2, roles: [ROLES.ATTENDEE] }, 3, valid()),
@@ -319,6 +333,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
     );
   });
 
+  // SCRUM-63-TC15
   it('US63-B15a: enabling with a null open time or no body at all counts as missing', async () => {
     await expectRejected(
       service.enableRegistration(assigned, 3, { ...valid(), opensAt: null }),
@@ -345,6 +360,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
    * Expected: only the close date is written; the open date and capacity are untouched.
    * Type: normal
    */
+  // SCRUM-63-TC16
   it('US63-B16: the close date can be moved later', async () => {
     const later = '2026-11-10T09:00:00.000Z';
     const result = await service.changeRegistrationSettings(assigned, 3, { closesAt: later });
@@ -368,6 +384,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
    * Expected: saved, including one millisecond after the open time.
    * Type: normal / boundary
    */
+  // SCRUM-63-TC17
   it.each([
     ['a few days earlier', '2026-11-05T09:00:00.000Z'],
     ['to one millisecond after the open time', '2026-11-01T09:00:00.001Z'],
@@ -385,6 +402,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
    * Expected: 400 INVALID_WINDOW; the close date is unchanged.
    * Type: boundary / error
    */
+  // SCRUM-63-TC18
   it.each([
     ['exactly the open time', OPENS],
     ['before the open time', '2026-10-30T09:00:00.000Z'],
@@ -403,6 +421,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
    * Expected: 400 CLOSE_IN_PAST; the close date is unchanged.
    * Type: error
    */
+  // SCRUM-63-TC19
   it('US63-B17b: the close date cannot be moved earlier into the past', async () => {
     event = enabledEvent({ registration_opens_at: '2026-10-10T09:00:00.000Z' });
     await expectRejected(
@@ -413,6 +432,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
     expect(event.registration_closes_at).toBe(CLOSES);
   });
 
+  // SCRUM-63-TC20
   it('US63-B18: a new close date that is not a date is rejected', async () => {
     await expectRejected(
       service.changeRegistrationSettings(assigned, 3, { closesAt: 'soon' }),
@@ -427,6 +447,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
    * Expected: 400 OPEN_LOCKED; nothing is written.
    * Type: error
    */
+  // SCRUM-63-TC22
   it('US63-B19: the open date cannot be changed after registration is enabled', async () => {
     await expectRejected(
       service.changeRegistrationSettings(assigned, 3, { opensAt: '2026-11-02T09:00:00.000Z' }),
@@ -441,6 +462,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
    * Expected: 10 is accepted, 9 is rejected and the capacity stays 50.
    * Type: boundary
    */
+  // SCRUM-63-TC23
   it('US63-B20: capacity can be set equal to the active registrations', async () => {
     db.fetchCount.mockResolvedValue(10);
     await service.changeRegistrationSettings(assigned, 3, { capacity: 10 });
@@ -449,6 +471,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
     }));
   });
 
+  // SCRUM-63-TC24
   it('US63-B21: capacity cannot be set below the active registrations', async () => {
     db.fetchCount.mockResolvedValue(10);
     await expectRejected(
@@ -466,6 +489,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
    * Expected: accepted, and the count query filtered out WITHDRAWN.
    * Type: boundary
    */
+  // SCRUM-63-TC25
   it('US63-B22: withdrawn registrations do not count against capacity', async () => {
     db.fetchCount.mockResolvedValue(7);
     await service.changeRegistrationSettings(assigned, 3, { capacity: 7 });
@@ -478,6 +502,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
     }));
   });
 
+  // SCRUM-63-TC26
   it.each([0, ''])('US63-B23: a new capacity of %p is rejected', async (capacity) => {
     await expectRejected(
       service.changeRegistrationSettings(assigned, 3, { capacity }),
@@ -486,6 +511,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
     );
   });
 
+  // SCRUM-63-TC21
   it('US63-B18a: a blank new close date is rejected', async () => {
     await expectRejected(
       service.changeRegistrationSettings(assigned, 3, { closesAt: null }),
@@ -499,6 +525,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
     await expectRejected(service.changeRegistrationSettings(assigned, 3), 400, 'NOTHING_TO_CHANGE');
   });
 
+  // SCRUM-63-TC27
   it('US63-B25: settings cannot be changed before registration is enabled', async () => {
     event = confirmedEvent();
     await expectRejected(
@@ -514,6 +541,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
    * Expected: 403 NOT_ASSIGNED; the close date is unchanged.
    * Type: error
    */
+  // SCRUM-63-TC28
   it('US63-B26: another Coordinator cannot change the settings', async () => {
     await expectRejected(
       service.changeRegistrationSettings(otherCoordinator, 3, { closesAt: '2026-11-10T09:00:00.000Z' }),
@@ -531,6 +559,7 @@ describe('SCRUM-63 general event edit cannot bypass the registration rules', () 
    * Expected: 409 REGISTRATION_SETTINGS_LOCKED; nothing written.
    * Type: error
    */
+  // SCRUM-63-TC29
   it.each([
     ['registrationOpen', true],
     ['registrationOpensAt', OPENS],
@@ -543,6 +572,7 @@ describe('SCRUM-63 general event edit cannot bypass the registration rules', () 
     );
   });
 
+  // SCRUM-63-TC30
   it('US63-E02: capacity cannot be changed through the general edit once registration is open', async () => {
     event = enabledEvent();
     await expectRejected(
@@ -561,6 +591,7 @@ describe('SCRUM-63 registration window and capacity fit the event (review on PR 
    * Expected: 409 EVENT_STARTED and nothing written.
    * Type: error
    */
+  // SCRUM-63-TC31
   it.each([
     ['has already ended', { start_at: '2026-10-12T13:31:00.000Z', end_at: '2026-10-12T13:33:00.000Z' }],
     ['starts right now', { start_at: NOW.toISOString() }],
@@ -581,6 +612,7 @@ describe('SCRUM-63 registration window and capacity fit the event (review on PR 
    * Expected: 400 CLOSES_AFTER_EVENT_START and nothing written.
    * Type: error / boundary
    */
+  // SCRUM-63-TC32
   it.each([
     ['one millisecond after the event starts', OPENS, '2026-11-12T09:00:00.001Z'],
     ['after the event has finished', '2026-11-13T09:00:00.000Z', '2026-11-16T09:00:00.000Z'],
@@ -592,6 +624,7 @@ describe('SCRUM-63 registration window and capacity fit the event (review on PR 
     );
   });
 
+  // SCRUM-63-TC33
   it('US63-B29: registration can close exactly when the event starts', async () => {
     await service.enableRegistration(assigned, 3, { opensAt: OPENS, closesAt: EVENT_STARTS, capacity: 50 });
     expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
@@ -605,6 +638,7 @@ describe('SCRUM-63 registration window and capacity fit the event (review on PR 
    * Expected: 400 CLOSE_IN_PAST and nothing written.
    * Type: boundary
    */
+  // SCRUM-63-TC34
   it.each([
     ['exactly now', NOW.toISOString()],
     ['yesterday', '2026-10-19T09:00:00.000Z'],
@@ -622,6 +656,7 @@ describe('SCRUM-63 registration window and capacity fit the event (review on PR 
    * Expected: refused; the close date stays as it was.
    * Type: error
    */
+  // SCRUM-63-TC35
   it('US63-B31: the close date cannot be extended past the event start', async () => {
     event = enabledEvent();
     await expectRejected(
@@ -632,6 +667,7 @@ describe('SCRUM-63 registration window and capacity fit the event (review on PR 
     expect(event.registration_closes_at).toBe(CLOSES);
   });
 
+  // SCRUM-63-TC36
   it('US63-B32: the close date cannot be changed once the event has started', async () => {
     event = enabledEvent();
     jest.setSystemTime(new Date('2026-11-12T10:00:00.000Z'));
@@ -649,6 +685,7 @@ describe('SCRUM-63 registration window and capacity fit the event (review on PR 
    * Expected: above attendance is refused (400 CAPACITY_ABOVE_ATTENDANCE); equal is allowed.
    * Type: error / boundary
    */
+  // SCRUM-63-TC37
   it('US63-B33: capacity above the expected attendance is refused when enabling', async () => {
     event = confirmedEvent({ expected_attendance: 40 });
     await expectRejected(
@@ -660,6 +697,7 @@ describe('SCRUM-63 registration window and capacity fit the event (review on PR 
       .rejects.toMatchObject({ message: 'Maximum capacity cannot be more than the expected attendance of 40' });
   });
 
+  // SCRUM-63-TC38
   it('US63-B34: capacity equal to the expected attendance is allowed', async () => {
     event = confirmedEvent({ expected_attendance: 40 });
     await service.enableRegistration(assigned, 3, { ...valid(), capacity: 40 });
@@ -668,6 +706,7 @@ describe('SCRUM-63 registration window and capacity fit the event (review on PR 
     }));
   });
 
+  // SCRUM-63-TC39
   it('US63-B35: capacity above the expected attendance is refused when changing', async () => {
     event = enabledEvent({ expected_attendance: 40, registration_capacity: 40 });
     await expectRejected(
@@ -684,6 +723,7 @@ describe('SCRUM-63 registration window and capacity fit the event (review on PR 
    * Expected: no attendance limit and no start-time limit; the other rules still apply.
    * Type: normal
    */
+  // SCRUM-63-TC40
   it('US63-B36: no attendance or start time recorded means no limit from them', async () => {
     event = confirmedEvent({ expected_attendance: null, start_at: null, end_at: null });
     await service.enableRegistration(assigned, 3, {
@@ -709,6 +749,7 @@ describe('SCRUM-63 registration routes', () => {
    * Expected: 200 with the saved settings.
    * Type: normal
    */
+  // SCRUM-63-TC41
   it('US63-R01: the assigned Coordinator can enable registration through the API', async () => {
     signedInAs(ROLES.EVENT_COORDINATOR);
     const res = await request(app)
@@ -726,6 +767,7 @@ describe('SCRUM-63 registration routes', () => {
    * Expected: 403 from the role check before the service runs; nothing written.
    * Type: error
    */
+  // SCRUM-63-TC42
   it('US63-R02: an Attendee is refused by the enable route', async () => {
     signedInAs(ROLES.ATTENDEE);
     const res = await request(app)
@@ -749,6 +791,7 @@ describe('SCRUM-63 registration routes', () => {
    * Expected: 200 with the new close date.
    * Type: normal
    */
+  // SCRUM-63-TC43
   it('US63-R04: the assigned Coordinator can extend the close date through the API', async () => {
     event = enabledEvent();
     signedInAs(ROLES.EVENT_COORDINATOR);
@@ -762,6 +805,7 @@ describe('SCRUM-63 registration routes', () => {
     expect(res.body.settings.registrationClosesAt).toBe(later);
   });
 
+  // SCRUM-63-TC44
   it('US63-R05: a rejected change returns the error code and writes nothing', async () => {
     event = enabledEvent();
     signedInAs(ROLES.EVENT_COORDINATOR);

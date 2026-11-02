@@ -599,6 +599,7 @@ describe('SCUM-24 venue search results', () => {
    * Expected: The card shows name, location, capacity, facilities, accessibility and layout pills
    * Type:     normal
    */
+  // SCRUM-24-TC01
   it('shows name, location, capacity, facilities, accessibility and layouts for each result', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -621,6 +622,7 @@ describe('SCUM-24 venue search results', () => {
    * Expected: Operating hours and setup/turnaround appear, then disappear
    * Type:     normal
    */
+  // SCRUM-24-TC02
   it('lets the coordinator select a result to view more details, and close it again', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -642,6 +644,7 @@ describe('SCUM-24 venue search results', () => {
    * Expected: "No venues match your selected filters."
    * Type:     boundary
    */
+  // SCRUM-23-TC24
   it('shows a clear message when no venue matches', async () => {
     mockSearchApi({ venues: [] });
     render(<Venues />);
@@ -658,6 +661,7 @@ describe('SCUM-24 venue search results', () => {
    * Expected: The page shows 200 and not 180
    * Type:     normal
    */
+  // SCRUM-24-TC03
   it('always renders whatever the latest search response says, not a stale previous one', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -679,6 +683,7 @@ describe('SCUM-24 venue search results', () => {
    * Expected: The detail panel closes
    * Type:     boundary
    */
+  // SCRUM-24-TC04
   it('clears the selected venue detail panel when a new search is run', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -699,6 +704,7 @@ describe('SCUM-24 venue search results', () => {
    * Expected: Card and detail panel both say "None listed"; no layout pills or hours line
    * Type:     boundary
    */
+  // SCRUM-24-TC05
   it('shows "None listed" and no layout pills for a venue with no facilities, accessibility or layouts', async () => {
     const bareVenue = {
       id: 2,
@@ -732,6 +738,7 @@ describe('SCUM-24 venue search results', () => {
    * Expected: The detail panel and the results are both gone
    * Type:     normal
    */
+  // SCRUM-24-TC06
   it('closes the detail panel and the results when Clear is clicked', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -752,6 +759,7 @@ describe('SCUM-24 venue search results', () => {
    * Expected: The panel shows the venue that was clicked, and switches when another is clicked
    * Type:     normal
    */
+  // SCRUM-24-TC07
   it('shows the details of whichever result is selected, and switches between results', async () => {
     const otherVenue = {
       ...SEARCH_RESULT_VENUE,
@@ -784,6 +792,7 @@ describe('SCUM-24 venue search results', () => {
    * Expected: The late response is ignored, so no results reappear; Search is usable again
    * Type:     error
    */
+  // SCRUM-24-TC08
   it('ignores a search response that arrives after Clear was pressed', async () => {
     const pending = mockDeferredSearchApi();
     render(<Venues />);
@@ -804,6 +813,7 @@ describe('SCUM-24 venue search results', () => {
    * Expected: The page keeps showing 200, not the stale 180
    * Type:     error
    */
+  // SCRUM-24-TC09
   it('keeps the newer results when an older search finishes last', async () => {
     const pending = mockDeferredSearchApi();
     const { container } = render(<Venues />);
@@ -828,6 +838,7 @@ describe('SCUM-24 venue search results', () => {
    * Expected: The error is still shown and Search is usable again
    * Type:     error
    */
+  // SCRUM-24-TC10
   it('still shows the error when the latest search fails', async () => {
     const pending = mockDeferredSearchApi();
     render(<Venues />);
@@ -847,6 +858,7 @@ describe('SCUM-24 venue search results', () => {
    * Expected: No error message appears for the abandoned search
    * Type:     error
    */
+  // SCRUM-24-TC11
   it('ignores a failed search that finishes after Clear was pressed', async () => {
     const pending = mockDeferredSearchApi();
     render(<Venues />);
@@ -857,6 +869,83 @@ describe('SCUM-24 venue search results', () => {
 
     await act(async () => pending[0].reject(new Error('Search failed')));
     expect(screen.queryByText('Search failed')).not.toBeInTheDocument();
+  });
+});
+
+describe('SCRUM-23 venue search form', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useAuth.mockReturnValue({ hasRole: () => false });
+  });
+
+  /*
+   * AC:       SCRUM-23 AC1-AC7
+   * Scenario: Coordinator fills in every search filter
+   * Expected: Each filter is sent to the search API, the dates as ISO times
+   * Type:     normal
+   */
+  // SCRUM-23-TC22
+  it('sends every filled-in filter to the search API', async () => {
+    mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
+    const { container } = render(<Venues />);
+    await screen.findByRole('button', { name: 'Search venues' });
+
+    const [start, end] = container.querySelectorAll('input[type="datetime-local"]');
+    fireEvent.change(start, { target: { value: '2026-11-20T10:00' } });
+    fireEvent.change(end, { target: { value: '2026-11-20T12:00' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. 50'), { target: { value: '50' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Level 2'), { target: { value: 'Level 2' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Wheelchair access'), { target: { value: 'Wheelchair access' } });
+    fireEvent.change(screen.getByDisplayValue('Any layout'), { target: { value: 'THEATRE' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Projector, Audio'), { target: { value: 'Projector' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Search venues' }));
+
+    expect(await screen.findByText('Helix Hall')).toBeInTheDocument();
+    const searchCall = api.mock.calls.find(([path]) => path.startsWith('/api/venues/search'));
+    const params = new URLSearchParams(searchCall[0].split('?')[1]);
+    expect(Object.fromEntries(params)).toEqual({
+      startAt: new Date('2026-11-20T10:00').toISOString(),
+      endAt: new Date('2026-11-20T12:00').toISOString(),
+      capacityMin: '50',
+      location: 'Level 2',
+      accessibility: 'Wheelchair access',
+      layout: 'THEATRE',
+      facilities: 'Projector',
+    });
+  });
+
+  /*
+   * AC:       SCRUM-23 AC1
+   * Scenario: Coordinator gives a start time but no end time
+   * Expected: A message asks for both, and no search is sent
+   * Type:     error
+   */
+  // SCRUM-23-TC23
+  it('asks for both a start and an end when only one is given', async () => {
+    mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
+    const { container } = render(<Venues />);
+    await screen.findByRole('button', { name: 'Search venues' });
+
+    const [start] = container.querySelectorAll('input[type="datetime-local"]');
+    fireEvent.change(start, { target: { value: '2026-11-20T10:00' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Search venues' }));
+
+    expect(screen.getByText('Pick both a start and an end date/time, or neither.')).toBeInTheDocument();
+    expect(api.mock.calls.some(([path]) => path.startsWith('/api/venues/search'))).toBe(false);
+  });
+
+  /*
+   * AC:       SCRUM-23 (no-results message)
+   * Scenario: The search reply has no venues list at all
+   * Expected: The page treats it as no matches
+   * Type:     boundary
+   */
+  // SCRUM-23-TC25
+  it('treats a search reply with no venues list as no matches', async () => {
+    mockSearchApi({});
+    render(<Venues />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+    expect(await screen.findByText('No venues match your selected filters.')).toBeInTheDocument();
   });
 });
 
@@ -1183,6 +1272,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
     api.mockReset();
   });
 
+  // SCRUM-75-TC43
   it('US75-F07: Venue Staff see the Place a hold card', async () => {
     useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
     mockPage([]);
@@ -1190,6 +1280,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
     expect(await screen.findByRole('heading', { name: 'Place a hold' })).toBeInTheDocument();
   });
 
+  // SCRUM-75-TC44
   it('US75-F08: Coordinators do not see the Place a hold card', async () => {
     useAuth.mockReturnValue({ hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
     mockPage([]);
@@ -1198,6 +1289,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
     expect(screen.queryByRole('heading', { name: 'Place a hold' })).not.toBeInTheDocument();
   });
 
+  // SCRUM-75-TC45
   it('US75-F09: a hold is shown as HELD with its expiry, not as approved', async () => {
     useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
     mockPage([held]);
@@ -1212,6 +1304,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
 });
 
 describe('SCRUM-76 expired holds on the Venues page', () => {
+  // SCRUM-76-TC27
   it('US76-F01: an expired hold shows as EXPIRED with when it expired', async () => {
     useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
     api.mockReset();

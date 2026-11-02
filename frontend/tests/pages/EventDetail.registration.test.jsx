@@ -80,6 +80,7 @@ describe('SCRUM-63 registration card (event page)', () => {
    * Scenario: The assigned Coordinator opens a Confirmed event and presses Enable.
    * Expected: the card is shown and the page calls the enable route.
    */
+  // SCRUM-63-TC50
   it('US63-F06: the assigned Coordinator sees the card and can enable registration', async () => {
     const calls = [];
     mockAuth(assignedCoordinator);
@@ -99,6 +100,7 @@ describe('SCRUM-63 registration card (event page)', () => {
    * Scenario: A Coordinator who is not assigned opens the same Confirmed event.
    * Expected: no registration card.
    */
+  // SCRUM-63-TC51
   it('US63-F07: a Coordinator who is not assigned does not see the card', async () => {
     mockAuth(otherCoordinator);
     stubApi(otherCoordinator, eventWith());
@@ -113,6 +115,7 @@ describe('SCRUM-63 registration card (event page)', () => {
    * Scenario: The assigned Coordinator opens an event that is not Confirmed yet.
    * Expected: no registration card.
    */
+  // SCRUM-63-TC52
   it('US63-F08: the card is hidden until the event is Confirmed', async () => {
     mockAuth(assignedCoordinator);
     stubApi(assignedCoordinator, eventWith({ status: 'PREPARATION' }));

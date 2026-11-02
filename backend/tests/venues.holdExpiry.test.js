@@ -91,6 +91,7 @@ beforeEach(() => {
 });
 
 describe('SCRUM-76 expire holds (service rules)', () => {
+  // SCRUM-76-TC01
   it('US76-B01: a Held booking whose expiry has passed becomes Expired', async () => {
     table = [hold()];
     const expired = await venuesService.expireHolds(AFTER);
@@ -98,12 +99,14 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     expect(table[0].status).toBe(BOOKING_STATUS.EXPIRED);
   });
 
+  // SCRUM-76-TC02
   it('US76-B02: a Held booking expires exactly at its expiry time', async () => {
     table = [hold()];
     await venuesService.expireHolds(AT);
     expect(table[0].status).toBe(BOOKING_STATUS.EXPIRED);
   });
 
+  // SCRUM-76-TC03
   it('US76-B03: a Held booking is not expired before its expiry time', async () => {
     table = [hold()];
     const expired = await venuesService.expireHolds(BEFORE);
@@ -111,18 +114,21 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     expect(table[0].status).toBe(BOOKING_STATUS.TENTATIVE);
   });
 
+  // SCRUM-76-TC04
   it('US76-B04: a confirmed (APPROVED) booking is never expired', async () => {
     table = [hold({ status: BOOKING_STATUS.APPROVED })];
     await venuesService.expireHolds(AFTER);
     expect(table[0].status).toBe(BOOKING_STATUS.APPROVED);
   });
 
+  // SCRUM-76-TC05
   it('US76-B05: a cancelled hold is not changed to Expired', async () => {
     table = [hold({ status: BOOKING_STATUS.CANCELLED })];
     await venuesService.expireHolds(AFTER);
     expect(table[0].status).toBe(BOOKING_STATUS.CANCELLED);
   });
 
+  // SCRUM-76-TC06
   it.each([BOOKING_STATUS.PENDING, BOOKING_STATUS.REJECTED])(
     'US76-B06: a %s booking is not touched',
     async (status) => {
@@ -132,12 +138,14 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     }
   );
 
+  // SCRUM-76-TC07
   it('US76-B07: a hold with no expiry recorded is left alone', async () => {
     table = [hold({ hold_expires_at: null })];
     await venuesService.expireHolds(AFTER);
     expect(table[0].status).toBe(BOOKING_STATUS.TENTATIVE);
   });
 
+  // SCRUM-76-TC08
   it('US76-B08: re-running on an already expired hold changes nothing', async () => {
     table = [hold()];
     await venuesService.expireHolds(AFTER);
@@ -151,6 +159,7 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     expect(writeAudit).not.toHaveBeenCalled();
   });
 
+  // SCRUM-76-TC09
   it('US76-B09: only due holds change when several are stored', async () => {
     table = [
       hold({ id: 1, hold_expires_at: '2026-11-17T00:00:00.000Z' }),
@@ -168,6 +177,7 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     ]);
   });
 
+  // SCRUM-76-TC10
   it('US76-B10: writes one HOLD_EXPIRED audit entry per expired hold, with no user as actor', async () => {
     table = [hold()];
     await venuesService.expireHolds(AFTER);
@@ -179,6 +189,7 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     });
   });
 
+  // SCRUM-76-TC11
   it('US76-B11: an expired hold no longer blocks another event\'s request for that period', async () => {
     table = [hold()];
     await venuesService.expireHolds(AFTER);
@@ -189,6 +200,7 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     expect(conflict).toBeNull();
   });
 
+  // SCRUM-76-TC12
   it('US76-B12: the venue is still blocked if another booking occupies that period', async () => {
     table = [
       hold(),
@@ -202,6 +214,7 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     expect(conflict).toMatchObject({ id: 901 });
   });
 
+  // SCRUM-76-TC13
   it('US76-B13: the venue is still blocked if another active hold occupies that period', async () => {
     table = [
       hold(),
@@ -215,6 +228,7 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     expect(conflict).toMatchObject({ id: 902 });
   });
 
+  // SCRUM-76-TC14
   it('US76-B14: between job runs, a hold past its expiry already stops blocking', async () => {
     // Still TENTATIVE in the table (the job hasn't run yet), but its expiry has passed.
     table = [hold()];
@@ -225,6 +239,7 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     expect(conflict).toBeNull();
   });
 
+  // SCRUM-76-TC15
   it('US76-B15: an expired hold cannot be approved as a booking', async () => {
     fetchOne.mockResolvedValueOnce(hold({ status: BOOKING_STATUS.EXPIRED }));
     await expect(
@@ -233,6 +248,7 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     expect(updateById).not.toHaveBeenCalled();
   });
 
+  // SCRUM-76-TC16
   it('US76-B16: an expired hold cannot be cancelled (it is already released)', async () => {
     fetchOne
       .mockResolvedValueOnce(hold({ status: BOOKING_STATUS.EXPIRED }))
@@ -243,6 +259,7 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     expect(updateById).not.toHaveBeenCalled();
   });
 
+  // SCRUM-76-TC17
   it('US76-B18: an expired hold does not stop an event from being ready for the safety check', async () => {
     fetchMany
       .mockResolvedValueOnce([{ status: BOOKING_STATUS.APPROVED }, { status: BOOKING_STATUS.EXPIRED }])
@@ -250,6 +267,7 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     await expect(accessService.arrangementsReadyForSafetyCheck(50)).resolves.toEqual({ ok: true });
   });
 
+  // SCRUM-76-TC18
   it('US76-B19: an expired hold alone does not count as the event\'s venue booking', async () => {
     fetchMany.mockResolvedValueOnce([{ status: BOOKING_STATUS.EXPIRED }]);
     const gate = await accessService.arrangementsReadyForSafetyCheck(50);
@@ -263,6 +281,7 @@ describe('SCRUM-76 expire holds (service rules)', () => {
 });
 
 describe('SCRUM-76 expire holds with the real clock', () => {
+  // SCRUM-76-TC19
   it('US76-B20: with no time passed in, expireHolds uses the current time', async () => {
     table = [
       hold({ id: 900, hold_expires_at: new Date(Date.now() - 60 * 1000).toISOString() }),
@@ -282,6 +301,7 @@ describe('SCRUM-76 expiry timer job', () => {
     jest.useRealTimers();
   });
 
+  // SCRUM-76-TC20
   it('US76-J01: runs once at start-up, then on every interval, with no user action', async () => {
     const run = jest.fn().mockResolvedValue([]);
     const stop = startHoldExpiryJob({ intervalMs: 1000, run });
@@ -293,6 +313,7 @@ describe('SCRUM-76 expiry timer job', () => {
     stop();
   });
 
+  // SCRUM-76-TC21
   it('US76-J02: stop() ends the timer', async () => {
     const run = jest.fn().mockResolvedValue([]);
     const stop = startHoldExpiryJob({ intervalMs: 1000, run });
@@ -301,6 +322,7 @@ describe('SCRUM-76 expiry timer job', () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
+  // SCRUM-76-TC22
   it('US76-J03: a failed run is logged and the next run still happens', async () => {
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const run = jest.fn()
@@ -315,6 +337,7 @@ describe('SCRUM-76 expiry timer job', () => {
     errorSpy.mockRestore();
   });
 
+  // SCRUM-76-TC23
   it('US76-J04: logs which holds were expired', async () => {
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     const run = jest.fn().mockResolvedValue([{ id: 900 }, { id: 901 }]);
@@ -326,6 +349,7 @@ describe('SCRUM-76 expiry timer job', () => {
     logSpy.mockRestore();
   });
 
+  // SCRUM-76-TC24
   it('US76-J05: with no options, runs the real expiry check every minute', async () => {
     const now = new Date('2026-11-18T08:59:30.000Z');
     jest.setSystemTime(now);

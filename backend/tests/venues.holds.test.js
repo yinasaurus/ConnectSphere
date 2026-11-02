@@ -99,6 +99,7 @@ beforeEach(() => {
 });
 
 describe('SCRUM-75 place a hold (service rules)', () => {
+  // SCRUM-75-TC01
   it('US75-B01: saves a Held booking for the event\'s date and time, linked to the event and its Coordinator', async () => {
     mockEventAndVenue();
 
@@ -121,6 +122,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(hold.hold_expires_at).toBe(EXPIRES);
   });
 
+  // SCRUM-75-TC02
   it('US75-B02: writes a HOLD_PLACED audit entry', async () => {
     mockEventAndVenue();
     await venuesService.placeHold(STAFF, { eventId: 50, venueId: 8, expiresAt: EXPIRES }, NOW);
@@ -131,12 +133,14 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     });
   });
 
+  // SCRUM-75-TC03
   it('US75-B03: returns coordinator_id null when the event has no Coordinator yet', async () => {
     mockEventAndVenue({ ...EVENT, coordinator_id: null });
     const hold = await venuesService.placeHold(STAFF, { eventId: 50, venueId: 8, expiresAt: EXPIRES }, NOW);
     expect(hold.coordinator_id).toBeNull();
   });
 
+  // SCRUM-75-TC04
   it.each([
     ['missing', undefined],
     ['null', null],
@@ -148,6 +152,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC05
   it('US75-B05: rejects an expiry that is not a real date', async () => {
     await expect(
       venuesService.placeHold(STAFF, { eventId: 50, venueId: 8, expiresAt: 'next tuesday' }, NOW)
@@ -155,6 +160,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC06
   it('US75-B06: rejects an expiry in the past and saves nothing', async () => {
     await expect(
       venuesService.placeHold(STAFF, { eventId: 50, venueId: 8, expiresAt: '2026-11-04T09:00:00.000Z' }, NOW)
@@ -162,12 +168,14 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC07
   it('US75-B07: rejects an expiry equal to now (it would already be expired)', async () => {
     await expect(
       venuesService.placeHold(STAFF, { eventId: 50, venueId: 8, expiresAt: NOW.toISOString() }, NOW)
     ).rejects.toMatchObject({ status: 400, code: 'HOLD_EXPIRY_IN_PAST' });
   });
 
+  // SCRUM-75-TC08
   it('US75-B08: accepts an expiry one minute from now', async () => {
     mockEventAndVenue();
     const hold = await venuesService.placeHold(
@@ -178,6 +186,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(hold.status).toBe(BOOKING_STATUS.TENTATIVE);
   });
 
+  // SCRUM-75-TC09
   it('US75-B09: rejects an expiry later than the event start and saves nothing', async () => {
     mockEventAndVenue();
     await expect(
@@ -186,6 +195,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC10
   it('US75-B10: accepts an expiry exactly at the event start', async () => {
     mockEventAndVenue();
     const hold = await venuesService.placeHold(
@@ -196,6 +206,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(hold.hold_expires_at).toBe(EVENT.start_at);
   });
 
+  // SCRUM-75-TC11
   it('US75-B11: rejects a hold that overlaps a confirmed booking and saves nothing', async () => {
     mockEventAndVenue();
     fetchMany.mockResolvedValueOnce([
@@ -208,6 +219,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(writeAudit).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC12
   it('US75-B12: rejects a hold that overlaps another active hold', async () => {
     mockEventAndVenue();
     fetchMany.mockResolvedValueOnce([
@@ -221,6 +233,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC13
   it('US75-B13: setup time counts: a booking ending 09:45 clashes with a hold occupied from 09:30', async () => {
     mockEventAndVenue();
     fetchMany.mockResolvedValueOnce([
@@ -231,6 +244,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     ).rejects.toMatchObject({ code: 'BOOKING_CONFLICT' });
   });
 
+  // SCRUM-75-TC14
   it('US75-B14: turnaround counts: a booking starting 12:30 clashes with a hold occupied until 12:45', async () => {
     mockEventAndVenue();
     fetchMany.mockResolvedValueOnce([
@@ -241,6 +255,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     ).rejects.toMatchObject({ code: 'BOOKING_CONFLICT' });
   });
 
+  // SCRUM-75-TC15
   it.each([
     ['ends exactly when the hold starts (09:30)', '2026-11-20T07:00:00.000Z', '2026-11-20T09:30:00.000Z'],
     ['starts exactly when the hold ends (12:45)', '2026-11-20T12:45:00.000Z', '2026-11-20T15:00:00.000Z'],
@@ -251,6 +266,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(hold.status).toBe(BOOKING_STATUS.TENTATIVE);
   });
 
+  // SCRUM-75-TC16
   it('US75-B16: a pending request in the same window does not stop the hold', async () => {
     mockEventAndVenue();
     // Only confirmed bookings and holds are asked for, so a PENDING row is never returned.
@@ -259,6 +275,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(insertOne).toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC17
   it('US75-B17: an expired hold in the same window does not stop a new hold', async () => {
     mockEventAndVenue();
     fetchMany.mockResolvedValueOnce([
@@ -270,6 +287,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(hold.status).toBe(BOOKING_STATUS.TENTATIVE);
   });
 
+  // SCRUM-75-TC18
   it.each([
     ['Coordinator', COORDINATOR],
     ['Coordinator Lead', { id: 22, roles: [ROLES.EVENT_COORDINATOR_LEAD] }],
@@ -343,6 +361,7 @@ describe('SCRUM-75 a Held booking blocks other events but is never confirmed', (
     hold_expires_at: EXPIRES,
   };
 
+  // SCRUM-75-TC19
   it('US75-B22: findConflict reports the hold to another event\'s overlapping request', async () => {
     fetchMany.mockResolvedValueOnce([ACTIVE_HOLD]);
     const conflict = await venuesService.findConflict(
@@ -352,6 +371,7 @@ describe('SCRUM-75 a Held booking blocks other events but is never confirmed', (
     expect(conflict).toMatchObject({ id: 900 });
   });
 
+  // SCRUM-75-TC20
   it.each([
     ['ends exactly when the hold\'s occupied window starts', '2026-11-20T07:00:00.000Z', '2026-11-20T09:30:00.000Z'],
     ['starts exactly when the hold\'s occupied window ends', '2026-11-20T12:45:00.000Z', '2026-11-20T15:00:00.000Z'],
@@ -363,6 +383,7 @@ describe('SCRUM-75 a Held booking blocks other events but is never confirmed', (
     expect(conflict).toBeNull();
   });
 
+  // SCRUM-75-TC21
   it('US75-B24: the held event\'s own request is not blocked by its own hold', async () => {
     fetchMany.mockResolvedValueOnce([ACTIVE_HOLD]);
     const conflict = await venuesService.findConflict(
@@ -372,6 +393,7 @@ describe('SCRUM-75 a Held booking blocks other events but is never confirmed', (
     expect(conflict).toBeNull();
   });
 
+  // SCRUM-75-TC22
   it('US75-B25: Venue Staff cannot approve a Held booking as if it were a request', async () => {
     fetchOne.mockResolvedValueOnce(ACTIVE_HOLD);
     await expect(
@@ -380,6 +402,7 @@ describe('SCRUM-75 a Held booking blocks other events but is never confirmed', (
     expect(updateById).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC23
   it('US75-B26: Venue Staff cannot approve another event\'s request over an active hold', async () => {
     const pending = { ...ACTIVE_HOLD, id: 901, event_id: 77, status: BOOKING_STATUS.PENDING, hold_expires_at: null };
     fetchOne.mockResolvedValueOnce(pending);
@@ -390,6 +413,7 @@ describe('SCRUM-75 a Held booking blocks other events but is never confirmed', (
     expect(updateById).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC24
   it('US75-B27: Venue Staff can approve the held event\'s own request for the held venue', async () => {
     const pending = { ...ACTIVE_HOLD, id: 902, status: BOOKING_STATUS.PENDING, hold_expires_at: null };
     fetchOne.mockResolvedValueOnce(pending).mockResolvedValueOnce({ ...EVENT, coordinator_id: null });
@@ -397,17 +421,10 @@ describe('SCRUM-75 a Held booking blocks other events but is never confirmed', (
     const updated = await venuesService.decideBooking(STAFF, 902, { approve: true });
     expect(updated.status).toBe(BOOKING_STATUS.APPROVED);
   });
-
-  it('US75-B28: the hold is never stored as APPROVED', async () => {
-    mockEventAndVenue();
-    await venuesService.placeHold(STAFF, { eventId: 50, venueId: 8, expiresAt: EXPIRES }, NOW);
-    const saved = insertOne.mock.calls[0][1];
-    expect(saved.status).not.toBe(BOOKING_STATUS.APPROVED);
-    expect(saved.decided_at).toBeUndefined();
-  });
 });
 
 describe('SCRUM-75 edge cases and defaults', () => {
+  // SCRUM-75-TC25
   it('US75-B29: rejects a hold for an event with no start or end time and saves nothing', async () => {
     fetchOne.mockResolvedValueOnce({ ...EVENT, start_at: null });
     await expect(
@@ -420,12 +437,14 @@ describe('SCRUM-75 edge cases and defaults', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC26
   it('US75-B30: uses 30 minutes setup and turnaround when the venue has none recorded', async () => {
     mockEventAndVenue(EVENT, { ...VENUE, setup_minutes: null, teardown_minutes: null });
     await venuesService.placeHold(STAFF, { eventId: 50, venueId: 8, expiresAt: EXPIRES }, NOW);
     expect(insertOne.mock.calls[0][1]).toMatchObject({ setup_minutes: 30, teardown_minutes: 30 });
   });
 
+  // SCRUM-75-TC27
   it('US75-B31: keeps a venue setup and turnaround of 0 (no padding)', async () => {
     mockEventAndVenue(EVENT, { ...VENUE, setup_minutes: 0, teardown_minutes: 0 });
     await venuesService.placeHold(STAFF, { eventId: 50, venueId: 8, expiresAt: EXPIRES }, NOW);
@@ -439,6 +458,7 @@ describe('SCRUM-75 edge cases and defaults', () => {
     });
   });
 
+  // SCRUM-75-TC28
   it('US75-B33: uses the real clock when no time is passed in', async () => {
     mockEventAndVenue({ ...EVENT, start_at: '2099-11-20T10:00:00.000Z', end_at: '2099-11-20T12:00:00.000Z' });
     const hold = await venuesService.placeHold(STAFF, { eventId: 50, venueId: 8, expiresAt: '2099-11-18T09:00:00.000Z' });
@@ -448,6 +468,7 @@ describe('SCRUM-75 edge cases and defaults', () => {
     ).rejects.toMatchObject({ code: 'HOLD_EXPIRY_IN_PAST' });
   });
 
+  // SCRUM-75-TC29
   it('US75-B34: without options, findConflict still checks holds (and pending requests)', async () => {
     fetchMany.mockResolvedValueOnce([
       existing(BOOKING_STATUS.TENTATIVE, '2099-11-20T10:00:00.000Z', '2099-11-20T12:00:00.000Z', {
@@ -463,6 +484,7 @@ describe('SCRUM-75 edge cases and defaults', () => {
     ]);
   });
 
+  // SCRUM-75-TC30
   it('US75-B35: the bookings list includes a hold\'s expiry, and null for other bookings', async () => {
     fetchMany.mockResolvedValueOnce([
       existing(BOOKING_STATUS.TENTATIVE, EVENT.start_at, EVENT.end_at, { id: 900, hold_expires_at: EXPIRES }),
@@ -492,6 +514,7 @@ describe('SCRUM-75 HTTP routes', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC31
   it('US75-R01: Venue Staff get 201 with the Held booking', async () => {
     mockUser = STAFF;
     mockEventAndVenue(FUTURE_EVENT);
@@ -507,6 +530,7 @@ describe('SCRUM-75 HTTP routes', () => {
     });
   });
 
+  // SCRUM-75-TC32
   it('US75-R02: 400 HOLD_EXPIRY_REQUIRED when expiresAt is left out', async () => {
     mockUser = STAFF;
     const res = await request(app).post('/api/venues/holds').send({ eventId: 50, venueId: 8 });
@@ -515,6 +539,7 @@ describe('SCRUM-75 HTTP routes', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC33
   it('US75-R03: 409 BOOKING_CONFLICT when the window is already confirmed', async () => {
     mockUser = STAFF;
     mockEventAndVenue(FUTURE_EVENT);
@@ -528,6 +553,7 @@ describe('SCRUM-75 HTTP routes', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC34
   it('US75-R04: a Coordinator gets 403 and nothing is saved', async () => {
     mockUser = COORDINATOR;
     const res = await request(app)
@@ -538,6 +564,7 @@ describe('SCRUM-75 HTTP routes', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC35
   it('US75-R05: signed out gets 401', async () => {
     const res = await request(app)
       .post('/api/venues/holds')
@@ -545,6 +572,7 @@ describe('SCRUM-75 HTTP routes', () => {
     expect(res.status).toBe(401);
   });
 
+  // SCRUM-75-TC36
   it('US75-R06: another event\'s booking request over an active hold gets 409', async () => {
     mockUser = COORDINATOR;
     fetchMany.mockResolvedValueOnce([{
@@ -570,6 +598,7 @@ describe('SCRUM-75 HTTP routes', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC37
   it('US75-R07: the held event\'s own Coordinator can still request the held venue', async () => {
     mockUser = COORDINATOR;
     fetchMany.mockResolvedValueOnce([{

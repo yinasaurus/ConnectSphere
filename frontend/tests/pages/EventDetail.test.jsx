@@ -332,6 +332,7 @@ beforeEach(() => {
  *           for the global bookings queue, which Organisers aren't allowed to see.
  * Type:     normal
  */
+// SCRUM-13-TC36
 it('loads an organiser event and its booking without requesting the restricted global queue', async () => {
   api.mockImplementation(async (path) => {
     if (path === '/api/events/3') return { event: { id: 3, organiserId: 1, name: 'My event', status: 'PLANNING' } };
@@ -586,6 +587,7 @@ it('US64-F03: the organiser does not see the Open for review button', async () =
  *           equipment requests.
  * Type:     boundary
  */
+// SCRUM-13-TC37
 it('loads an attendee event without requesting restricted planning data', async () => {
   useAuth.mockReturnValue({ user: { id: 8 }, hasRole: (...roles) => roles.includes('ATTENDEE') });
   api.mockImplementation(async (path) => {
@@ -907,4 +909,42 @@ describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () =>
     expect(screen.getByText(/Arrangement note: Testing mic packs and checking batteries/i)).toBeInTheDocument();
   });
 });
+});
+
+describe('SCRUM-13 the event page copes with empty venue and booking replies', () => {
+  /*
+   * AC:       SCRUM-13 (a Coordinator can view the planning details of their event)
+   * Scenario: The venue list and venue booking replies have no list in them
+   * Expected: The page still opens and shows the event
+   * Type:     boundary
+   */
+  // SCRUM-13-TC40
+  it('opens the event for its Coordinator when the venue and booking replies are empty', async () => {
+    api.mockReset();
+    useAuth.mockReturnValue({
+      user: { id: 21, roles: ['EVENT_COORDINATOR'] },
+      hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
+    });
+    api.mockImplementation(async (path) => {
+      if (path === '/api/events/3') {
+        return { event: { id: 3, name: 'Workshop', coordinatorId: 21, status: 'PLANNING' } };
+      }
+      if (path === '/api/events/3/history') return { history: [] };
+      if (path === '/api/comments/3') return { comments: [] };
+      if (path === '/api/venues') return {};
+      if (path === '/api/events/3/venue-bookings') return {};
+      if (path === '/api/events/3/registrations') return { registrations: [] };
+      if (path === '/api/events/3/change-requests') return { changeRequests: [] };
+      return {};
+    });
+    render(
+      <MemoryRouter initialEntries={['/app/events/3']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/app/events/:id" element={<EventDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole('heading', { name: 'Workshop' })).toBeInTheDocument();
+    expect(screen.queryByText('Approved')).not.toBeInTheDocument();
+  });
 });

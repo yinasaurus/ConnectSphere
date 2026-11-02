@@ -65,6 +65,7 @@ describe('SCUM-13 venue booking authorisation', () => {
     expect(venuesService.listBookings).toHaveBeenCalledTimes(1);
   });
 
+  // SCRUM-13-TC29
   it('allows a hybrid Coordinator and Venue Staff user', async () => {
     mockRoles = [ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF];
 

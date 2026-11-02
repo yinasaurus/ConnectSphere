@@ -83,6 +83,7 @@ describe('SCRUM-52 register for an event (service rules)', () => {
    * Expected: One REGISTERED row for that Attendee and event, with no waitlist position.
    * Type: normal
    */
+  // SCRUM-52-TC01
   it('US52-B01: an Attendee registers for a Confirmed event with registration open', async () => {
     const result = await service.register(attendee, 3);
 
@@ -102,6 +103,7 @@ describe('SCRUM-52 register for an event (service rules)', () => {
    * Expected: Places left after registering drops by one each time: 49, 39, 0.
    * Type: normal / boundary (last place)
    */
+  // SCRUM-52-TC02
   it.each([
     [0, 49],
     [10, 39],
@@ -119,6 +121,7 @@ describe('SCRUM-52 register for an event (service rules)', () => {
    * Expected: The count query excludes WITHDRAWN for this event.
    * Type: normal
    */
+  // SCRUM-52-TC03
   it('US52-B03: withdrawn registrations do not take up a place', async () => {
     await service.register(attendee, 3);
     expect(builder.eq).toHaveBeenCalledWith('event_id', 3);
@@ -132,6 +135,7 @@ describe('SCRUM-52 register for an event (service rules)', () => {
    * Expected: 409 NOT_OPEN and nothing written.
    * Type: error
    */
+  // SCRUM-52-TC04
   it.each([
     'DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'PLANNING',
     'AWAITING_SAFETY_CHECK', 'PREPARATION', 'COMPLETED', 'CANCELLED', 'REJECTED',
@@ -146,6 +150,7 @@ describe('SCRUM-52 register for an event (service rules)', () => {
    * Expected: 409 NOT_OPEN and nothing written.
    * Type: error
    */
+  // SCRUM-52-TC05
   it('US52-B05: registration is refused when it has not been enabled', async () => {
     event = openEvent({ registration_open: false, registration_opens_at: null, registration_closes_at: null });
     await expectRefused(service.register(attendee, 3), 409, 'NOT_OPEN');
@@ -157,23 +162,27 @@ describe('SCRUM-52 register for an event (service rules)', () => {
    * Expected: Before the open time is refused; from the open time up to (not including) the close time is allowed.
    * Type: boundary
    */
+  // SCRUM-52-TC06
   it('US52-B06: registration is refused before the window opens', async () => {
     jest.setSystemTime(new Date('2026-11-01T08:59:59.999Z'));
     await expectRefused(service.register(attendee, 3), 409, 'NOT_YET_OPEN');
   });
 
+  // SCRUM-52-TC07
   it('US52-B07: registration is allowed exactly when the window opens', async () => {
     jest.setSystemTime(new Date(OPENS));
     await service.register(attendee, 3);
     expect(db.insertOne).toHaveBeenCalledTimes(1);
   });
 
+  // SCRUM-52-TC08
   it('US52-B08: registration is allowed one millisecond before the window closes', async () => {
     jest.setSystemTime(new Date('2026-11-08T08:59:59.999Z'));
     await service.register(attendee, 3);
     expect(db.insertOne).toHaveBeenCalledTimes(1);
   });
 
+  // SCRUM-52-TC09
   it.each([
     ['exactly at the close time', CLOSES],
     ['after the close time', '2026-11-09T09:00:00.000Z'],
@@ -188,6 +197,7 @@ describe('SCRUM-52 register for an event (service rules)', () => {
    * Expected: 409 EVENT_FULL and nothing written. A full event does not waitlist (hard cap).
    * Type: boundary / error
    */
+  // SCRUM-52-TC10
   it.each([50, 51])('US52-B10: registration is refused when %i of 50 places are taken', async (taken) => {
     db.fetchCount.mockResolvedValue(taken);
     await expectRefused(service.register(attendee, 3), 409, 'EVENT_FULL');
@@ -199,6 +209,7 @@ describe('SCRUM-52 register for an event (service rules)', () => {
    * Expected: 409 ALREADY_REGISTERED and nothing written, even if the event is also full.
    * Type: error
    */
+  // SCRUM-52-TC11
   it('US52-B11: a second active registration for the same event is refused', async () => {
     db.fetchMany.mockResolvedValue([{ id: 5, status: 'REGISTERED' }]);
     db.fetchCount.mockResolvedValue(50);
@@ -211,6 +222,7 @@ describe('SCRUM-52 register for an event (service rules)', () => {
    * Expected: The query filters by event, attendee and not WITHDRAWN, so a withdrawn Attendee can register again.
    * Type: normal
    */
+  // SCRUM-52-TC12
   it('US52-B12: an Attendee who withdrew can register again', async () => {
     await service.register(attendee, 3);
     expect(builder.eq).toHaveBeenCalledWith('attendee_id', 30);
@@ -224,6 +236,7 @@ describe('SCRUM-52 register for an event (service rules)', () => {
    * Expected: 403 FORBIDDEN and nothing written.
    * Type: error
    */
+  // SCRUM-52-TC13
   it.each([
     ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR,
   ])('US52-B13: a user with only the %s role cannot register', async (role) => {
@@ -236,6 +249,7 @@ describe('SCRUM-52 register for an event (service rules)', () => {
    * Expected: Allowed, because they hold the Attendee role.
    * Type: normal
    */
+  // SCRUM-52-TC14
   it('US52-B15: a user with the Attendee role plus another role can register', async () => {
     await service.register({ id: 31, roles: [ROLES.ATTENDEE, ROLES.EVENT_ORGANISER] }, 3);
     expect(db.insertOne).toHaveBeenCalledTimes(1);
@@ -247,6 +261,7 @@ describe('SCRUM-52 register for an event (service rules)', () => {
    * Expected: Treated as no places (409 EVENT_FULL) rather than unlimited.
    * Type: error
    */
+  // SCRUM-52-TC15
   it('US52-B16: an open event with no stored capacity takes no registrations', async () => {
     event = openEvent({ registration_capacity: null });
     await expectRefused(service.register(attendee, 3), 409, 'EVENT_FULL');
@@ -259,6 +274,7 @@ describe('SCRUM-52 register for an event (service rules)', () => {
    * Expected: Refused from the start time onwards with 409 EVENT_STARTED; allowed just before it.
    * Type: boundary / error
    */
+  // SCRUM-52-TC16
   it.each([
     ['exactly at the new start time', '2026-11-05T09:00:00.000Z'],
     ['after the new start time', '2026-11-05T08:00:00.000Z'],
@@ -267,12 +283,14 @@ describe('SCRUM-52 register for an event (service rules)', () => {
     await expectRefused(service.register(attendee, 3), 409, 'EVENT_STARTED');
   });
 
+  // SCRUM-52-TC17
   it('US52-B18: registration is allowed one millisecond before the event starts', async () => {
     event = openEvent({ start_at: '2026-11-05T09:00:00.001Z' });
     await service.register(attendee, 3);
     expect(db.insertOne).toHaveBeenCalledTimes(1);
   });
 
+  // SCRUM-52-TC18
   it('US52-B19: an event with no start date is not treated as started', async () => {
     event = openEvent({ start_at: null });
     await service.register(attendee, 3);
@@ -301,6 +319,7 @@ describe('SCRUM-52 register route', () => {
    * Expected: 201 with the registration and the places left.
    * Type: normal
    */
+  // SCRUM-52-TC19
   it('US52-R01: an Attendee can register through the API', async () => {
     signedInAs(ROLES.ATTENDEE);
     db.fetchCount.mockResolvedValue(10);
@@ -325,6 +344,7 @@ describe('SCRUM-52 register route', () => {
    * Expected: 409 with the EVENT_FULL code and message; nothing written.
    * Type: error
    */
+  // SCRUM-52-TC20
   it('US52-R03: a refused registration returns the error code and writes nothing', async () => {
     signedInAs(ROLES.ATTENDEE);
     db.fetchCount.mockResolvedValue(50);
