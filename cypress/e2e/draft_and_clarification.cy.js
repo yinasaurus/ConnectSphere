@@ -1,9 +1,19 @@
 const ORGANISER_EMAIL = 'organiser@acme.example';
 const COORDINATOR_EMAIL = 'coordinator@connectsphere.sg';
+const LEAD_EMAIL = 'lead@connectsphere.sg';
 const PASSWORD = 'Password123!';
 
 function login(email, password) {
   cy.visit('/');
+  cy.get('body').should(($body) => {
+    const ready = $body.find('#email').length > 0 || $body.text().includes('Sign out');
+    expect(ready, 'login form or an open session').to.eq(true);
+  });
+  cy.get('body').then(($body) => {
+    if ($body.find('#email').length === 0) {
+      cy.contains('button', 'Sign out').click();
+    }
+  });
   cy.get('#email').clear().type(email);
   cy.get('#password').clear().type(password, { log: false });
   cy.contains('button', 'Continue').click();
@@ -65,18 +75,25 @@ describe('SCUM-16: Request Clarification on Event Request', () => {
     cy.contains('button', 'Submit for review').click();
     cy.location('pathname').should('match', /\/app\/events\/\d+/);
     cy.contains('h1', eventName).should('be.visible');
-    cy.contains('.badge', 'Under review').should('be.visible');
+    cy.contains('.badge', 'Submitted').should('be.visible');
 
     // Get event ID from URL
     cy.url().then((url) => {
       const eventId = url.split('/').pop();
 
-      // Step 2: Sign in as Coordinator
+      // A Lead assigns Chloe before anyone can review the request.
+      login(LEAD_EMAIL, PASSWORD);
+      cy.visit(`/app/events/${eventId}`);
+      cy.contains('h1', eventName).should('be.visible');
+      cy.get('#assign-coordinator').select('Chloe Lim');
+      cy.contains('button', 'Assign coordinator').click();
+      cy.contains('button', 'Assign coordinator').should('not.exist');
+      cy.contains('.badge', 'Under Review').should('be.visible');
+
+      // Assigning Chloe opens the request for review. She asks for clarification.
       login(COORDINATOR_EMAIL, PASSWORD);
       cy.visit(`/app/events/${eventId}`);
       cy.contains('h1', eventName).should('be.visible');
-
-      // Coordinator requests clarification
       cy.contains('button', 'Request Clarification / Amendments').click();
       cy.get('textarea[placeholder*="State incomplete details"]').type('Please specify exact AV microphone requirements.');
       cy.contains('button', 'Send Clarification Request').click();

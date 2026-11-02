@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { displayError } from '../displayError';
+import Button from './Button';
+import AlertBanner from './AlertBanner';
 
 // <input type="datetime-local"> gives local time without a zone; send it as ISO (UTC).
 function toIso(localValue) {
@@ -101,12 +103,12 @@ export default function PlaceHoldCard({ venues, onPlaced }) {
           onChange={(e) => setExpiresAt(e.target.value)}
         />
 
-        <button className="btn" type="submit" disabled={saving}>
+        <Button  type="submit" disabled={saving}>
           {saving ? 'Placing hold…' : 'Place hold'}
-        </button>
+        </Button>
       </form>
-      {error && <div className="alert">{error}</div>}
-      {success && <div className="alert success">{success}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
+      {success && <AlertBanner tone="success">{success}</AlertBanner>}
     </div>
   );
 }

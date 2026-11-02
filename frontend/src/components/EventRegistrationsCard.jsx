@@ -1,10 +1,4 @@
-const STATUS_LABEL = {
-  REGISTERED: 'Registered',
-  WAITLISTED: 'Waitlisted',
-  WITHDRAWN: 'Withdrawn',
-  ATTENDED: 'Attended',
-  NO_SHOW: 'Did not attend',
-};
+import StatusBadge from './StatusBadge';
 
 /**
  * Purpose: the Organiser or assigned Coordinator's view of who has registered for their event,
@@ -41,7 +35,7 @@ export default function EventRegistrationsCard({ data }) {
             <strong>{row.attendee_name || 'Unnamed attendee'}</strong>
             {row.attendee_email && <span className="muted"> &middot; {row.attendee_email}</span>}
           </div>
-          <span className={`badge ${row.status}`}>{STATUS_LABEL[row.status] || row.status}</span>
+          <StatusBadge kind="registration" status={row.status} />
         </div>
       ))}
     </div>

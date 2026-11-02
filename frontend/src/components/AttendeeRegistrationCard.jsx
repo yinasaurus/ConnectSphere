@@ -1,3 +1,5 @@
+import Button from './Button';
+
 const STATE_TEXT = {
   OPEN: 'Registration is open.',
   FULL: 'This event is full.',
@@ -69,11 +71,11 @@ export default function AttendeeRegistrationCard({ status, registering = false, 
       {(canRegister || hasActiveRegistration) && (
         <div className="actions">
           {canRegister && (
-            <button className="btn" onClick={onRegister} disabled={registering}>
+            <Button  onClick={onRegister} disabled={registering}>
               {registering ? 'Registering...' : 'Register'}
-            </button>
+            </Button>
           )}
-          {hasActiveRegistration && <button className="btn ghost" onClick={onWithdraw}>Withdraw</button>}
+          {hasActiveRegistration && <Button variant="ghost"  onClick={onWithdraw}>Withdraw</Button>}
         </div>
       )}
     </div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { displayError } from '../displayError';
+import AlertBanner from '../components/AlertBanner';
 
 /**
  * Purpose: Safety Officer list of events awaiting a safety check.
@@ -32,7 +33,7 @@ export default function SafetyQueue() {
           </p>
         </div>
       </div>
-      {error && <div className="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
       <div className="card">
         <table className="table">
           <thead>

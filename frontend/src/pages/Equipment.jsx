@@ -3,6 +3,8 @@ import { api } from '../api';
 import { displayError } from '../displayError';
 import { useAuth } from '../auth';
 import { ROLES } from '../constants';
+import Button from '../components/Button';
+import AlertBanner from '../components/AlertBanner';
 
 /**
  * Purpose: catalogue plus reservation requests. Technical Support can check whether
@@ -148,8 +150,8 @@ export default function Equipment() {
           <p>Lightweight catalogue plus reservation requests. Maintenance workflow is a flag for Release 1.</p>
         </div>
       </div>
-      {error && <div className="alert">{error}</div>}
-      {successMsg && <div className="alert success">{successMsg}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
+      {successMsg && <AlertBanner tone="success">{successMsg}</AlertBanner>}
       <div className="cards">
         {items.map((item) => (
           <div className="card" key={item.id}>
@@ -167,7 +169,7 @@ export default function Equipment() {
             <input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             <input placeholder="Type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} />
             <input type="number" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} />
-            <button className="btn" onClick={async () => {
+            <Button  onClick={async () => {
               try {
                 await api('/api/equipment', { method: 'POST', body: form });
                 setForm({ ...form, name: '' });
@@ -178,7 +180,7 @@ export default function Equipment() {
             }}
             >
               Save
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -247,12 +249,12 @@ export default function Equipment() {
 
                 {isTech && request.status === 'PENDING' && check?.ok && (
                   <>
-                    <p className={check.sufficient ? 'muted' : 'alert'}>{availabilityLabel(check)}</p>
+                    {check.sufficient ? <p className="muted">{availabilityLabel(check)}</p> : <AlertBanner>{availabilityLabel(check)}</AlertBanner>}
                     {checkedWindow && <p className="muted">{checkedWindow}</p>}
                   </>
                 )}
                 {isTech && request.status === 'PENDING' && check && !check.ok && (
-                  <p className="alert">{check.message}</p>
+                  <AlertBanner>{check.message}</AlertBanner>
                 )}
 
                 {/* SCRUM-48 AC3: Technical Support Staff can update the request status as arrangements are made */}
@@ -281,35 +283,35 @@ export default function Equipment() {
                       onChange={(e) => setNotesUpdates((prev) => ({ ...prev, [request.id]: e.target.value }))}
                       style={{ padding: '3px 8px', fontSize: '0.84rem', minWidth: 200 }}
                     />
-                    <button
-                      className="btn"
-                      type="button"
+                    <Button
+                      
+                     
                       style={{ padding: '3px 10px', fontSize: '0.84rem' }}
                       onClick={() => handleStatusUpdate(request.id, request.status)}
                     >
                       Update status
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
               {isTech && request.status === 'RESERVED' && request.needs_review && (
                 <div className="actions">
-                  <button className="btn" type="button" onClick={() => reserveRequest(request.id)}>Reserve</button>
+                  <Button  onClick={() => reserveRequest(request.id)}>Reserve</Button>
                 </div>
               )}
               {isTech && request.status === 'PENDING' && (
                 <div className="actions" style={{ alignSelf: 'flex-start' }}>
-                  <button
-                    className="btn"
-                    type="button"
+                  <Button
+                    
+                   
                     onClick={() => api(`/api/equipment/requests/${request.id}/availability`)
                       .then((result) => setChecks((current) => ({ ...current, [request.id]: { ok: true, ...result } })))
                       .catch((err) => setChecks((current) => ({ ...current, [request.id]: { ok: false, message: displayError(err) } })))}
                   >
                     Check availability
-                  </button>
-                  <button className="btn" type="button" onClick={() => reserveRequest(request.id)}>Reserve</button>
-                  <button className="btn danger" onClick={() => api(`/api/equipment/requests/${request.id}/decision`, { method: 'POST', body: { approve: false, reason: 'Insufficient stock' } }).then(reload)}>Unavailable</button>
+                  </Button>
+                  <Button  onClick={() => reserveRequest(request.id)}>Reserve</Button>
+                  <Button variant="danger"  onClick={() => api(`/api/equipment/requests/${request.id}/decision`, { method: 'POST', body: { approve: false, reason: 'Insufficient stock' } }).then(reload)}>Unavailable</Button>
                 </div>
               )}
             </div>

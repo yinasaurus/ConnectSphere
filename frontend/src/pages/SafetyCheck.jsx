@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { api } from '../api';
 import { displayError } from '../displayError';
+import Button from '../components/Button';
+import AlertBanner from '../components/AlertBanner';
 
 /**
  * Purpose: Safety Officer reviews an awaiting event and records approve / reject / request changes.
@@ -95,14 +97,14 @@ export default function SafetyCheck() {
         </div>
       </div>
       {error && (
-        <div className="alert stack">
+        <AlertBanner className="stack">
           <p>{error}</p>
           {!check && (
-            <Link className="btn ghost" to="/app/events/safety-queue">Back to queue</Link>
+            <Button variant="ghost"  to="/app/events/safety-queue">Back to queue</Button>
           )}
-        </div>
+        </AlertBanner>
       )}
-      {message && <div className="alert success">{message}</div>}
+      {message && <AlertBanner tone="success">{message}</AlertBanner>}
       {check && (
         <div className="stack" style={{ maxWidth: 720 }}>
           <div className="card stack">
@@ -192,15 +194,15 @@ export default function SafetyCheck() {
               )}
 
               <div className="actions">
-                <button className="btn" type="submit" disabled={!canSubmit}>Record outcome</button>
-                <Link className="btn ghost" to="/app/events/safety-queue">Back to queue</Link>
+                <Button  type="submit" disabled={!canSubmit}>Record outcome</Button>
+                <Button variant="ghost"  to="/app/events/safety-queue">Back to queue</Button>
               </div>
             </form>
           ) : (
             <div className="card stack">
               <p><strong>Recorded outcome:</strong> {check.outcome}</p>
               {check.reason && <p><strong>Reason:</strong> {check.reason}</p>}
-              <Link className="btn ghost" to="/app/events/safety-queue">Back to queue</Link>
+              <Button variant="ghost"  to="/app/events/safety-queue">Back to queue</Button>
             </div>
           )}
         </div>

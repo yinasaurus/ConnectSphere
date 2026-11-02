@@ -38,6 +38,10 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+async function openVenueTab(name) {
+  await userEvent.click(await screen.findByRole('tab', { name }));
+}
+
 // Same messages as the real number rules in backend/src/validators/venues.validators.js.
 function numberIssue(value, label, min) {
   if (typeof value !== 'number' || Number.isNaN(value)) return `${label} must be a number`;
@@ -907,6 +911,7 @@ describe('SCRUM-19 AC7: Conflict indicators and conflict modal in Venues page', 
     });
 
     render(<Venues />);
+    await openVenueTab('Pending');
 
     expect(await screen.findByText('⚠️ Conflict with Confirmed Gala')).toBeInTheDocument();
     expect(screen.getByText('✓ No conflict')).toBeInTheDocument();
@@ -949,6 +954,7 @@ describe('SCRUM-19 AC7: Conflict indicators and conflict modal in Venues page', 
     });
 
     render(<Venues />);
+    await openVenueTab('Pending');
 
     const approveButton = await screen.findByRole('button', { name: 'Approve' });
     await user.click(approveButton);
@@ -1019,6 +1025,7 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
    */
   it('US18-UI01 (AC1+AC2): pending queue shows event, venue, date and time for each booking', async () => {
     renderVenues();
+    await openVenueTab('Pending');
 
     expect(await screen.findByTestId('pending-booking-101')).toBeInTheDocument();
     expect(screen.getByText(/Pending approval/)).toBeInTheDocument();
@@ -1048,6 +1055,7 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
   it('US18-UI02 (AC3+AC5+AC9): approving booking 101 hits decision endpoint for 101 only and keeps 102 pending', async () => {
     const user = userEvent.setup();
     renderVenues();
+    await openVenueTab('Pending');
 
     expect(await screen.findByTestId('pending-booking-101')).toBeInTheDocument();
     expect(screen.getByTestId('pending-booking-102')).toBeInTheDocument();
@@ -1085,6 +1093,7 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
   it('US18-UI03 (AC3+AC4+AC9): rejecting booking 102 sends reason and alternative for 102 only', async () => {
     const user = userEvent.setup();
     renderVenues();
+    await openVenueTab('Pending');
 
     expect(await screen.findByTestId('pending-booking-102')).toBeInTheDocument();
     const card102 = screen.getByTestId('pending-booking-102');
@@ -1138,6 +1147,7 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
     });
     const user = userEvent.setup();
     renderVenues();
+    await openVenueTab('Decided');
 
     const row = await screen.findByTestId('booking-row-201');
     expect(within(row).getByText('Requires review')).toBeInTheDocument();
@@ -1152,8 +1162,9 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
       expect(decisionCalls[0][0]).toBe('/api/venues/bookings/201/decision');
       expect(decisionCalls[0][1].body.approve).toBe(true);
     });
-    expect(screen.getByTestId('pending-booking-101')).toBeInTheDocument();
     expect(within(screen.getByTestId('booking-row-201')).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    await openVenueTab('Pending');
+    expect(screen.getByTestId('pending-booking-101')).toBeInTheDocument();
   });
 });
 
@@ -1187,6 +1198,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
     useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
     mockPage([]);
     render(<Venues />);
+    await openVenueTab('Holds');
     expect(await screen.findByRole('heading', { name: 'Place a hold' })).toBeInTheDocument();
   });
 
@@ -1194,7 +1206,12 @@ describe('SCRUM-75 holds on the Venues page', () => {
     useAuth.mockReturnValue({ hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
     mockPage([]);
     render(<Venues />);
-    await screen.findByRole('heading', { name: 'Booking requests' });
+    expect(screen.queryByRole('tab', { name: 'Holds' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Unavailable' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Pending' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Decided' })).not.toBeInTheDocument();
+    await openVenueTab('Bookings');
+    expect(await screen.findByRole('heading', { name: 'Booking requests' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Place a hold' })).not.toBeInTheDocument();
   });
 
@@ -1202,6 +1219,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
     useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
     mockPage([held]);
     render(<Venues />);
+    await openVenueTab('Decided');
     const row = await screen.findByTestId('booking-row-900');
     expect(within(row).getByText('HELD')).toBeInTheDocument();
     expect(within(row).queryByText('APPROVED')).not.toBeInTheDocument();
@@ -1236,6 +1254,7 @@ describe('SCRUM-76 expired holds on the Venues page', () => {
       return {};
     });
     render(<Venues />);
+    await openVenueTab('Decided');
     const row = await screen.findByTestId('booking-row-903');
     expect(within(row).getByText('EXPIRED')).toBeInTheDocument();
     expect(within(row).getByTestId('hold-expiry-903')).toHaveTextContent(

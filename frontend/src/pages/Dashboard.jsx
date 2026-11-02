@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
+import Button from '../components/Button';
 
 export default function Dashboard() {
   const { user, hasRole } = useAuth();
@@ -58,7 +59,7 @@ export default function Dashboard() {
           <p>This home view is role-aware. Wire more widgets here as stories land.</p>
         </div>
         {hasRole(ROLES.EVENT_ORGANISER) && (
-          <Link className="btn" to="/app/events/new">New event request</Link>
+          <Button  to="/app/events/new">New event request</Button>
         )}
       </div>
       <div className="grid-3">
@@ -100,12 +101,12 @@ export default function Dashboard() {
                   </p>
                 )}
                 <div className="actions" style={{ marginTop: 6 }}>
-                  <Link className="btn" to={`/app/events/${event.id}/edit`} style={{ padding: '6px 14px', fontSize: '0.85rem' }}>
+                  <Button  to={`/app/events/${event.id}/edit`} style={{ padding: '6px 14px', fontSize: '0.85rem' }}>
                     Amend Request Details
-                  </Link>
-                  <Link className="btn secondary" to={`/app/events/${event.id}`} style={{ padding: '6px 14px', fontSize: '0.85rem' }}>
+                  </Button>
+                  <Button variant="secondary"  to={`/app/events/${event.id}`} style={{ padding: '6px 14px', fontSize: '0.85rem' }}>
                     View & Respond
-                  </Link>
+                  </Button>
                 </div>
               </div>
             ))}

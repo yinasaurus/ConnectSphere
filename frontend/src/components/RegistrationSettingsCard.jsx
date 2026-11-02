@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Button from './Button';
 
 // <input type="datetime-local"> gives local time without a zone; send it as ISO (UTC).
 function toIso(localValue) {
@@ -51,8 +52,8 @@ export default function RegistrationSettingsCard({ event, onRun }) {
         <label htmlFor="registration-capacity">Maximum capacity</label>
         <input id="registration-capacity" type="number" min="1" max={event.expectedAttendance || undefined} step="1" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
         <div className="actions">
-          <button
-            className="btn"
+          <Button
+            
             onClick={() => onRun({
               path: `/api/events/${event.id}/registration/enable`,
               method: 'POST',
@@ -60,7 +61,7 @@ export default function RegistrationSettingsCard({ event, onRun }) {
             })}
           >
             Enable registration
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -78,8 +79,8 @@ export default function RegistrationSettingsCard({ event, onRun }) {
       <label htmlFor="registration-new-capacity">New maximum capacity</label>
       <input id="registration-new-capacity" type="number" min="1" max={event.expectedAttendance || undefined} step="1" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
       <div className="actions">
-        <button
-          className="btn secondary"
+        <Button variant="secondary"
+          
           onClick={() => onRun({
             path: `/api/events/${event.id}/registration`,
             method: 'PATCH',
@@ -91,7 +92,7 @@ export default function RegistrationSettingsCard({ event, onRun }) {
           })}
         >
           Save registration changes
-        </button>
+        </Button>
       </div>
     </div>
   );

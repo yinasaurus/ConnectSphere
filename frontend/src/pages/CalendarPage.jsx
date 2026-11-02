@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import Button from '../components/Button';
 
 export default function CalendarPage() {
   const [events, setEvents] = useState([]);
@@ -23,9 +24,9 @@ export default function CalendarPage() {
           <p>Single combined view for now. A per-venue calendar can be added later without changing the API.</p>
         </div>
         <div className="actions">
-          <button className="btn ghost" onClick={() => setCursor(addMonths(cursor, -1))}>Prev</button>
+          <Button variant="ghost"  onClick={() => setCursor(addMonths(cursor, -1))}>Prev</Button>
           <strong>{cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</strong>
-          <button className="btn ghost" onClick={() => setCursor(addMonths(cursor, 1))}>Next</button>
+          <Button variant="ghost"  onClick={() => setCursor(addMonths(cursor, 1))}>Next</Button>
         </div>
       </div>
       <div className="calendar">

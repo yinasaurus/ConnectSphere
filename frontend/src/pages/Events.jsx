@@ -4,6 +4,7 @@ import { api } from '../api';
 import StatusBadge from '../components/StatusBadge';
 import { STATUS_LABELS, ROLES } from '../constants';
 import { useAuth } from '../auth';
+import Button from '../components/Button';
 
 export default function Events() {
   const { user, hasRole } = useAuth();
@@ -60,7 +61,7 @@ export default function Events() {
           <p>Coordinators see events assigned to them. Leads and other staff see the planning list.</p>
         </div>
         {hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR) && (
-          <Link className="btn" to="/app/events/new">Create</Link>
+          <Button  to="/app/events/new">Create</Button>
         )}
       </div>
       <div className="card" style={{ marginBottom: 16 }}>

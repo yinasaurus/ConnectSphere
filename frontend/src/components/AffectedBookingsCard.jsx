@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { displayError } from '../displayError';
+import Button from './Button';
+import AlertBanner from './AlertBanner';
 
 /**
  * Purpose: Venue Staff view the bookings identified as affected by a recorded venue
@@ -61,11 +63,11 @@ export default function AffectedBookingsCard({ venues }) {
             </option>
           ))}
         </select>
-        <button className="btn" onClick={view} disabled={!periodId || loading}>
+        <Button  onClick={view} disabled={!periodId || loading}>
           {loading ? 'Loading…' : 'View affected bookings'}
-        </button>
+        </Button>
       </div>
-      {error && <div className="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
       {bookings !== null && (
         bookings.length === 0 ? (
           <p className="muted">No bookings are affected by this period.</p>

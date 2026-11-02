@@ -8,6 +8,39 @@ import UnavailabilityList from '../components/UnavailabilityList';
 import PlaceHoldCard from '../components/PlaceHoldCard';
 import AffectedBookingsCard from '../components/AffectedBookingsCard';
 import { LAYOUTS, ROLES } from '../constants';
+import Button from '../components/Button';
+import StatusBadge from '../components/StatusBadge';
+import AlertBanner from '../components/AlertBanner';
+
+const BOOKING_PAGE_SIZE = 10;
+
+function bookingMatches(booking, query) {
+  if (!query) return true;
+  return `${booking.event_name || ''} ${booking.venue_name || ''}`.toLowerCase().includes(query);
+}
+
+function pageSlice(rows, page) {
+  const count = Math.max(1, Math.ceil(rows.length / BOOKING_PAGE_SIZE));
+  const index = Math.min(page, count - 1);
+  return {
+    count,
+    index,
+    rows: rows.slice(index * BOOKING_PAGE_SIZE, index * BOOKING_PAGE_SIZE + BOOKING_PAGE_SIZE),
+  };
+}
+
+function BookingPager({ pageIndex, pageCount, total, onPage }) {
+  if (total <= BOOKING_PAGE_SIZE) return null;
+  const start = pageIndex * BOOKING_PAGE_SIZE + 1;
+  const end = Math.min((pageIndex + 1) * BOOKING_PAGE_SIZE, total);
+  return (
+    <div className="venue-pager">
+      <Button variant="ghost" disabled={pageIndex === 0} onClick={() => onPage(pageIndex - 1)}>Previous</Button>
+      <span className="muted">{start}–{end} of {total}</span>
+      <Button variant="ghost" disabled={pageIndex >= pageCount - 1} onClick={() => onPage(pageIndex + 1)}>Next</Button>
+    </div>
+  );
+}
 
 const emptyForm = {
   name: '',
@@ -49,36 +82,6 @@ const EMPTY_SEARCH = {
   layout: '',
   facilities: '',
 };
-
-// SCRUM-75 AC1: a hold is stored as TENTATIVE and shown to users as Held.
-const STATUS_LABELS = { TENTATIVE: 'HELD' };
-
-/** SCRUM-18: per-booking status badge with colour-coded pill. */
-function BookingStatusBadge({ status }) {
-  const colours = {
-    PENDING: '#b45309',
-    APPROVED: '#15803d',
-    REJECTED: '#b91c1c',
-    TENTATIVE: '#1d4ed8',
-    CANCELLED: '#6b7280',
-    EXPIRED: '#6b7280',
-  };
-  return (
-    <span
-      style={{
-        display: 'inline-block',
-        padding: '2px 10px',
-        borderRadius: 12,
-        fontSize: '0.78rem',
-        fontWeight: 600,
-        background: colours[status] || '#374151',
-        color: '#fff',
-      }}
-    >
-      {STATUS_LABELS[status] || status}
-    </span>
-  );
-}
 
 /**
  * SCRUM-18 AC2/AC3: one card per pending booking shown to Venue Staff.
@@ -149,10 +152,10 @@ function PendingBookingCard({ booking, onDecide }) {
             </p>
           )}
         </div>
-        <BookingStatusBadge status={booking.status} />
+        <StatusBadge kind="booking" status={booking.status} />
       </div>
 
-      {localError && <div className="alert" style={{ marginTop: 10 }}>{localError}</div>}
+      {localError && <AlertBanner style={{ marginTop: 10 }}>{localError}</AlertBanner>}
 
       <div style={{ marginTop: 14 }}>
         <label
@@ -185,22 +188,22 @@ function PendingBookingCard({ booking, onDecide }) {
           style={{ width: '100%', marginBottom: 12 }}
         />
         <div className="actions">
-          <button
+          <Button
             id={`approve-booking-${booking.id}`}
-            className="btn"
+            
             disabled={deciding}
             onClick={() => decide(true)}
           >
             {deciding ? 'Saving…' : 'Approve'}
-          </button>
-          <button
+          </Button>
+          <Button variant="danger"
             id={`reject-booking-${booking.id}`}
-            className="btn danger"
+            
             disabled={deciding}
             onClick={() => decide(false)}
           >
             {deciding ? 'Saving…' : 'Reject'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -237,7 +240,7 @@ function BookingRow({ booking, onApprove }) {
       <td>{booking.event_name || `Event #${booking.event_id}`}</td>
       <td>{booking.venue_name || `Venue #${booking.venue_id}`}</td>
       <td>
-        <BookingStatusBadge status={booking.status} />
+        <StatusBadge kind="booking" status={booking.status} />
         {needsClear && <span className="needs-review-flag">Requires review</span>}
       </td>
       <td>
@@ -266,16 +269,16 @@ function BookingRow({ booking, onApprove }) {
           </span>
         )}
         {needsClear && onApprove && (
-          <button
-            className="btn"
-            type="button"
+          <Button
+            
+           
             disabled={deciding}
             onClick={approveAgain}
           >
             {deciding ? 'Saving…' : 'Approve'}
-          </button>
+          </Button>
         )}
-        {localError && <div className="alert">{localError}</div>}
+        {localError && <AlertBanner>{localError}</AlertBanner>}
         {!isRejected && !isHeld && !isExpired && !(needsClear && onApprove) && <span className="muted">—</span>}
       </td>
     </tr>
@@ -311,12 +314,36 @@ export default function Venues() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [selectedVenue, setSelectedVenue] = useState(null);
+  const [section, setSection] = useState('catalogue');
+  const [bookingQuery, setBookingQuery] = useState('');
+  const [bookingPage, setBookingPage] = useState(0);
+  const [pendingPage, setPendingPage] = useState(0);
   // Numbers each search so a slow, older response can't overwrite a newer search or a Clear.
   const latestSearchId = useRef(0);
 
   const isVenueStaff = hasRole(ROLES.VENUE_STAFF);
   const pendingBookings = bookings.filter((b) => b.status === 'PENDING');
   const decidedBookings = bookings.filter((b) => b.status !== 'PENDING');
+  const venueTabs = [
+    { id: 'catalogue', label: 'Catalogue' },
+    ...(isVenueStaff ? [
+      { id: 'pending', label: 'Pending' },
+      { id: 'decided', label: 'Decided' },
+    ] : [
+      { id: 'bookings', label: 'Bookings' },
+    ]),
+    ...(isVenueStaff ? [
+      { id: 'holds', label: 'Holds' },
+      { id: 'unavailable', label: 'Unavailable' },
+    ] : []),
+  ];
+  const activeSection = venueTabs.some((item) => item.id === section) ? section : 'catalogue';
+  const bookingSource = isVenueStaff ? decidedBookings : bookings;
+  const bookingQueryText = bookingQuery.trim().toLowerCase();
+  const listedPending = pendingBookings.filter((booking) => bookingMatches(booking, bookingQueryText));
+  const listedBookings = bookingSource.filter((booking) => bookingMatches(booking, bookingQueryText));
+  const pendingSlice = pageSlice(listedPending, pendingPage);
+  const bookingSlice = pageSlice(listedBookings, bookingPage);
 
   async function reload() {
     const [venueRes, bookingRes] = await Promise.all([
@@ -481,7 +508,7 @@ export default function Venues() {
           <p>Catalogue, layouts, and booking queue. Conflict checks include setup and turnaround time.</p>
         </div>
       </div>
-      {error && <div className="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
       {saveToast && (
         <div className="venue-save-toast" role="status">
           <span className="venue-save-toast-check" aria-hidden="true">✓</span>
@@ -489,6 +516,22 @@ export default function Venues() {
         </div>
       )}
 
+      <div className="venue-tabs" role="tablist" aria-label="Venue sections">
+        {venueTabs.map((item) => (
+          <Button
+            key={item.id}
+            variant={activeSection === item.id ? 'primary' : 'ghost'}
+            role="tab"
+            aria-selected={activeSection === item.id}
+            onClick={() => setSection(item.id)}
+          >
+            {item.label}
+          </Button>
+        ))}
+      </div>
+
+      {activeSection === 'catalogue' && (
+      <>
       <div className="card" style={{ marginBottom: 18 }}>
         <h3>Search available venues</h3>
         <p className="muted">
@@ -548,16 +591,16 @@ export default function Venues() {
             />
           </div>
           <div className="stack" style={{ gridColumn: '1 / -1', flexDirection: 'row' }}>
-            <button className="btn" type="submit" disabled={searching}>
+            <Button  type="submit" disabled={searching}>
               {searching ? 'Searching…' : 'Search venues'}
-            </button>
-            <button className="btn ghost" type="button" onClick={clearSearch}>
+            </Button>
+            <Button variant="ghost"  onClick={clearSearch}>
               Clear
-            </button>
+            </Button>
           </div>
         </form>
 
-        {searchError && <div className="alert" style={{ marginTop: 12 }}>{searchError}</div>}
+        {searchError && <AlertBanner style={{ marginTop: 12 }}>{searchError}</AlertBanner>}
 
         {searchResults !== null && (
           <div style={{ marginTop: 18 }}>
@@ -570,9 +613,9 @@ export default function Venues() {
                   <div className="card" style={{ marginBottom: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                       <h3>{selectedVenue.name}</h3>
-                      <button className="btn ghost" type="button" onClick={() => setSelectedVenue(null)}>
+                      <Button variant="ghost"  onClick={() => setSelectedVenue(null)}>
                         Close
-                      </button>
+                      </Button>
                     </div>
                     <p className="muted">{selectedVenue.location}</p>
                     <p>Capacity {selectedVenue.capacity}</p>
@@ -602,14 +645,14 @@ export default function Venues() {
                           {venue.layouts.map((layout) => <span className="pill" key={layout}>{layout}</span>)}
                         </div>
                       )}
-                      <button
-                        className="btn ghost"
-                        type="button"
+                      <Button variant="ghost"
+                        
+                       
                         style={{ marginTop: 8 }}
                         onClick={() => setSelectedVenue(venue)}
                       >
                         View details
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -641,144 +684,12 @@ export default function Venues() {
       </div>
 
       {hasRole(ROLES.VENUE_STAFF) && (
-        <div className="card" style={{ marginTop: 18 }}>
-          <h3>Add venue</h3>
-          <div className="grid-2">
-            <div className="stack">
-              <label>Venue name<input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
-              <label>Location<input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></label>
-              <label>Capacity<input type="number" min="1" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: numberValue(e.target.value) })} /></label>
-              <label>Operating hours<input placeholder="08:00 - 22:00" value={form.operatingHours} onChange={(e) => setForm({ ...form, operatingHours: e.target.value })} /></label>
-            </div>
-            <div className="stack">
-              <label>Facilities<textarea value={form.facilities} onChange={(e) => setForm({ ...form, facilities: e.target.value })} /></label>
-              <label>Accessibility<textarea value={form.accessibility} onChange={(e) => setForm({ ...form, accessibility: e.target.value })} /></label>
-              <fieldset className="stack">
-                <legend>Supported layouts</legend>
-                {LAYOUTS.map((layout) => (
-                  <label className="checkbox-field" key={layout}>
-                    <input type="checkbox" checked={form.layouts.includes(layout)} onChange={() => toggleNewVenueLayout(layout)} />
-                    {layout}
-                  </label>
-                ))}
-              </fieldset>
-              <button className="btn" onClick={async () => {
-                try {
-                  await api('/api/venues', { method: 'POST', body: form });
-                  setForm({ ...form, name: '' });
-                  await reload();
-                } catch (err) {
-                  setError(displayFieldErrors(err));
-                }
-              }}
-              >
-                Save venue
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SCRUM-72: Venue Staff record a venue as unavailable for a period, with a reason. */}
-      {isVenueStaff && (
-        <BlockVenueCard
-          venues={venues}
-          onRecorded={async () => {
-            await reload();
-            setUnavailabilityRefresh((n) => n + 1);
-          }}
-        />
-      )}
-      {/* SCRUM-72: shows recorded venue unavailability periods. */}
-      {isVenueStaff && (
-        <UnavailabilityList
-          venues={venues}
-          refreshKey={unavailabilityRefresh}
-        />
-      )}
-      {/* SCRUM-75: Venue Staff place a tentative hold with an expiry. */}
-      {isVenueStaff && <PlaceHoldCard venues={venues} onPlaced={reload} />}
-
-      {/* SCRUM-60 AC8: Venue Staff view the bookings a recorded unavailability period affects. */}
-      {isVenueStaff && <AffectedBookingsCard venues={venues} />}
-
-      {/*
-        SCRUM-18 AC1/AC2/AC3: Booking requests section.
-        Venue Staff see pending requests as actionable cards (each with full details and
-        independent approve/reject controls). Decided bookings appear in a table below.
-        Non-staff (Coordinators, Organisers) see only the status table (AC7/AC8).
-      */}
-      <div className="card" style={{ marginTop: 18 }}>
-        <h3>Booking requests</h3>
-        {isVenueStaff && pendingBookings.length > 0 && (
-          <div style={{ marginBottom: 24 }}>
-            <h4 style={{ marginBottom: 10 }}>
-              Pending approval
-              <span
-                style={{
-                  marginLeft: 8,
-                  background: '#fcd34d',
-                  color: '#92400e',
-                  borderRadius: 12,
-                  fontSize: '0.78rem',
-                  fontWeight: 700,
-                  padding: '2px 9px',
-                }}
-              >
-                {pendingBookings.length}
-              </span>
-            </h4>
-            {pendingBookings.map((booking) => (
-              <PendingBookingCard
-                key={booking.id}
-                booking={booking}
-                onDecide={handleDecide}
-              />
-            ))}
-          </div>
-        )}
-
-        {isVenueStaff && pendingBookings.length === 0 && (
-          <p className="muted" style={{ marginBottom: 16 }}>No pending booking requests.</p>
-        )}
-
-        {/* Decided bookings table — Venue Staff see only decided ones; others see all */}
-        {(isVenueStaff ? decidedBookings : bookings).length > 0 ? (
-          <>
-            {isVenueStaff && <h4 style={{ marginBottom: 10 }}>Decided bookings</h4>}
-            <table className="table" id="bookings-table">
-              <thead>
-                <tr>
-                  <th>Event</th>
-                  <th>Venue</th>
-                  <th>Status</th>
-                  <th>Window</th>
-                  <th>Decision / Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(isVenueStaff ? decidedBookings : bookings).map((booking) => (
-                  <BookingRow
-                    key={booking.id}
-                    booking={booking}
-                    onApprove={isVenueStaff ? (id) => handleDecide(id, true) : undefined}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </>
-        ) : (
-          !isVenueStaff && <p className="muted">No bookings yet.</p>
-        )}
-      </div>
-
-      {hasRole(ROLES.VENUE_STAFF) && (
         <div className="card venue-update-card" ref={updateCardRef} style={{ marginTop: 18 }}>
           {!selectedId ? (
             <p className="venue-empty-state">Select a venue card from the catalogue above to edit its details.</p>
           ) : (
             <>
-              {updateError && <div className="alert">{updateError}</div>}
+              {updateError && <AlertBanner>{updateError}</AlertBanner>}
               <div className="row-between">
                 <div>
                   <h3>Update venue</h3>
@@ -816,7 +727,7 @@ export default function Venues() {
                   </div>
                   <div className="actions">
                     <input placeholder="Add layout" value={newLayout} onChange={(e) => setNewLayout(e.target.value)} />
-                    <button type="button" className="btn secondary" onClick={addLayout}>Add layout</button>
+                    <Button variant="secondary"  onClick={addLayout}>Add layout</Button>
                   </div>
                   <label className="checkbox-field">
                     <input type="checkbox" checked={updateForm.isActive} onChange={(e) => setUpdateField('isActive', e.target.checked)} />
@@ -825,12 +736,179 @@ export default function Venues() {
                 </div>
               </div>
               <div className="actions venue-update-actions">
-                <button className="btn ghost" type="button" onClick={() => setSelectedId(null)}>Cancel</button>
-                <button className="btn" type="button" disabled={saving} onClick={saveUpdate}>{saving ? 'Saving…' : 'Save changes'}</button>
+                <Button variant="ghost"  onClick={() => setSelectedId(null)}>Cancel</Button>
+                <Button  disabled={saving} onClick={saveUpdate}>{saving ? 'Saving…' : 'Save changes'}</Button>
               </div>
             </>
           )}
         </div>
+      )}
+
+      {hasRole(ROLES.VENUE_STAFF) && (
+        <div className="card" style={{ marginTop: 18 }}>
+          <h3>Add venue</h3>
+          <div className="grid-2">
+            <div className="stack">
+              <label>Venue name<input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+              <label>Location<input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></label>
+              <label>Capacity<input type="number" min="1" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: numberValue(e.target.value) })} /></label>
+              <label>Operating hours<input placeholder="08:00 - 22:00" value={form.operatingHours} onChange={(e) => setForm({ ...form, operatingHours: e.target.value })} /></label>
+            </div>
+            <div className="stack">
+              <label>Facilities<textarea value={form.facilities} onChange={(e) => setForm({ ...form, facilities: e.target.value })} /></label>
+              <label>Accessibility<textarea value={form.accessibility} onChange={(e) => setForm({ ...form, accessibility: e.target.value })} /></label>
+              <fieldset className="stack">
+                <legend>Supported layouts</legend>
+                {LAYOUTS.map((layout) => (
+                  <label className="checkbox-field" key={layout}>
+                    <input type="checkbox" checked={form.layouts.includes(layout)} onChange={() => toggleNewVenueLayout(layout)} />
+                    {layout}
+                  </label>
+                ))}
+              </fieldset>
+              <Button  onClick={async () => {
+                try {
+                  await api('/api/venues', { method: 'POST', body: form });
+                  setForm({ ...form, name: '' });
+                  await reload();
+                } catch (err) {
+                  setError(displayFieldErrors(err));
+                }
+              }}
+              >
+                Save venue
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      </>
+      )}
+
+      {activeSection === 'unavailable' && isVenueStaff && (
+      <>
+      {/* SCRUM-72: Venue Staff record a venue as unavailable for a period, with a reason. */}
+      <BlockVenueCard
+        venues={venues}
+        onRecorded={async () => {
+          await reload();
+          setUnavailabilityRefresh((n) => n + 1);
+        }}
+      />
+      {/* SCRUM-72: shows recorded venue unavailability periods. */}
+      <UnavailabilityList
+        venues={venues}
+        refreshKey={unavailabilityRefresh}
+      />
+      {/* SCRUM-60 AC8: Venue Staff view the bookings a recorded unavailability period affects. */}
+      <AffectedBookingsCard venues={venues} />
+      </>
+      )}
+
+      {activeSection === 'holds' && isVenueStaff && (
+        <PlaceHoldCard venues={venues} onPlaced={reload} />
+      )}
+
+      {activeSection === 'pending' && isVenueStaff && (
+      <div className="card" style={{ marginTop: 18 }}>
+        {/*
+          SCRUM-18 AC1/AC2/AC3: pending requests are the work queue.
+          Each card has its own approve and reject controls.
+        */}
+        <h3>
+          Pending approval
+          <span className="count-pill">{listedPending.length}</span>
+        </h3>
+        <div className="list-filter">
+          <label htmlFor="pending-name-filter">Find a booking</label>
+          <input
+            id="pending-name-filter"
+            value={bookingQuery}
+            placeholder="Event or venue name"
+            onChange={(e) => {
+              setBookingQuery(e.target.value);
+              setPendingPage(0);
+            }}
+          />
+        </div>
+        {listedPending.length > 0 ? (
+          <>
+            {pendingSlice.rows.map((booking) => (
+              <PendingBookingCard
+                key={booking.id}
+                booking={booking}
+                onDecide={handleDecide}
+              />
+            ))}
+            <BookingPager
+              pageIndex={pendingSlice.index}
+              pageCount={pendingSlice.count}
+              total={listedPending.length}
+              onPage={setPendingPage}
+            />
+          </>
+        ) : pendingBookings.length === 0 ? (
+          <p className="muted">No pending booking requests.</p>
+        ) : (
+          <p className="muted">No pending bookings match that name.</p>
+        )}
+      </div>
+      )}
+
+      {(activeSection === 'decided' || activeSection === 'bookings') && (
+      <div className="card" style={{ marginTop: 18 }}>
+        {/*
+          SCRUM-18 AC7/AC8: Venue Staff see decided bookings here.
+          Coordinators and Organisers see every booking in this one table.
+        */}
+        <h3>{isVenueStaff ? 'Decided bookings' : 'Booking requests'}</h3>
+        <div className="list-filter">
+          <label htmlFor="booking-name-filter">Find a booking</label>
+          <input
+            id="booking-name-filter"
+            value={bookingQuery}
+            placeholder="Event or venue name"
+            onChange={(e) => {
+              setBookingQuery(e.target.value);
+              setBookingPage(0);
+            }}
+          />
+        </div>
+        {listedBookings.length > 0 ? (
+          <>
+            <table className="table" id="bookings-table">
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Venue</th>
+                  <th>Status</th>
+                  <th>Window</th>
+                  <th>Decision / Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bookingSlice.rows.map((booking) => (
+                  <BookingRow
+                    key={booking.id}
+                    booking={booking}
+                    onApprove={isVenueStaff ? (id) => handleDecide(id, true) : undefined}
+                  />
+                ))}
+              </tbody>
+            </table>
+            <BookingPager
+              pageIndex={bookingSlice.index}
+              pageCount={bookingSlice.count}
+              total={listedBookings.length}
+              onPage={setBookingPage}
+            />
+          </>
+        ) : bookingQueryText ? (
+          <p className="muted">No bookings match that name.</p>
+        ) : (
+          <p className="muted">{isVenueStaff ? 'No decided bookings yet.' : 'No bookings yet.'}</p>
+        )}
+      </div>
       )}
       <ConflictModal
         isOpen={Boolean(conflictModalMsg)}

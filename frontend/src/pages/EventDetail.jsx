@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { displayError } from '../displayError';
 import { useAuth } from '../auth';
@@ -10,6 +10,8 @@ import RegistrationSettingsCard from '../components/RegistrationSettingsCard';
 import EventRegistrationsCard from '../components/EventRegistrationsCard';
 import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
+import Button from '../components/Button';
+import AlertBanner from '../components/AlertBanner';
 
 // Format each saved booking window and submitted date for the event's request list.
 function formatBookingTime(value) {
@@ -265,10 +267,10 @@ export default function EventDetail() {
         </div>
         <StatusBadge status={event.status} subState={event.subState} />
       </div>
-      {error && <div className="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
       {/* Keep the submitted-request confirmation visible after returning from booking or equipment request. */}
       {(message || location.state?.venueBookingSubmitted || location.state?.replacementBookingSubmitted || location.state?.equipmentRequestSubmitted) && (
-        <div className="alert success" role="status">
+        <AlertBanner tone="success">
           {location.state?.venueBookingSubmitted
             ? 'Venue booking request submitted. Venue Staff will review it as Pending.'
             : location.state?.replacementBookingSubmitted
@@ -276,7 +278,7 @@ export default function EventDetail() {
             : location.state?.equipmentRequestSubmitted
             ? 'Equipment request submitted. Technical Support Staff can now review and prepare the equipment.'
             : message}
-        </div>
+        </AlertBanner>
       )}
 
       <div className="grid-2">
@@ -331,9 +333,9 @@ export default function EventDetail() {
                   <option key={row.id} value={row.id}>{row.fullName}</option>
                 ))}
               </select>
-              <button
-                className="btn"
-                type="button"
+              <Button
+                
+               
                 disabled={!assignCoordinatorId}
                 onClick={() => run(() => api(`/api/events/${id}/assign-coordinator`, {
                   method: 'POST',
@@ -341,7 +343,7 @@ export default function EventDetail() {
                 }))}
               >
                 Assign coordinator
-              </button>
+              </Button>
             </div>
           )}
 
@@ -371,9 +373,9 @@ export default function EventDetail() {
                   <option key={row.id} value={row.id}>{row.fullName}</option>
                 ))}
               </select>
-              <button
-                className="btn"
-                type="button"
+              <Button
+                
+               
                 disabled={!assignCoordinatorId}
                 onClick={() => run(() => api(`/api/events/${id}/reassign-coordinator`, {
                   method: 'POST',
@@ -381,16 +383,16 @@ export default function EventDetail() {
                 }))}
               >
                 Reassign coordinator
-              </button>
+              </Button>
             </div>
           )}
 
           {isOrganiser && event.status === 'DRAFT' && (
             <div className="card actions">
-              <Link className="btn secondary" to={`/app/events/${id}/edit`}>Continue editing</Link>
-              <button className="btn" onClick={() => run(() => api(`/api/events/${id}/submit`, { method: 'POST' }))}>
+              <Button variant="secondary"  to={`/app/events/${id}/edit`}>Continue editing</Button>
+              <Button  onClick={() => run(() => api(`/api/events/${id}/submit`, { method: 'POST' }))}>
                 Submit for review
-              </button>
+              </Button>
             </div>
           )}
 
@@ -401,15 +403,15 @@ export default function EventDetail() {
                 <StatusBadge status={event.status} subState={event.subState} />
               </div>
               <p>The event coordinator has reviewed your request and needs additional details or amendments before moving to planning.</p>
-              <div className="alert warning" style={{ whiteSpace: 'pre-wrap', margin: '4px 0 12px' }}>
+              <AlertBanner tone="warning" style={{ whiteSpace: 'pre-wrap', margin: '4px 0 12px' }}>
                 <strong>Coordinator review remarks:</strong>
                 <p style={{ marginTop: 4 }}>{event.reviewRemarks}</p>
-              </div>
+              </AlertBanner>
               <div className="actions">
-                <Link className="btn" to={`/app/events/${id}/edit`}>Edit & Amend Details</Link>
-                <button className="btn secondary" onClick={() => setShowRespondForm(!showRespondForm)}>
+                <Button  to={`/app/events/${id}/edit`}>Edit & Amend Details</Button>
+                <Button variant="secondary"  onClick={() => setShowRespondForm(!showRespondForm)}>
                   {showRespondForm ? 'Close Response Form' : 'Send Clarification Response'}
-                </button>
+                </Button>
               </div>
 
               {showRespondForm && (
@@ -421,8 +423,8 @@ export default function EventDetail() {
                     placeholder="Describe the changes made or answer the coordinator's questions..."
                   />
                   <div className="actions">
-                    <button
-                      className="btn"
+                    <Button
+                      
                       disabled={!clarificationReply.trim()}
                       onClick={() => run(async () => {
                         await api(`/api/events/${id}/clarification/respond`, {
@@ -434,8 +436,8 @@ export default function EventDetail() {
                       })}
                     >
                       Submit Response
-                    </button>
-                    <button className="btn ghost" onClick={() => setShowRespondForm(false)}>Cancel</button>
+                    </Button>
+                    <Button variant="ghost"  onClick={() => setShowRespondForm(false)}>Cancel</Button>
                   </div>
                 </div>
               )}
@@ -462,7 +464,7 @@ export default function EventDetail() {
             <div className="card stack">
               <h3>Request a change</h3>
               <p className="muted">Ask the assigned coordinator to update date, time, attendance, venue requirements or equipment requirements. Other fields cannot be requested here.</p>
-              {changeRequestError && <div className="alert">{changeRequestError}</div>}
+              {changeRequestError && <AlertBanner>{changeRequestError}</AlertBanner>}
               <label htmlFor="change-start">Proposed start</label>
               <input
                 id="change-start"
@@ -497,9 +499,9 @@ export default function EventDetail() {
                 value={changeForm.equipmentNotes}
                 onChange={(e) => setChangeForm((prev) => ({ ...prev, equipmentNotes: e.target.value }))}
               />
-              <button
-                className="btn"
-                type="button"
+              <Button
+                
+               
                 disabled={!Object.keys(buildChangePayload(changeForm)).length}
                 onClick={() => run(async () => {
                   await api(`/api/events/${id}/change-requests`, {
@@ -510,7 +512,7 @@ export default function EventDetail() {
                 })}
               >
                 Submit change request
-              </button>
+              </Button>
             </div>
           )}
 
@@ -537,19 +539,19 @@ export default function EventDetail() {
                       {/* SCRUM-69 AC2: page-level run() so a 400 (invalid requested values)
                           shows in the alert above the event, not only in Coordinator actions. */}
                       <div className="actions">
-                        <button
-                          className="btn"
-                          type="button"
+                        <Button
+                          
+                         
                           onClick={() => run(() => api(
                             `/api/events/${id}/change-requests/${row.id}/decision`,
                             { method: 'POST', body: { approve: true } }
                           ))}
                         >
                           Approve change
-                        </button>
-                        <button
-                          className="btn danger"
-                          type="button"
+                        </Button>
+                        <Button variant="danger"
+                          
+                         
                           onClick={() => run(() => api(
                             `/api/events/${id}/change-requests/${row.id}/decision`,
                             {
@@ -562,7 +564,7 @@ export default function EventDetail() {
                           ))}
                         >
                           Reject change
-                        </button>
+                        </Button>
                       </div>
                     </>
                   )}
@@ -574,14 +576,14 @@ export default function EventDetail() {
           {isCoordinator && (
             <div className="card stack review-panel">
               <h3>Coordinator {event.status === 'UNDER_REVIEW' ? 'review actions' : 'actions'}</h3>
-              {coordinatorError && <div className="alert" role="alert">{coordinatorError}</div>}
+              {coordinatorError && <AlertBanner>{coordinatorError}</AlertBanner>}
               {/*
                 Purpose: assigned Coordinator opens the shared edit form before Confirmed.
                 AC: SCRUM-40 1C, 2A — Confirmed/terminal statuses stay on change requests only.
               */}
               {!COORD_EDIT_LOCKED_STATUSES.includes(event.status) && (
                 <div className="actions">
-                  <Link className="btn secondary" to={`/app/events/${id}/edit`}>Edit event details</Link>
+                  <Button variant="secondary"  to={`/app/events/${id}/edit`}>Edit event details</Button>
                 </div>
               )}
               {event.status === 'CONFIRMED' && (
@@ -591,9 +593,9 @@ export default function EventDetail() {
               )}
               {event.status === 'SUBMITTED' && (
                 <div className="actions">
-                  <button className="btn" onClick={() => run(() => api(`/api/events/${id}/review`, { method: 'POST' }))}>
+                  <Button  onClick={() => run(() => api(`/api/events/${id}/review`, { method: 'POST' }))}>
                     Open for review
-                  </button>
+                  </Button>
                 </div>
               )}
               {event.status === 'UNDER_REVIEW' && (
@@ -630,13 +632,13 @@ export default function EventDetail() {
                       body: { decision, reason: text },
                     }))}
                     extra={(
-                      <button
-                        className="btn secondary"
-                        type="button"
+                      <Button variant="secondary"
+                        
+                       
                         onClick={() => setShowClarificationInput(true)}
                       >
                         {event.subState === 'ACTION_REQUIRED' ? 'Update Clarification' : 'Request Clarification / Amendments'}
-                      </button>
+                      </Button>
                     )}
                   />
 
@@ -650,8 +652,8 @@ export default function EventDetail() {
                         placeholder="State incomplete details or amendments needed from the organizer..."
                       />
                       <div className="actions">
-                        <button
-                          className="btn"
+                        <Button
+                          
                           disabled={!clarificationNotes.trim()}
                           onClick={() => runCoordinatorAction(async () => {
                             await api(`/api/events/${id}/clarification`, {
@@ -663,40 +665,40 @@ export default function EventDetail() {
                           })}
                         >
                           Send Clarification Request
-                        </button>
-                        <button className="btn ghost" type="button" onClick={() => setShowClarificationInput(false)}>Cancel</button>
+                        </Button>
+                        <Button variant="ghost"  onClick={() => setShowClarificationInput(false)}>Cancel</Button>
                       </div>
                     </div>
                   )}
                 </>
               )}
               {event.status === 'APPROVED' && (
-                <button className="btn" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'PLANNING' } }))}>
+                <Button  onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'PLANNING' } }))}>
                   Start planning
-                </button>
+                </Button>
               )}
               {event.status === 'PLANNING' && (
                 <>
-                  <button
-                    className="btn"
+                  <Button
+                    
                     disabled={!venuesReadyForSafetyCheck}
                     aria-describedby={safetyCheckHint ? 'safety-check-hint' : undefined}
                     onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'AWAITING_SAFETY_CHECK' } }))}
                   >
                     Send to safety check
-                  </button>
+                  </Button>
                   {safetyCheckHint && <p className="muted" id="safety-check-hint">{safetyCheckHint}</p>}
                 </>
               )}
               {event.status === 'PREPARATION' && (
-                <button className="btn" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'CONFIRMED' } }))}>
+                <Button  onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'CONFIRMED' } }))}>
                   Confirm event
-                </button>
+                </Button>
               )}
               {event.status === 'CONFIRMED' && (
-                <button className="btn secondary" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'COMPLETED' } }))}>
+                <Button variant="secondary"  onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'COMPLETED' } }))}>
                   Mark completed
-                </button>
+                </Button>
               )}
               {event.status !== 'UNDER_REVIEW' && (
                 <>
@@ -752,18 +754,18 @@ export default function EventDetail() {
                     </>
                   )}
                   <div className="actions">
-                    <button
-                      className="btn"
+                    <Button
+                      
                       onClick={() => run(() => api(`/api/venues/bookings/${booking.id}/decision`, {
                         method: 'POST',
                         body: { approve: true },
                       }))}
                     >
                       Approve venue
-                    </button>
+                    </Button>
                     {booking.status === 'PENDING' && (
-                      <button
-                        className="btn danger"
+                      <Button variant="danger"
+                        
                         onClick={() => run(() => api(`/api/venues/bookings/${booking.id}/decision`, {
                           method: 'POST',
                           body: {
@@ -774,7 +776,7 @@ export default function EventDetail() {
                         }))}
                       >
                         Reject venue
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -821,13 +823,13 @@ export default function EventDetail() {
               </div>
             ))}
             <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Leave a planning note" />
-            <button className="btn secondary" onClick={() => run(async () => {
+            <Button variant="secondary"  onClick={() => run(async () => {
               await api(`/api/comments/${id}`, { method: 'POST', body: { body: comment } });
               setComment('');
             })}
             >
               Post comment
-            </button>
+            </Button>
           </div>}
         </div>
 
@@ -891,12 +893,12 @@ export default function EventDetail() {
                   </p>
                 )}
                 {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && booking.needs_review && (
-                  <Link
-                    className="btn secondary"
+                  <Button variant="secondary"
+                    
                     to={`/app/events/${id}/venue-booking?replacementFor=${encodeURIComponent(booking.id)}`}
                   >
                     Request replacement venue
-                  </Link>
+                  </Button>
                 )}
                 {/*
                  * Purpose: expose cancellation for an eligible booking to its assigned Coordinator.
@@ -908,34 +910,34 @@ export default function EventDetail() {
                   && event.status !== 'COMPLETED'
                   && event.status !== 'CANCELLED'
                   && ['PENDING', 'TENTATIVE', 'APPROVED'].includes(booking.status) && (
-                  <button
-                    className="btn ghost"
+                  <Button variant="ghost"
+                    
                     onClick={() => run(() => api(`/api/venues/bookings/${booking.id}/cancel`, { method: 'POST' }))}
                   >
                     Cancel booking
-                  </button>
+                  </Button>
                 )}
               </div>
             )) : <p className="muted">No booking yet. Essential arrangements must be approved before confirmation.</p>}
             {/* A coordinator may create independent requests for the same event. */}
             {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && canBookVenue && (
-              <Link className="btn venue-book-link" to={`/app/events/${id}/venue-booking`}>Book a venue</Link>
+              <Button className="venue-book-link" to={`/app/events/${id}/venue-booking`}>Book a venue</Button>
             )}
           </div>
           {hasRole(ROLES.SAFETY_OFFICER) && (
             <div className="card stack">
               <h3>Safety check</h3>
               <p className="muted">Only a Safety Officer can open a safety check or record its outcome.</p>
-              <Link className="btn ghost" to="/app/events/safety-queue">Safety queue</Link>
+              <Button variant="ghost"  to="/app/events/safety-queue">Safety queue</Button>
               {event.status === 'AWAITING_SAFETY_CHECK' && (
-                <Link className="btn" to={`/app/events/${id}/safety-check`}>Open safety check</Link>
+                <Button  to={`/app/events/${id}/safety-check`}>Open safety check</Button>
               )}
             </div>
           )}
 
           {canViewPlanning && <div className="card">
             <h3>Equipment requests</h3>
-            {equipmentError ? <p className="alert">Equipment requests could not be loaded: {equipmentError}</p>
+            {equipmentError ? <AlertBanner>Equipment requests could not be loaded: {equipmentError}</AlertBanner>
               : equipmentRequests.length ? equipmentRequests.map((item) => (
               <div key={item.id} className="equipment-request-row" style={{ marginBottom: 10 }}>
                 <p style={{ margin: '2px 0' }}>
@@ -966,9 +968,9 @@ export default function EventDetail() {
             )) : <p className="muted">No equipment requested yet.</p>}
             {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && !['CANCELLED', 'REJECTED'].includes(event.status) && (
               <div style={{ marginTop: 10 }}>
-                <Link className="btn equipment-request-link" to={`/app/events/${id}/equipment-request`}>
+                <Button className="equipment-request-link" to={`/app/events/${id}/equipment-request`}>
                   Request equipment
-                </Link>
+                </Button>
               </div>
             )}
           </div>}

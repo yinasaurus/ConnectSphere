@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { displayError } from '../displayError';
+import Button from '../components/Button';
+import AlertBanner from '../components/AlertBanner';
 
 const STANDARD_EQUIPMENT_TYPES = [
   'AUDIO',
@@ -200,7 +202,7 @@ export default function EquipmentRequest() {
     return (
       <div className="card alert">
         <p>{error || 'Event not found.'}</p>
-        <Link className="btn" to="/app/events">Back to events</Link>
+        <Button  to="/app/events">Back to events</Button>
       </div>
     );
   }
@@ -219,7 +221,7 @@ export default function EquipmentRequest() {
         </div>
       </div>
 
-      {error && <div className="alert" role="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
 
       <div className="grid-2">
         <div className="stack">
@@ -327,17 +329,17 @@ export default function EquipmentRequest() {
             </div>
 
             <div className="actions" style={{ marginTop: 14 }}>
-              <button
+              <Button
                 id="submit-equipment-request"
-                className="btn"
+                
                 type="submit"
                 disabled={submitting}
               >
                 {submitting ? 'Submitting…' : 'Submit Equipment Request'}
-              </button>
-              <Link className="btn ghost" to={`/app/events/${id}`}>
+              </Button>
+              <Button variant="ghost"  to={`/app/events/${id}`}>
                 Cancel
-              </Link>
+              </Button>
             </div>
           </form>
         </div>

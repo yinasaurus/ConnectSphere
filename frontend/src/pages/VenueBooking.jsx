@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { displayError } from '../displayError';
+import Button from '../components/Button';
+import AlertBanner from '../components/AlertBanner';
 
 // Keep date/time output consistent between the live window and saved requests.
 function formatTime(value) {
@@ -264,7 +266,7 @@ export default function VenueBooking() {
   }
 
   if (loading) return <p className="muted">Loading venue booking…</p>;
-  if (!event) return <div className="alert" role="alert">{error || 'Event could not be loaded.'}</div>;
+  if (!event) return <AlertBanner>{error || 'Event could not be loaded.'}</AlertBanner>;
 
   return (
     <div className="venue-booking-page">
@@ -275,12 +277,12 @@ export default function VenueBooking() {
       </header>
 
       <Link className="venue-back-link" to={`/app/events/${id}`}>‹ Back to event</Link>
-      {error && <div className="alert" role="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
       {replacementFor && (
-        <p className="alert info">
+        <AlertBanner tone="info">
           The replacement request uses this event’s saved details and schedule. The affected booking and event remain unchanged.
           A new request will be Pending until Venue Staff decide.
-        </p>
+        </AlertBanner>
       )}
 
       <div className="venue-booking-columns">
@@ -397,10 +399,10 @@ export default function VenueBooking() {
               After you submit, the request is sent to Venue Staff with the status Pending.
             </p>
             <div className="actions booking-actions">
-              <Link className="btn secondary" to={`/app/events/${id}`}>Cancel</Link>
-              <button className="btn" disabled={!canSubmit} onClick={submitRequest}>
+              <Button variant="secondary"  to={`/app/events/${id}`}>Cancel</Button>
+              <Button  disabled={!canSubmit} onClick={submitRequest}>
                 {submitting ? 'Submitting…' : replacementFor ? 'Submit replacement request' : 'Submit request'}
-              </button>
+              </Button>
             </div>
           </section>
 

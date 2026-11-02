@@ -3,6 +3,8 @@ import { api } from '../api';
 import { displayError } from '../displayError';
 import { useAuth } from '../auth';
 import { ROLES } from '../constants';
+import Button from '../components/Button';
+import AlertBanner from '../components/AlertBanner';
 
 // SCRUM-66: venue availability view. The backend decides what is available
 // (GET /api/venues/:id/availability); this page only picks the range and shows it.
@@ -111,14 +113,14 @@ export default function VenueAvailability() {
           <label htmlFor="availability-to" className="muted">To</label>
           <input id="availability-to" type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} />
           <div className="actions">
-            <button className="btn" type="submit" disabled={loading}>
+            <Button  type="submit" disabled={loading}>
               {loading ? 'Checking…' : 'Check availability'}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
 
-      {error && <div className="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
 
       {result && (
         <div className="card">
@@ -161,7 +163,7 @@ export default function VenueAvailability() {
       {canSeeBookings && (bookings || bookingsError) && (
         <div className="card" style={{ marginTop: 18 }}>
           <h3>{bookingsVenue ? `Existing bookings at ${bookingsVenue}` : 'Existing bookings'}</h3>
-          {bookingsError && <div className="alert">{bookingsError}</div>}
+          {bookingsError && <AlertBanner>{bookingsError}</AlertBanner>}
           {bookings && bookings.length === 0 && <p className="muted">No confirmed bookings or active holds in this period.</p>}
           {bookings && bookings.length > 0 && (
             <table className="table" aria-label="Existing bookings">

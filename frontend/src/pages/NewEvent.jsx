@@ -4,6 +4,8 @@ import { api } from '../api';
 import { displayError } from '../displayError';
 import { useAuth } from '../auth';
 import { CATEGORIES, LAYOUTS, ROLES } from '../constants';
+import Button from '../components/Button';
+import AlertBanner from '../components/AlertBanner';
 
 const empty = {
   name: '',
@@ -254,7 +256,7 @@ export default function NewEvent() {
           </p>
         </div>
       </div>
-      {error && <div className="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
       {eventData?.subState === 'ACTION_REQUIRED' && (
         <div className="card attention-card" style={{ marginBottom: 16 }}>
           <p style={{ margin: '0 0 6px', fontWeight: 600, color: '#92400e' }}>
@@ -346,17 +348,17 @@ export default function NewEvent() {
           <div className="actions">
             {isCoordinatorEdit ? (
               <>
-                <button className="btn" disabled={busy} onClick={() => save(false)}>Save changes</button>
-                <button className="btn ghost" disabled={busy} onClick={() => navigate(`/app/events/${id}`)}>Cancel</button>
+                <Button  disabled={busy} onClick={() => save(false)}>Save changes</Button>
+                <Button variant="ghost"  disabled={busy} onClick={() => navigate(`/app/events/${id}`)}>Cancel</Button>
               </>
             ) : (
               <>
-                <button className="btn secondary" disabled={busy} onClick={() => save(false)}>
+                <Button variant="secondary"  disabled={busy} onClick={() => save(false)}>
                   {eventData?.subState === 'ACTION_REQUIRED' ? 'Save changes' : 'Save as draft'}
-                </button>
-                <button className="btn" disabled={busy} onClick={() => save(true)}>
+                </Button>
+                <Button  disabled={busy} onClick={() => save(true)}>
                   {eventData?.subState === 'ACTION_REQUIRED' ? 'Submit amended request' : 'Submit for review'}
-                </button>
+                </Button>
               </>
             )}
           </div>

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { displayError } from '../displayError';
 import { useAuth } from '../auth';
+import Button from '../components/Button';
+import AlertBanner from '../components/AlertBanner';
 
 export default function Drafts() {
   const { user } = useAuth();
@@ -24,9 +26,9 @@ export default function Drafts() {
           <h1>My drafts</h1>
           <p>Incomplete event requests you have saved. Continue editing before submitting for review.</p>
         </div>
-        <Link className="btn" to="/app/events/new">New request</Link>
+        <Button  to="/app/events/new">New request</Button>
       </div>
-      {error && <div className="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
       <div className="cards">
         {drafts.map((draft) => (
           <Link key={draft.id} to={`/app/events/${draft.id}/edit`} className="card" style={{ textDecoration: 'none' }}>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { displayError } from '../displayError';
 import StatusBadge from '../components/StatusBadge';
+import AlertBanner from '../components/AlertBanner';
 
 /**
  * Purpose: Lead-only overview of the Coordinators this Lead assigned and their events.
@@ -29,7 +30,7 @@ export default function AssignmentOverview() {
           <p>Coordinators you assigned, and the events you assigned them to. Only an Event Coordinator Lead can open this.</p>
         </div>
       </div>
-      {error && <div className="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
       {!error && (
         <div className="card">
           <table className="table">
