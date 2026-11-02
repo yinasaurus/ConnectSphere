@@ -8,7 +8,7 @@
  *   AC5  Converted (non-TENTATIVE) bookings receive no further notices.
  *   AC6  Each hold receives at most one warning and one expiry notice.
  *
- * Dependency: SCRUM-75 creates expiring holds; SCRUM-76 converts eligible holds.
+ * Dependency: SCRUM-75 creates expiring holds; SCRUM-76 expires holds automatically.
  */
 jest.mock('../src/config/db', () => ({
   supabase: { from: jest.fn() },
@@ -67,7 +67,7 @@ beforeEach(() => {
       || field === 'hold_expiry_notice_sent_at')?.[1];
     return source.filter((row) => {
       if (
-        row.status !== BOOKING_STATUS.TENTATIVE
+        !builder.__statuses.includes(row.status)
         || row[marker] != null
         || claimedMarkers.has(`${row.id}:${marker}`)
       ) return false;
@@ -81,6 +81,7 @@ beforeEach(() => {
   supabase.from.mockImplementation((table) => ({
     __table: table,
     __kind: null,
+    __statuses: [],
     select: jest.fn(function select() {
       return this;
     }),
@@ -91,9 +92,18 @@ beforeEach(() => {
     eq: jest.fn(function eq(field, value) {
       if (currentClaim) {
         if (field === 'id') currentClaim.id = value;
-        if (field === 'status') currentClaim.status = value;
       } else {
+        if (field === 'status') this.__statuses = [value];
         this.__filters = [...(this.__filters || []), ['eq', field, value]];
+      }
+      return this;
+    }),
+    in: jest.fn(function inFilter(field, values) {
+      if (currentClaim) {
+        if (field === 'status') currentClaim.statuses = values;
+      } else {
+        if (field === 'status') this.__statuses = values;
+        this.__filters = [...(this.__filters || []), ['in', field, values]];
       }
       return this;
     }),
@@ -115,7 +125,11 @@ beforeEach(() => {
       const claim = currentClaim;
       currentClaim = null;
       const key = `${claim.id}:${claim.marker}`;
-      if (claim.status !== BOOKING_STATUS.TENTATIVE || !claim.nullMarker || claimedMarkers.has(key)) {
+      if (!claim.statuses.includes(BOOKING_STATUS.TENTATIVE)
+        && !claim.statuses.includes(BOOKING_STATUS.EXPIRED)) {
+        return { data: null, error: null };
+      }
+      if (!claim.nullMarker || claimedMarkers.has(key)) {
         return { data: null, error: null };
       }
       claimedMarkers.add(key);
@@ -152,13 +166,16 @@ describe('SCRUM-80 hold expiry notifications', () => {
   /*
    * AC: SCRUM-80 AC2, AC3, AC4.
    * Scenario: A tentative hold has passed its expiry.
-   * Setup: Expired hold still has TENTATIVE status and an assigned Coordinator.
+   * Setup: SCRUM-76 has already changed the hold status to EXPIRED.
    * Expected: Only that Coordinator gets one named expiry notice.
    * Type: boundary.
    */
   // SCRUM-80-TC02
   it('sends the Coordinator a named notice after the hold expires', async () => {
-    expiredRows = [hold({ hold_expires_at: '2026-11-01T23:59:00.000Z' })];
+    expiredRows = [hold({
+      status: BOOKING_STATUS.EXPIRED,
+      hold_expires_at: '2026-11-01T23:59:00.000Z',
+    })];
 
     const result = await venuesService.processDueHoldNotifications(NOW, 15);
 
@@ -175,9 +192,9 @@ describe('SCRUM-80 hold expiry notifications', () => {
 
   /*
    * AC: SCRUM-80 AC1, AC5, AC6.
-   * Scenario: A hold's expiry is outside the configured warning window, then the hold converts.
-   * Setup: Warning query returns no due holds; expiry candidate has already changed to APPROVED.
-   * Expected: No warning or expiry notice is sent for the converted booking.
+   * Scenario: A hold's expiry is outside the configured warning window and it is confirmed.
+   * Setup: The row status is APPROVED when the expiry query runs.
+   * Expected: No warning or expiry notice is sent for the confirmed booking.
    * Type: boundary.
    */
   // SCRUM-80-TC03
@@ -223,7 +240,10 @@ describe('SCRUM-80 hold expiry notifications', () => {
     expect(notifyUser).toHaveBeenCalledTimes(1);
 
     warningRows = [];
-    expiredRows = [hold({ hold_expires_at: '2026-11-01T23:59:00.000Z' })];
+    expiredRows = [hold({
+      status: BOOKING_STATUS.EXPIRED,
+      hold_expires_at: '2026-11-01T23:59:00.000Z',
+    })];
     await venuesService.processDueHoldNotifications(NOW, 15);
     await venuesService.processDueHoldNotifications(NOW, 15);
     expect(notifyUser).toHaveBeenCalledTimes(2);

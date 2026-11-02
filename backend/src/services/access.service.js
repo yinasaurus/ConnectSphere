@@ -13,7 +13,12 @@ const { httpError } = require('../middleware/errorHandler');
 const { assertTransition } = require('../domain/statusMachine');
 const { writeAudit, notifyUser } = require('./audit.service');
 
-const INACTIVE_BOOKING_STATUSES = [BOOKING_STATUS.REJECTED, BOOKING_STATUS.CANCELLED];
+// SCRUM-76: an expired hold is no longer an arrangement, like a rejected or cancelled booking.
+const INACTIVE_BOOKING_STATUSES = [
+  BOOKING_STATUS.REJECTED,
+  BOOKING_STATUS.CANCELLED,
+  BOOKING_STATUS.EXPIRED,
+];
 
 /**
  * Purpose: active user ids that hold the Safety Officer role (for readiness notices).

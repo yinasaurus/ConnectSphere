@@ -940,10 +940,49 @@ async function placeHold(user, payload = {}, now = new Date()) {
   return { ...created, coordinator_id: event.coordinator_id ?? null };
 }
 
+/**
+ * Purpose: release the venue from every hold whose expiry has been reached by changing it from
+ * TENTATIVE (Held) to EXPIRED. Run on a timer by jobs/holdExpiry.job.js, so no user action is
+ * needed. The read paths (findConflict, search, availability) already ignore a hold once its
+ * expiry has passed, so the venue is free even between two runs.
+ * AC: SCRUM-76 AC1 (Held + expiry reached -> Expired, automatically), AC2 (a confirmed booking
+ *     is not touched), AC3 (not before the expiry), AC4 (a cancelled hold is not touched),
+ *     AC7 (re-running changes nothing: an EXPIRED row no longer matches status = TENTATIVE).
+ * Business rule: W7 #4, a tentative hold has a mandatory expiry.
+ * Inputs: now (a parameter so tests can fix the time).
+ * Output: the rows that were expired by this run (empty when there were none).
+ * Failure: a database error is passed on; nothing is half-applied because it is one UPDATE.
+ */
+async function expireHolds(now = new Date()) {
+  const nowIso = new Date(now).toISOString();
+  // One conditional UPDATE: only rows that are still Held and whose expiry is at or before now.
+  // A hold with no expiry (rows from before SCRUM-75) is left alone, as the read paths do.
+  const expired = await fetchMany(
+    supabase
+      .from('venue_bookings')
+      .update({ status: BOOKING_STATUS.EXPIRED, updated_at: nowIso })
+      .eq('status', BOOKING_STATUS.TENTATIVE)
+      .not('hold_expires_at', 'is', null)
+      .lte('hold_expires_at', nowIso)
+      .select()
+  );
+
+  // actor_id null: the system did this, not a user.
+  for (const row of expired) {
+    await writeAudit(null, 'HOLD_EXPIRED', 'venue_booking', row.id, {
+      eventId: row.event_id,
+      venueId: row.venue_id,
+      holdExpiresAt: row.hold_expires_at,
+    });
+  }
+  return expired;
+}
+
 /*
  * Purpose: deliver a hold warning within the configured lead window and an expiry notice
  *   after expiry, each at most once for a hold.
- * AC: SCRUM-80 AC1-AC6. Only TENTATIVE holds are considered; a converted booking is ignored.
+ * AC: SCRUM-80 AC1-AC6. Only TENTATIVE holds receive warnings; expiry notices also cover
+ *   holds already changed to EXPIRED by the SCRUM-76 expiry job. Confirmed bookings are ignored.
  * Inputs: now (injectable clock) and warningLeadMinutes (defaults to environment config).
  * Output: counts of warnings and expiry notices successfully delivered.
  * Failure: query, claim, or notification database errors propagate to the scheduler.
@@ -965,12 +1004,12 @@ async function processDueHoldNotifications(now = new Date(), warningLeadMinutes 
     supabase
       .from('venue_bookings')
       .select(selection)
-      .eq('status', BOOKING_STATUS.TENTATIVE)
+      .in('status', [BOOKING_STATUS.TENTATIVE, BOOKING_STATUS.EXPIRED])
       .lte('hold_expires_at', nowIso)
       .is('hold_expiry_notice_sent_at', null)
   );
 
-  async function sendOnce(booking, marker, type, title, body) {
+  async function sendOnce(booking, marker, allowedStatuses, type, title, body) {
     const coordinatorId = booking.events?.coordinator_id;
     if (coordinatorId == null) return false;
 
@@ -978,7 +1017,7 @@ async function processDueHoldNotifications(now = new Date(), warningLeadMinutes 
       .from('venue_bookings')
       .update({ [marker]: nowIso })
       .eq('id', booking.id)
-      .eq('status', BOOKING_STATUS.TENTATIVE)
+      .in('status', allowedStatuses)
       .is(marker, null)
       .select('id')
       .maybeSingle();
@@ -997,6 +1036,7 @@ async function processDueHoldNotifications(now = new Date(), warningLeadMinutes 
     if (await sendOnce(
       booking,
       'hold_warning_sent_at',
+      [BOOKING_STATUS.TENTATIVE],
       'HOLD_EXPIRING',
       'Venue hold expiring soon',
       body
@@ -1011,6 +1051,7 @@ async function processDueHoldNotifications(now = new Date(), warningLeadMinutes 
     if (await sendOnce(
       booking,
       'hold_expiry_notice_sent_at',
+      [BOOKING_STATUS.TENTATIVE, BOOKING_STATUS.EXPIRED],
       'HOLD_EXPIRED',
       'Venue hold expired',
       body
@@ -1393,6 +1434,7 @@ module.exports = {
   decideBooking,
   placeHold,
   processDueHoldNotifications,
+  expireHolds,
   cancelBooking,
   buildBookingDecisionNotice,
   listUnavailability,

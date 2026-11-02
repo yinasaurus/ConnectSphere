@@ -1,8 +1,10 @@
 const { createApp } = require('./app');
 const { env } = require('./config/env');
+const { startHoldExpiryJob } = require('./jobs/holdExpiry.job');
 const { processDueHoldNotifications } = require('./services/venues.service');
 
 const app = createApp();
+let holdNotificationTimer;
 
 const server = app.listen(env.port, () => {
   console.log(`ConnectSphere API listening on http://localhost:${env.port}`);
@@ -12,11 +14,16 @@ const server = app.listen(env.port, () => {
     });
   };
   pollHoldNotifications();
-  server.holdNotificationTimer = setInterval(pollHoldNotifications, env.holdNotificationPollMs);
+  holdNotificationTimer = setInterval(pollHoldNotifications, env.holdNotificationPollMs);
 });
 
+// SCRUM-76: expire venue holds automatically. Started here, not in app.js, so tests that
+// build the app don't start a timer.
+const stopHoldExpiryJob = startHoldExpiryJob();
+
 function shutdown() {
-  if (server.holdNotificationTimer) clearInterval(server.holdNotificationTimer);
+  if (holdNotificationTimer) clearInterval(holdNotificationTimer);
+  stopHoldExpiryJob();
   server.close(() => process.exit(0));
 }
 
