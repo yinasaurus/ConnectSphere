@@ -974,7 +974,7 @@ export default function EventDetail() {
           </div>}
           {canViewPlanning && <div className="card">
             <h3>Status history</h3>
-            {history.map((item) => (
+            {history.filter((item) => item.from_status).map((item) => (
               <p key={item.id}>
                 {item.from_status || '—'} → {item.to_status}
                 <span className="muted"> · {item.actor_name}</span>
@@ -985,7 +985,7 @@ export default function EventDetail() {
                 )}
               </p>
             ))}
-            {!history.length && <p className="muted">No transitions yet.</p>}
+            {!history.some((item) => item.from_status) && <p className="muted">No transitions yet.</p>}
           </div>}
         </div>
       </div>

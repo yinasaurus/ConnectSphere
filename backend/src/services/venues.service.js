@@ -1012,19 +1012,30 @@ async function changeBooking(user, bookingId, payload) {
   });
 
   if (event.status === EVENT_STATUS.CONFIRMED) {
-    await updateById('events', event.id, {
-      status: EVENT_STATUS.PLANNING,
-      updated_at: new Date().toISOString(),
-    });
-    await insertOne('event_status_history', {
-      event_id: event.id,
-      actor_id: user.id,
-      from_status: EVENT_STATUS.CONFIRMED,
-      to_status: EVENT_STATUS.PLANNING,
-      note: 'Venue booking rescheduled',
-    });
+    try {
+      const eventUpdate = await updateById('events', event.id, {
+        status: EVENT_STATUS.PLANNING,
+        updated_at: new Date().toISOString(),
+      });
+      if (!eventUpdate) {
+        throw new Error(`Event ${event.id} was not updated after its venue booking was rescheduled`);
+      }
+      await insertOne('event_status_history', {
+        event_id: event.id,
+        actor_id: user.id,
+        from_status: EVENT_STATUS.CONFIRMED,
+        to_status: EVENT_STATUS.PLANNING,
+        note: 'Venue booking rescheduled',
+      });
+    } catch (error) {
+      console.error(`Failed to move event ${event.id} to Planning after booking ${bookingId} was rescheduled`, error);
+      throw httpError(
+        500,
+        'The booking was rescheduled, but the event could not be moved to Planning. The change has been saved.',
+        'EVENT_STATUS_UPDATE_FAILED'
+      );
+    }
   }
-
   return updated;
 }
 
