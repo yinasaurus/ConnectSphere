@@ -160,7 +160,7 @@ describe('SCRUM-80 hold expiry notifications', () => {
       expect.stringContaining('Tech Symposium at Innovation Hall'),
       50
     );
-    expect(notifyUser.mock.calls[0][3]).toContain(hold().hold_expires_at);
+    expect(notifyUser.mock.calls[0][3]).toContain('02 Nov 2026, 08:10 SGT');
   });
 
   /*
@@ -187,7 +187,7 @@ describe('SCRUM-80 hold expiry notifications', () => {
       expect.stringContaining('Tech Symposium at Innovation Hall'),
       50
     );
-    expect(notifyUser.mock.calls[0][3]).toContain('2026-11-01T23:59:00.000Z');
+    expect(notifyUser.mock.calls[0][3]).toContain('02 Nov 2026, 07:59 SGT');
   });
 
   /*
@@ -267,5 +267,85 @@ describe('SCRUM-80 hold expiry notifications', () => {
     const warningWindow = warningQuery.__filters.find(([operator, field]) => operator === 'lte' && field === 'hold_expires_at');
 
     expect(warningWindow[2]).toBe('2026-11-02T00:15:00.000Z');
+  });
+
+  /*
+   * AC: SCRUM-80 AC2.
+   * Scenario: SCRUM-76 has not yet changed the status; the hold is TENTATIVE but its
+   * expiry has already passed.
+   * Setup: Hold status stays TENTATIVE with hold_expires_at before NOW (TC02 uses EXPIRED).
+   * Expected: The Coordinator receives one "Venue hold expired" notice.
+   * Type: boundary.
+   */
+  // SCRUM-80-TC07
+  it('sends an expiry notice for a TENTATIVE hold whose expiry has already passed', async () => {
+    expiredRows = [hold({ hold_expires_at: '2026-11-01T23:59:00.000Z' })]; // status still TENTATIVE
+
+    const result = await venuesService.processDueHoldNotifications(NOW, 15);
+
+    expect(result).toEqual({ warningsSent: 0, expiryNoticesSent: 1 });
+    expect(notifyUser).toHaveBeenCalledWith(
+      21,
+      'HOLD_EXPIRED',
+      'Venue hold expired',
+      expect.stringContaining('Tech Symposium at Innovation Hall'),
+      50
+    );
+  });
+
+  /*
+   * AC: SCRUM-80 AC6 (retry on delivery failure).
+   * Scenario: The notification service is temporarily unavailable on the first job run.
+   * Setup: notifyUser rejects once; the hold is a warning candidate on both runs.
+   * Expected: The marker stays null after the failed run so the next run retries and
+   * succeeds.
+   * Type: error.
+   */
+  // SCRUM-80-TC08
+  it('retries the notice on the next run when notifyUser fails and leaves the marker empty', async () => {
+    warningRows = [hold()];
+    notifyUser
+      .mockRejectedValueOnce(new Error('notification service down'))
+      .mockResolvedValue(undefined);
+
+    // First run: delivery fails; 0 sent, marker stays null.
+    const first = await venuesService.processDueHoldNotifications(NOW, 15);
+    expect(first).toEqual({ warningsSent: 0, expiryNoticesSent: 0 });
+
+    // Second run: delivery succeeds; same hold is retried because marker was never set.
+    const second = await venuesService.processDueHoldNotifications(NOW, 15);
+    expect(second).toEqual({ warningsSent: 1, expiryNoticesSent: 0 });
+
+    expect(notifyUser).toHaveBeenCalledTimes(2);
+  });
+
+  /*
+   * AC: SCRUM-80 AC1 and configurable warning interval.
+   * Scenario: A 5-minute lead warns only holds expiring within that window.
+   * Setup: One hold 10 minutes out (outside window); one hold 3 minutes out (inside window).
+   * Expected: Only the 3-minute hold triggers a warning; the 10-minute hold does not.
+   * Type: boundary.
+   */
+  // SCRUM-80-TC09
+  it('warns only holds inside the configured lead-time window', async () => {
+    // hold() expires 10 minutes from NOW -- outside a 5-minute window.
+    warningRows = [hold()];
+    const resultOutside = await venuesService.processDueHoldNotifications(NOW, 5);
+    expect(resultOutside).toEqual({ warningsSent: 0, expiryNoticesSent: 0 });
+    expect(notifyUser).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+
+    // A hold 3 minutes out -- inside the 5-minute window.
+    warningRows = [hold({ hold_expires_at: '2026-11-02T00:03:00.000Z' })];
+    const resultInside = await venuesService.processDueHoldNotifications(NOW, 5);
+    expect(resultInside).toEqual({ warningsSent: 1, expiryNoticesSent: 0 });
+    expect(notifyUser).toHaveBeenCalledWith(
+      21,
+      'HOLD_EXPIRING',
+      'Venue hold expiring soon',
+      expect.stringContaining('Tech Symposium at Innovation Hall'),
+      50
+    );
   });
 });

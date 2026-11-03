@@ -1053,6 +1053,24 @@ async function expireHolds(now = new Date()) {
  * Output: counts of warnings and expiry notices successfully delivered.
  * Failure: query, claim, or notification database errors propagate to the scheduler.
  */
+/**
+ * Purpose: format a UTC date/time string as Singapore Time (SGT, UTC+8) for use in
+ * human-readable notification bodies (SCRUM-80).
+ * Input:  ISO 8601 string or Date.
+ * Output: e.g. "02 Nov 2026, 08:10 SGT".
+ */
+function toSGT(value) {
+  return new Date(value).toLocaleString('en-SG', {
+    timeZone: 'Asia/Singapore',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }) + ' SGT';
+}
+
 async function processDueHoldNotifications(now = new Date(), warningLeadMinutes = env.holdWarningLeadMinutes) {
   const nowIso = new Date(now).toISOString();
   const warningBoundary = new Date(new Date(now).getTime() + warningLeadMinutes * 60_000).toISOString();
@@ -1075,9 +1093,12 @@ async function processDueHoldNotifications(now = new Date(), warningLeadMinutes 
       .is('hold_expiry_notice_sent_at', null)
   );
 
+  // Deliver first so a failed send leaves the marker null and the next run retries (SCRUM-80 AC6).
   async function sendOnce(booking, marker, allowedStatuses, type, title, body) {
     const coordinatorId = booking.events?.coordinator_id;
     if (coordinatorId == null) return false;
+
+    await notifyUser(coordinatorId, type, title, body, booking.event_id);
 
     const { data, error } = await supabase
       .from('venue_bookings')
@@ -1088,40 +1109,45 @@ async function processDueHoldNotifications(now = new Date(), warningLeadMinutes 
       .select('id')
       .maybeSingle();
     throwIf(error);
-    if (!data) return false;
-
-    await notifyUser(coordinatorId, type, title, body, booking.event_id);
-    return true;
+    return Boolean(data);
   }
 
   let warningsSent = 0;
   for (const booking of warnings) {
     const eventName = booking.events?.name || 'Event';
     const venueName = booking.venues?.name || `venue #${booking.venue_id}`;
-    const body = `The hold for ${eventName} at ${venueName} expires at ${booking.hold_expires_at}. Confirm the booking or choose another venue before it expires.`;
-    if (await sendOnce(
-      booking,
-      'hold_warning_sent_at',
-      [BOOKING_STATUS.TENTATIVE],
-      'HOLD_EXPIRING',
-      'Venue hold expiring soon',
-      body
-    )) warningsSent += 1;
+    const body = `The hold for ${eventName} at ${venueName} expires at ${toSGT(booking.hold_expires_at)}. Confirm the booking or choose another venue before it expires.`;
+    try {
+      if (await sendOnce(
+        booking,
+        'hold_warning_sent_at',
+        [BOOKING_STATUS.TENTATIVE],
+        'HOLD_EXPIRING',
+        'Venue hold expiring soon',
+        body
+      )) warningsSent += 1;
+    } catch {
+      // Delivery failed; marker stays null so the next run retries.
+    }
   }
 
   let expiryNoticesSent = 0;
   for (const booking of expired) {
     const eventName = booking.events?.name || 'Event';
     const venueName = booking.venues?.name || `venue #${booking.venue_id}`;
-    const body = `The venue hold for ${eventName} at ${venueName} expired at ${booking.hold_expires_at}. Please choose another venue if needed.`;
-    if (await sendOnce(
-      booking,
-      'hold_expiry_notice_sent_at',
-      [BOOKING_STATUS.TENTATIVE, BOOKING_STATUS.EXPIRED],
-      'HOLD_EXPIRED',
-      'Venue hold expired',
-      body
-    )) expiryNoticesSent += 1;
+    const body = `The venue hold for ${eventName} at ${venueName} expired at ${toSGT(booking.hold_expires_at)}. Please choose another venue if needed.`;
+    try {
+      if (await sendOnce(
+        booking,
+        'hold_expiry_notice_sent_at',
+        [BOOKING_STATUS.TENTATIVE, BOOKING_STATUS.EXPIRED],
+        'HOLD_EXPIRED',
+        'Venue hold expired',
+        body
+      )) expiryNoticesSent += 1;
+    } catch {
+      // Delivery failed; marker stays null so the next run retries.
+    }
   }
 
   return { warningsSent, expiryNoticesSent };
