@@ -888,6 +888,83 @@ describe('SCUM-24 venue search results', () => {
   });
 });
 
+describe('SCRUM-23 venue search form', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useAuth.mockReturnValue({ hasRole: () => false });
+  });
+
+  /*
+   * AC:       SCRUM-23 AC1-AC7
+   * Scenario: Coordinator fills in every search filter
+   * Expected: Each filter is sent to the search API, the dates as ISO times
+   * Type:     normal
+   */
+  // SCRUM-23-TC22
+  it('sends every filled-in filter to the search API', async () => {
+    mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
+    const { container } = render(<Venues />);
+    await screen.findByRole('button', { name: 'Search venues' });
+
+    const [start, end] = container.querySelectorAll('input[type="datetime-local"]');
+    fireEvent.change(start, { target: { value: '2026-11-20T10:00' } });
+    fireEvent.change(end, { target: { value: '2026-11-20T12:00' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. 50'), { target: { value: '50' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Level 2'), { target: { value: 'Level 2' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Wheelchair access'), { target: { value: 'Wheelchair access' } });
+    fireEvent.change(screen.getByDisplayValue('Any layout'), { target: { value: 'THEATRE' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Projector, Audio'), { target: { value: 'Projector' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Search venues' }));
+
+    expect(await screen.findByText('Helix Hall')).toBeInTheDocument();
+    const searchCall = api.mock.calls.find(([path]) => path.startsWith('/api/venues/search'));
+    const params = new URLSearchParams(searchCall[0].split('?')[1]);
+    expect(Object.fromEntries(params)).toEqual({
+      startAt: new Date('2026-11-20T10:00').toISOString(),
+      endAt: new Date('2026-11-20T12:00').toISOString(),
+      capacityMin: '50',
+      location: 'Level 2',
+      accessibility: 'Wheelchair access',
+      layout: 'THEATRE',
+      facilities: 'Projector',
+    });
+  });
+
+  /*
+   * AC:       SCRUM-23 AC1
+   * Scenario: Coordinator gives a start time but no end time
+   * Expected: A message asks for both, and no search is sent
+   * Type:     error
+   */
+  // SCRUM-23-TC23
+  it('asks for both a start and an end when only one is given', async () => {
+    mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
+    const { container } = render(<Venues />);
+    await screen.findByRole('button', { name: 'Search venues' });
+
+    const [start] = container.querySelectorAll('input[type="datetime-local"]');
+    fireEvent.change(start, { target: { value: '2026-11-20T10:00' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Search venues' }));
+
+    expect(screen.getByText('Pick both a start and an end date/time, or neither.')).toBeInTheDocument();
+    expect(api.mock.calls.some(([path]) => path.startsWith('/api/venues/search'))).toBe(false);
+  });
+
+  /*
+   * AC:       SCRUM-23 (no-results message)
+   * Scenario: The search reply has no venues list at all
+   * Expected: The page treats it as no matches
+   * Type:     boundary
+   */
+  // SCRUM-23-TC25
+  it('treats a search reply with no venues list as no matches', async () => {
+    mockSearchApi({});
+    render(<Venues />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+    expect(await screen.findByText('No venues match your selected filters.')).toBeInTheDocument();
+  });
+});
+
 describe('SCRUM-19 AC7: Conflict indicators and conflict modal in Venues page', () => {
   beforeEach(() => {
     useAuth.mockReturnValue({
@@ -1212,6 +1289,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
     api.mockReset();
   });
 
+  // SCRUM-75-TC43
   it('US75-F07: Venue Staff see the Place a hold card', async () => {
     useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
     mockPage([]);
@@ -1219,6 +1297,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
     expect(await screen.findByRole('heading', { name: 'Place a hold' })).toBeInTheDocument();
   });
 
+  // SCRUM-75-TC44
   it('US75-F08: Coordinators do not see the Place a hold card', async () => {
     useAuth.mockReturnValue({ hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
     mockPage([]);
@@ -1227,6 +1306,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
     expect(screen.queryByRole('heading', { name: 'Place a hold' })).not.toBeInTheDocument();
   });
 
+  // SCRUM-75-TC45
   it('US75-F09: a hold is shown as HELD with its expiry, not as approved', async () => {
     useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
     mockPage([held]);
@@ -1236,6 +1316,40 @@ describe('SCRUM-75 holds on the Venues page', () => {
     expect(within(row).queryByText('APPROVED')).not.toBeInTheDocument();
     expect(within(row).getByTestId('hold-expiry-900')).toHaveTextContent(
       new Date(held.hold_expires_at).toLocaleString()
+    );
+  });
+});
+
+describe('SCRUM-76 expired holds on the Venues page', () => {
+  // SCRUM-76-TC27
+  it('US76-F01: an expired hold shows as EXPIRED with when it expired', async () => {
+    useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
+    api.mockReset();
+    api.mockImplementation(async (path) => {
+      if (path === '/api/venues') return { venues: clone(database.venues) };
+      if (path === '/api/venues/bookings') {
+        return {
+          bookings: [{
+            id: 903,
+            event_id: 50,
+            venue_id: 1,
+            status: 'EXPIRED',
+            start_at: '2026-11-20T10:00:00.000Z',
+            end_at: '2026-11-20T12:00:00.000Z',
+            hold_expires_at: '2026-11-18T09:00:00.000Z',
+            event_name: 'Tech Talk',
+            venue_name: 'Helix Hall',
+          }],
+        };
+      }
+      if (path === '/api/events') return { events: [] };
+      return {};
+    });
+    render(<Venues />);
+    const row = await screen.findByTestId('booking-row-903');
+    expect(within(row).getByText('EXPIRED')).toBeInTheDocument();
+    expect(within(row).getByTestId('hold-expiry-903')).toHaveTextContent(
+      `Hold expired ${new Date('2026-11-18T09:00:00.000Z').toLocaleString()}`
     );
   });
 });

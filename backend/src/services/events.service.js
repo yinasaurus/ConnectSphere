@@ -1030,8 +1030,9 @@ async function isReadyToConfirm(event) {
       .eq('event_id', event.id)
   );
 
+  // SCRUM-76 AC6: an expired hold is no longer an arrangement, like a cancelled booking.
   const activeBookings = allBookings.filter(
-    (booking) => booking.status !== BOOKING_STATUS.CANCELLED
+    (booking) => ![BOOKING_STATUS.CANCELLED, BOOKING_STATUS.EXPIRED].includes(booking.status)
   );
 
   if (activeBookings.length === 0) {
@@ -1106,9 +1107,13 @@ async function isReadyToConfirm(event) {
   return { ok: true };
 }
 
-// Rejected and cancelled bookings are no longer part of the event's arrangements,
-// so they don't count for or against readiness.
-const INACTIVE_BOOKING_STATUSES = [BOOKING_STATUS.REJECTED, BOOKING_STATUS.CANCELLED];
+// Rejected, cancelled and expired (SCRUM-76) bookings are no longer part of the event's
+// arrangements, so they don't count for or against readiness.
+const INACTIVE_BOOKING_STATUSES = [
+  BOOKING_STATUS.REJECTED,
+  BOOKING_STATUS.CANCELLED,
+  BOOKING_STATUS.EXPIRED,
+];
 
 async function isReadyForSafetyCheck(eventId) {
   const bookings = await fetchMany(
@@ -1563,19 +1568,46 @@ async function writeStatusHistory(eventId, actorId, fromStatus, toStatus, note) 
   });
 }
 
+/*
+ * Purpose: return event status history and related audit logs (including booking reschedules).
+ * AC: SCRUM-62 AC5 — previous date and time can still be viewed after a change.
+ * Inputs: user and event ID. Output: array combining event_status_history and audit_logs entries.
+ * Failure: throws if user lacks planning access; empty arrays if queries fail.
+ */
 async function listHistory(user, eventId) {
   await assertPlanningAccess(user, eventId);
-  const rows = await fetchMany(
+  const statusRows = await fetchMany(
     supabase
       .from('event_status_history')
       .select('*, actor:users!actor_id ( full_name )')
       .eq('event_id', eventId)
       .order('created_at', { ascending: false })
-  );
-  return rows.map((row) => ({
+  ).catch(() => []);
+  
+  const auditRows = await fetchMany(
+    supabase
+      .from('audit_logs')
+      .select('*')
+      .eq('entity_type', 'venue_booking')
+      .eq('action', 'BOOKING_RESCHEDULED')
+  ).catch(() => []);
+  
+  // Filter audit logs to only those for bookings of this event
+  const bookings = await fetchMany(
+    supabase
+      .from('venue_bookings')
+      .select('id')
+      .eq('event_id', eventId)
+  ).catch(() => []);
+  const bookingIds = bookings.map((b) => b.id);
+  const relevantAudits = auditRows.filter((a) => bookingIds.includes(a.entity_id));
+  
+  const statusHistory = statusRows.map((row) => ({
     ...row,
     actor_name: row.actor?.full_name || null,
   }));
+  
+  return [...statusHistory, ...relevantAudits];
 }
 
 async function requestClarification(user, id, remarks) {
@@ -2116,8 +2148,38 @@ async function decideChangeRequest(user, eventId, requestId, { approve, reason }
     // Bypass updateEvent so Confirmed stays locked to every direct edit (SCRUM-40 2A)
     // but an approved change request can still apply date/time/attendance/requirements.
     await updateById('events', event.id, eventPatch);
-    // Flag before APPROVED so a DB error here leaves the request PENDING (retryable).
-    await flagArrangementsForReview(user, event, { ...event, ...eventPatch });
+    /*
+     * Purpose: return a Confirmed event to Planning when an approved request changes its date,
+     *   time, or expected attendance so operational arrangements can be reviewed again.
+     * AC: SCRUM-85 AC1 (critical fields trigger reversion), AC2 (venue/equipment-only changes
+     *   do not), AC3/AC4 (pending and rejected requests never reach this branch), AC5 (history).
+     * Inputs: original event row and approved eventPatch. Output: event status and status history
+     *   are updated only for a changed revert-trigger field.
+     * Failure: status-update or history-write errors propagate; the request is not approved.
+     */
+    const approvedNextRow = { ...event, ...eventPatch };
+    const approvedChangedFields = changedCriticalFields(event, approvedNextRow);
+    const revertTriggerFields = new Set(['startAt', 'endAt', 'expectedAttendance']);
+    const revertTriggered =
+      event.status === EVENT_STATUS.CONFIRMED &&
+      approvedChangedFields.some((field) => revertTriggerFields.has(field));
+
+    if (revertTriggered) {
+      await updateById('events', event.id, {
+        status: EVENT_STATUS.PLANNING,
+        updated_at: nowIso,
+      });
+      await writeStatusHistory(
+        event.id,
+        user.id,
+        EVENT_STATUS.CONFIRMED,
+        EVENT_STATUS.PLANNING,
+        'Reverted to Planning: approved critical change on Confirmed event'
+      );
+    }
+    
+    // Always flag arrangements for review (SCRUM-41/42); only status reversion is gated above
+    await flagArrangementsForReview(user, event, approvedNextRow);
   }
 
   const crPatch = {

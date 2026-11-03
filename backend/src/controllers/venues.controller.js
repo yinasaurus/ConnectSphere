@@ -60,6 +60,11 @@ const requestBooking = asyncHandler(async (req, res) => {
   res.status(201).json({ booking });
 });
 
+const requestReplacementBooking = asyncHandler(async (req, res) => {
+  const booking = await venuesService.requestReplacementBooking(req.user, req.params.id, req.body);
+  res.status(201).json({ booking });
+});
+
 /**
  * Purpose: POST /api/venues/bookings/:id/decision. Passes the signed-in Venue Staff member,
  * the booking id and the JSON body { approve, reason, alternativeSuggestion } to the service.
@@ -93,6 +98,17 @@ const cancelBooking = asyncHandler(async (req, res) => {
   res.json({ booking });
 });
 
+/*
+ * Purpose: pass the authenticated Coordinator, booking id, and requested time to the rescheduling service.
+ * AC: SCRUM-62 AC1–AC8 — the service validates ownership, status, and venue conflicts.
+ * Inputs: req.user, req.params.id, and req.body { startAt, endAt }. Output: 200 { booking }.
+ * Failure: propagates authorization, missing-row, cancelled-booking, and conflict errors to the error handler.
+ */
+const changeBooking = asyncHandler(async (req, res) => {
+  const booking = await venuesService.changeBooking(req.user, req.params.id, req.body);
+  res.json({ booking });
+});
+
 const unavailability = asyncHandler(async (req, res) => {
   const rows = await venuesService.listUnavailability(req.query.venueId);
   res.json({ unavailability: rows });
@@ -123,9 +139,11 @@ module.exports = {
   update,
   bookings,
   requestBooking,
+  requestReplacementBooking,
   decideBooking,
   placeHold,
   cancelBooking,
+  changeBooking,
   unavailability,
   block,
   affectedBookings,

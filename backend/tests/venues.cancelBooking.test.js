@@ -96,6 +96,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    *   and venue; the event remains unchanged.
    * - Type: normal.
    */
+  // SCRUM-61-TC01, SCRUM-61-TC02, SCRUM-61-TC03
   it.each([
     ['PENDING', PENDING_BOOKING],
     ['APPROVED', APPROVED_BOOKING],
@@ -130,6 +131,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    *   remain unchanged.
    * - Type: boundary.
    */
+  // SCRUM-61-TC04
   it('updates only the selected booking and leaves event status untouched', async () => {
     mockUser = COORDINATOR;
     setupCancellation(PENDING_BOOKING);
@@ -157,6 +159,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    *   both the booking cancellation and automatic status transition.
    * - Type: normal.
    */
+  // SCRUM-61-TC05
   it('transitions a Confirmed event to Planning when a booking is cancelled', async () => {
     const confirmedEvent = { ...EVENT_ROW, status: 'CONFIRMED' };
     setupCancellation(APPROVED_BOOKING, confirmedEvent);
@@ -216,6 +219,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    * - Expected: Only the booking is updated; no event status update or transition audit occurs.
    * - Type: boundary.
    */
+  // SCRUM-61-TC06
   it('keeps a Planning event in Planning when a booking is cancelled', async () => {
     setupCancellation(APPROVED_BOOKING, EVENT_ROW);
 
@@ -244,6 +248,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    * - Expected: Cancellation succeeds without a status-based 409 response.
    * - Type: normal.
    */
+  // SCRUM-61-TC07
   it('allows cancellation of a booking for a Confirmed event', async () => {
     setupCancellation(APPROVED_BOOKING, { ...EVENT_ROW, status: 'CONFIRMED' });
 
@@ -260,6 +265,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    *   the booking nor audit records.
    * - Type: error.
    */
+  // SCRUM-61-TC08
   it('rejects cancellation of bookings for Completed events', async () => {
     setupCancellation(APPROVED_BOOKING, { ...EVENT_ROW, status: 'COMPLETED' });
 
@@ -281,6 +287,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    * - Expected: The service returns the completed-event 409 message, not ALREADY_CANCELLED.
    * - Type: boundary.
    */
+  // SCRUM-61-TC09
   it('prioritizes Completed event validation over duplicate cancellation check', async () => {
     setupCancellation(CANCELLED_BOOKING, { ...EVENT_ROW, status: 'COMPLETED' });
 
@@ -301,6 +308,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    * - Expected: The service returns 409 with the cancelled-event message and changes neither the booking nor audit records.
    * - Type: error.
    */
+  // SCRUM-61-TC10, SCRUM-61-TC11
   it.each([
     ['APPROVED', APPROVED_BOOKING],
     ['PENDING', PENDING_BOOKING],
@@ -325,6 +333,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    * - Expected: The service returns the cancelled-event 409 message, not ALREADY_CANCELLED.
    * - Type: boundary.
    */
+  // SCRUM-61-TC12
   it('prioritizes Cancelled event validation over duplicate cancellation check', async () => {
     setupCancellation(CANCELLED_BOOKING, { ...EVENT_ROW, status: 'CANCELLED' });
 
@@ -346,6 +355,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    *   partial-success error.
    * - Type: error.
    */
+  // SCRUM-61-TC13
   it('reports partial success when the Confirmed event status update fails', async () => {
     setupCancellation(APPROVED_BOOKING, { ...EVENT_ROW, status: 'CONFIRMED' });
     updateById
@@ -387,6 +397,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    *   occupies the venue.
    * - Type: boundary.
    */
+  // SCRUM-61-TC14
   it('does not treat a cancelled booking as a venue conflict', async () => {
     fetchMany.mockResolvedValueOnce([{ ...PENDING_BOOKING, status: BOOKING_STATUS.CANCELLED }]);
 
@@ -406,6 +417,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    * - Expected: The request returns 404 NOT_FOUND and no booking is updated.
    * - Type: error.
    */
+  // SCRUM-61-TC15
   it('returns 404 when the booking is missing', async () => {
     mockUser = COORDINATOR;
     fetchOne.mockResolvedValueOnce(null);
@@ -425,6 +437,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    *   409 INVALID_STATUS. Neither booking is updated.
    * - Type: error.
    */
+  // SCRUM-61-TC16, SCRUM-61-TC17
   it.each([
     ['CANCELLED', CANCELLED_BOOKING, 'ALREADY_CANCELLED'],
     ['REJECTED', REJECTED_BOOKING, 'INVALID_STATUS'],
@@ -446,6 +459,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    * - Expected: The route returns 403 FORBIDDEN before the booking is read or changed.
    * - Type: error.
    */
+  // SCRUM-61-TC18
   it.each([ORGANISER, STAFF])('forbids users without Coordinator role', async (user) => {
     mockUser = user;
 
@@ -464,6 +478,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    * - Expected: The request returns 403 FORBIDDEN and leaves the booking unchanged.
    * - Type: error.
    */
+  // SCRUM-61-TC19
   it('forbids a Coordinator who is not assigned to the event', async () => {
     mockUser = COORDINATOR;
     setupCancellation(PENDING_BOOKING, { ...EVENT_ROW, coordinator_id: OTHER_COORD.id });
@@ -482,6 +497,7 @@ describe('SCRUM-61 cancel one venue booking', () => {
    * - Expected: The route returns 401 UNAUTHENTICATED before reading or changing the booking.
    * - Type: error.
    */
+  // SCRUM-61-TC20
   it('rejects unauthenticated cancellation requests with 401', async () => {
     const result = await request(app).post('/api/venues/bookings/10/cancel');
 

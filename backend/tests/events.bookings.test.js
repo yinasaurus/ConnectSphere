@@ -123,6 +123,7 @@ describe('event-specific venue booking access', () => {
     expect(fetchMany).not.toHaveBeenCalled();
   });
 
+  // SCRUM-13-TC25
   it.each(['get', 'post'])('blocks cross-client comments through %s', async (method) => {
     mockUser.organisationId = 20;
     const res = await request(app)[method]('/api/comments/3').send({ body: 'Not permitted' });
@@ -131,11 +132,13 @@ describe('event-specific venue booking access', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-13-TC26
   it('allows comments for an accessible event', async () => {
     expect((await request(app).get('/api/comments/3')).status).toBe(200);
     expect(query.eq).toHaveBeenCalledWith('event_id', '3');
   });
 
+  // SCRUM-13-TC27
   it.each(['/api/comments/3', '/api/events/3/history'])('blocks attendee planning data at %s', async (path) => {
     mockUser.roles = [ROLES.ATTENDEE];
     expect((await request(app).get(path)).status).toBe(403);
@@ -151,6 +154,7 @@ describe('event-specific venue booking access', () => {
    *           event details or pending/rejected request statuses.
    * Type:     boundary
    */
+  // SCRUM-13-TC28
   it('returns only public event fields and approved bookings for attendees', async () => {
     mockUser.roles = [ROLES.ATTENDEE];
     fetchOne.mockResolvedValue({ id: 3, name: 'Public event', status: 'CONFIRMED', registration_required: true, operational_notes: 'Private', equipment_notes: 'Private' });

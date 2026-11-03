@@ -71,6 +71,7 @@ describe('SCRUM-61 cancel booking action', () => {
    * - Expected: An accessible Cancel booking button is shown.
    * - Type: normal.
    */
+  // SCRUM-61-TC21, SCRUM-61-TC22, SCRUM-61-TC23
   it.each(['PENDING', 'APPROVED', 'TENTATIVE'])('shows Cancel booking for %s bookings', async (status) => {
     renderBookingPage(status);
     expect(await screen.findByRole('button', { name: /cancel booking/i })).toBeInTheDocument();
@@ -84,6 +85,7 @@ describe('SCRUM-61 cancel booking action', () => {
    * - Expected: No Cancel booking button is shown.
    * - Type: boundary.
    */
+  // SCRUM-61-TC24, SCRUM-61-TC25
   it.each(['CANCELLED', 'REJECTED'])('hides Cancel booking for %s bookings', async (status) => {
     renderBookingPage(status);
     await screen.findByText('Innovation Hall');
@@ -97,6 +99,7 @@ describe('SCRUM-61 cancel booking action', () => {
    * - Expected: No Cancel booking button is shown.
    * - Type: error.
    */
+  // SCRUM-61-TC26
   it('hides Cancel booking from a Coordinator who is not assigned', async () => {
     renderBookingPage('PENDING', false);
     await screen.findByText('Innovation Hall');
@@ -110,6 +113,7 @@ describe('SCRUM-61 cancel booking action', () => {
    * - Expected: The Cancel booking button is not rendered.
    * - Type: boundary.
    */
+  // SCRUM-61-TC27
   it('hides Cancel booking for bookings on Completed events', async () => {
     renderBookingPage('APPROVED', true, 'COMPLETED');
     await screen.findByText('Innovation Hall');
@@ -123,6 +127,7 @@ describe('SCRUM-61 cancel booking action', () => {
    * - Expected: The Cancel booking button is not rendered.
    * - Type: boundary.
    */
+  // SCRUM-61-TC28, SCRUM-61-TC29
   it.each(['APPROVED', 'PENDING'])('hides Cancel booking for %s bookings on Cancelled events', async (status) => {
     renderBookingPage(status, true, 'CANCELLED');
     await screen.findByText('Innovation Hall');
@@ -136,6 +141,7 @@ describe('SCRUM-61 cancel booking action', () => {
    * - Expected: The Cancel booking button is visible and can be clicked.
    * - Type: normal.
    */
+  // SCRUM-61-TC30
   it('shows Cancel booking for bookings on Confirmed events', async () => {
     renderBookingPage('APPROVED', true, 'CONFIRMED');
     expect(await screen.findByRole('button', { name: /cancel booking/i })).toBeInTheDocument();
@@ -148,6 +154,7 @@ describe('SCRUM-61 cancel booking action', () => {
    * - Expected: The page sends POST /api/venues/bookings/10/cancel for the selected booking.
    * - Type: normal.
    */
+  // SCRUM-61-TC31
   it('posts to the cancellation endpoint for the selected booking', async () => {
     renderBookingPage('PENDING');
     const user = userEvent.setup();
@@ -163,6 +170,7 @@ describe('SCRUM-61 cancel booking action', () => {
    * - Expected: The page displays the updated Planning status after the cancellation action.
    * - Type: normal.
    */
+  // SCRUM-61-TC32
   it('displays Planning after cancelling a booking on a Confirmed event', async () => {
     renderBookingPage('APPROVED', true, 'CONFIRMED', 'PLANNING');
     const user = userEvent.setup();

@@ -7,6 +7,7 @@ import EventDecisionPanel from '../components/EventDecisionPanel';
 import AttendeeRegistrationCard from '../components/AttendeeRegistrationCard';
 import RegistrationSettingsCard from '../components/RegistrationSettingsCard';
 import EventRegistrationsCard from '../components/EventRegistrationsCard';
+import RescheduleBookingForm from '../components/RescheduleBookingForm';
 import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
 
@@ -18,6 +19,7 @@ function BookingStatusBadge({ status }) {
     REJECTED: '#b91c1c',
     TENTATIVE: '#1d4ed8',
     CANCELLED: '#6b7280',
+    EXPIRED: '#6b7280',
   };
   return (
     <span style={{
@@ -36,9 +38,17 @@ function BookingStatusBadge({ status }) {
   );
 }
 
-// Format each saved booking window and submitted date for the event's request list.
+/*
+ * Purpose: format a booking's start or end time with day, month, and time so dates are visible.
+ * AC: SCRUM-62 feedback fix — show date on both ends to prevent hiding cross-day bookings.
+ * Inputs: ISO timestamp. Output: formatted string like "31 Oct 13:45".
+ * Failure: returns an empty string for invalid dates.
+ */
 function formatBookingTime(value) {
-  return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const d = new Date(value);
+  const datePart = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const timePart = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return `${datePart} ${timePart}`;
 }
 
 function formatSubmittedDate(value) {
@@ -239,12 +249,14 @@ export default function EventDetail() {
       const result = await action();
       setMessage(typeof result === 'string' ? result : 'Updated.');
       await reload();
+      return true;
     } catch (err) {
       if (err.code === 'BOOKING_CONFLICT') {
         setConflictModalMsg(err.message);
       } else {
         showError(err.message);
       }
+      return false;
     }
   }
 
@@ -292,10 +304,12 @@ export default function EventDetail() {
       </div>
       {error && <div className="alert">{error}</div>}
       {/* Keep the submitted-request confirmation visible after returning from booking or equipment request. */}
-      {(message || location.state?.venueBookingSubmitted || location.state?.equipmentRequestSubmitted) && (
+      {(message || location.state?.venueBookingSubmitted || location.state?.replacementBookingSubmitted || location.state?.equipmentRequestSubmitted) && (
         <div className="alert success" role="status">
           {location.state?.venueBookingSubmitted
             ? 'Venue booking request submitted. Venue Staff will review it as Pending.'
+            : location.state?.replacementBookingSubmitted
+            ? 'Replacement venue request submitted. Venue Staff will review it as Pending.'
             : location.state?.equipmentRequestSubmitted
             ? 'Equipment request submitted. Technical Support Staff can now review and prepare the equipment.'
             : message}
@@ -891,6 +905,18 @@ export default function EventDetail() {
                     : 'Occupied window unavailable'}
                   {booking.created_at && ` · Submitted ${formatSubmittedDate(booking.created_at)}`}
                 </p>
+                {/* SCRUM-62 AC5: show the previous booking window after a reschedule. */}
+                {(() => {
+                  const reschedule = (history || []).slice().reverse().find(
+                    (e) => e.action === 'BOOKING_RESCHEDULED' && String(e.entity_id) === String(booking.id)
+                  );
+                  if (!reschedule?.metadata?.previousStartAt || !reschedule?.metadata?.previousEndAt) return null;
+                  return (
+                    <p style={{margin: '2px 0', fontSize: '0.85rem', color: '#6b7280'}}>
+                      Previous time: {formatBookingTime(new Date(reschedule.metadata.previousStartAt).getTime())} to {formatBookingTime(new Date(reschedule.metadata.previousEndAt).getTime())}
+                    </p>
+                  );
+                })()}
                 {/* SCRUM-18 AC7: Coordinator sees the rejection reason and suggested alternative. */}
                 {booking.status === 'REJECTED' && booking.decision_reason && (
                   <p style={{ margin: '2px 0', fontSize: '0.88rem', color: '#ef4444' }}>
@@ -907,6 +933,40 @@ export default function EventDetail() {
                   <p style={{ margin: '2px 0', fontSize: '0.88rem', color: '#22c55e' }}>
                     ✓ Confirmed venue booking
                   </p>
+                )}
+                {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && booking.needs_review && (
+                  <Link
+                    className="btn secondary"
+                    to={`/app/events/${id}/venue-booking?replacementFor=${encodeURIComponent(booking.id)}`}
+                  >
+                    Request replacement venue
+                  </Link>
+                )}
+                {/*
+                 * Purpose: show a rescheduling form only to the assigned Coordinator for active, non-rejected bookings on active events.
+                 * AC: SCRUM-62 AC1, AC3, AC6, AC7, AC10–AC12 — rejected bookings and bookings on completed/cancelled events cannot be modified.
+                 * Inputs: assignment state, booking status, event status, and booking id. Output: PATCH request followed by a page refresh.
+                 * Failure: runCoordinatorAction displays server errors and leaves persisted booking data unchanged.
+                 */}
+                {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR)
+                  && booking.status !== 'CANCELLED'
+                  && booking.status !== 'REJECTED'
+                  && event.status !== 'COMPLETED'
+                  && event.status !== 'CANCELLED' && (
+                  <RescheduleBookingForm
+                    bookingId={booking.id}
+                    onSubmit={(startAt, endAt) =>
+                      runCoordinatorAction(() =>
+                        api(`/api/venues/bookings/${booking.id}`, {
+                          method: 'PATCH',
+                          body: {
+                            startAt: new Date(startAt).toISOString(),
+                            endAt:   new Date(endAt).toISOString(),
+                          },
+                        }).then(() => reload())
+                      )
+                    }
+                  />
                 )}
                 {/*
                  * Purpose: expose cancellation for an eligible booking to its assigned Coordinator.
@@ -984,7 +1044,7 @@ export default function EventDetail() {
           </div>}
           {canViewPlanning && <div className="card">
             <h3>Status history</h3>
-            {history.map((item) => (
+            {history.filter((item) => item.from_status).map((item) => (
               <p key={item.id}>
                 {item.from_status || '—'} → {item.to_status}
                 <span className="muted"> · {item.actor_name}</span>
@@ -995,7 +1055,7 @@ export default function EventDetail() {
                 )}
               </p>
             ))}
-            {!history.length && <p className="muted">No transitions yet.</p>}
+            {!history.some((item) => item.from_status) && <p className="muted">No transitions yet.</p>}
           </div>}
         </div>
       </div>

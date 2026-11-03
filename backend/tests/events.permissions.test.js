@@ -30,11 +30,13 @@ describe('SCUM-13 event ownership and assigned coordinator permissions', () => {
     db.updateById.mockResolvedValue(event);
   });
 
+  // SCRUM-13-TC14
   it('allows the owner to update their draft', async () => {
     await service.updateEvent(organiser, 3, { name: 'Updated' });
     expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ name: 'Updated' }));
   });
 
+  // SCRUM-13-TC15
   it.each([
     { id: 4, organisationId: 20, roles: [ROLES.EVENT_ORGANISER] },
     { id: 4, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] },
@@ -44,11 +46,13 @@ describe('SCUM-13 event ownership and assigned coordinator permissions', () => {
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
+  // SCRUM-13-TC16
   it('allows the assigned coordinator to edit', async () => {
     await service.updateEvent(coordinator, 3, { purpose: 'Updated' });
     expect(db.updateById).toHaveBeenCalled();
   });
 
+  // SCRUM-13-TC17
   it.each([organiser, coordinator])('allows owner/assigned coordinator submission', async (user) => {
     await service.submitEvent(user, 3);
     expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
@@ -57,6 +61,22 @@ describe('SCUM-13 event ownership and assigned coordinator permissions', () => {
     }));
   });
 
+  // SCRUM-13-TC38
+  it('allows a Coordinator who created the request to submit it', async () => {
+    event.organiser_id = 4;
+    event.coordinator_id = null;
+    await service.submitEvent({ id: 4, roles: [ROLES.EVENT_COORDINATOR] }, 3);
+    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'SUBMITTED' }));
+  });
+
+  // SCRUM-13-TC39
+  it('rejects submission by a creator who is neither an Organiser nor a Coordinator', async () => {
+    event.organiser_id = 5;
+    await expect(service.submitEvent({ id: 5, roles: [ROLES.ATTENDEE] }, 3)).rejects.toMatchObject({ status: 403 });
+    expect(db.updateById).not.toHaveBeenCalled();
+  });
+
+  // SCRUM-13-TC18
   it('rejects submission by an unassigned coordinator', async () => {
     await expect(service.submitEvent({ ...coordinator, id: 4 }, 3)).rejects.toMatchObject({ status: 403 });
     expect(db.updateById).not.toHaveBeenCalled();
@@ -128,6 +148,7 @@ describe('SCUM-13 event ownership and assigned coordinator permissions', () => {
     expect(db.updateById).toHaveBeenCalled();
   });
 
+  // SCRUM-13-TC19
   it.each([organiser, { ...coordinator, id: 4 }])('rejects review by the wrong user', async (user) => {
     event.status = 'UNDER_REVIEW';
     await expect(service.changeStatus(user, 3, 'PLANNING')).rejects.toMatchObject({ status: 403 });

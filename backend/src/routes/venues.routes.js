@@ -21,6 +21,12 @@ router.get(
   controller.bookings
 );
 router.post('/bookings', requireRole(ROLES.EVENT_COORDINATOR), controller.requestBooking);
+// SCRUM-68: the service verifies the flagged booking and the assigned Coordinator.
+router.post(
+  '/bookings/:id/replacement',
+  requireRole(ROLES.EVENT_COORDINATOR),
+  controller.requestReplacementBooking
+);
 // Venue Staff approve or reject a booking request; the assigned Coordinator is notified
 // (SCRUM-78). Anyone else gets 403 here, before anything is saved or sent.
 router.post('/bookings/:id/decision', requireRole(ROLES.VENUE_STAFF), controller.decideBooking);
@@ -35,6 +41,14 @@ router.post('/holds', requireRole(ROLES.VENUE_STAFF), controller.placeHold);
  * Failure: requireAuth or requireRole returns 401/403 without invoking the controller.
  */
 router.post('/bookings/:id/cancel', requireRole(ROLES.EVENT_COORDINATOR), controller.cancelBooking);
+
+/*
+ * Purpose: restrict booking rescheduling to authenticated Event Coordinators before controller execution.
+ * AC: SCRUM-62 AC7 — users without the Coordinator role are rejected before booking data is accessed.
+ * Inputs: authenticated request and booking id. Output: delegates eligible requests to the controller.
+ * Failure: requireAuth or requireRole returns 401/403 without invoking the controller.
+ */
+router.patch('/bookings/:id', requireRole(ROLES.EVENT_COORDINATOR), controller.changeBooking);
 
 // SCRUM-66 AC6: internal users only; Event Organisers and Attendees get 403.
 router.get(
