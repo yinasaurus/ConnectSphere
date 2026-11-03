@@ -257,7 +257,7 @@ describe('Venues page inputs', () => {
     await user.clear(input);
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
-    expect(await screen.findByText('capacity: Capacity must be a number')).toBeInTheDocument();
+    expect(await screen.findByText('Capacity must be a number')).toBeInTheDocument();
     expect(database.venues[0].name).toBe('Helix Hall');
   });
 
