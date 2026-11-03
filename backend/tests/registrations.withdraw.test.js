@@ -225,7 +225,7 @@ describe('SCRUM-53 AC2: withdrawing updates the available registration capacity 
    * Type:     normal
    */
   // SCRUM-53-TC08
-  it('activeCount drops by one immediately after an attencan do when dee withdraws', async () => {
+  it('activeCount drops by one immediately after an attendee withdraws', async () => {
     // Before: 2 active registrations
     db.fetchOne.mockResolvedValueOnce(withEvent());
     db.fetchMany.mockResolvedValueOnce([

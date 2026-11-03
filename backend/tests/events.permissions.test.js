@@ -93,18 +93,18 @@ describe('SCUM-13 event ownership and assigned coordinator permissions', () => {
       event.status = 'SUBMITTED';
     });
 
-    /*
+        /*
     * AC:       SCRUM-64 (AC1: assigned Coordinator opens a Submitted request, moving it to Under Review)
     * Scenario: Assigned Coordinator opens a Submitted request, moving it to Under Review.
     * Setup:    Event is SUBMITTED, assigned to the caller; openForReview() is called.
-    * Expected: event_status_history records SUBMITTED -> UNDER_REVIEW. (The write itself — updateById with
-    *           status UNDER_REVIEW — is proven by SCRUM-5's US5-S01b; this test's own job is the history
-    *           trail, so the two doesn't duplicate each other.)
+    * Expected: event_status_history records SUBMITTED -> UNDER_REVIEW, and the event itself is
+    *           updated to status UNDER_REVIEW.
     * Type:     normal
     */
     // SCRUM-64-TC01
     it('lets the assigned coordinator open a submitted request, moving it to Under Review', async () => {
       await service.openForReview(coordinator, 3);
+      expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({ status: 'UNDER_REVIEW' }));
       expect(historyRows()).toEqual([['SUBMITTED', 'UNDER_REVIEW']]);
     });
 
