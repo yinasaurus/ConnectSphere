@@ -292,6 +292,7 @@ describe('SCRUM-48 Technical Support manages equipment requests', () => {
    * Scenario: Tech opens Equipment and views equipment requirements, specs, and event name.
    * Expected: Event name, equipment name, technical requirements/specifications are rendered.
    */
+  // SCRUM-48-TC11
   it('AC1/AC2: displays event details and technical specifications', async () => {
     const detailedRequest = {
       ...REQUEST,
@@ -311,6 +312,7 @@ describe('SCRUM-48 Technical Support manages equipment requests', () => {
    * Scenario: Tech updates status to PREPARING with arrangement notes.
    * Expected: PATCH /api/equipment/requests/:id is sent and status is updated.
    */
+  // SCRUM-48-TC12
   it('AC3: updates request status and arrangement notes', async () => {
     let currentStatus = 'PENDING';
     api.mockImplementation(async (path, options = {}) => {
@@ -361,6 +363,7 @@ describe('SCRUM-48 Technical Support manages equipment requests', () => {
    * Scenario: Tech filters requests by status.
    * Expected: Only matching requests are visible.
    */
+  // SCRUM-48-TC13
   it('AC1: filters requests by status and searches by event', async () => {
     mockLists({
       requests: [

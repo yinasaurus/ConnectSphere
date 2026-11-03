@@ -93,6 +93,7 @@ describe('SCRUM-48 Manage Equipment Request (Backend)', () => {
   });
 
   describe('AC 1 & AC 2: Technical Support Staff view equipment requests and specifications', () => {
+    // SCRUM-48-TC01
     it('returns equipment requests with event details and technical specifications', async () => {
       fetchMany.mockResolvedValueOnce([SAMPLE_REQUEST]);
 
@@ -113,6 +114,7 @@ describe('SCRUM-48 Manage Equipment Request (Backend)', () => {
       expect(reqItem.status).toBe('PENDING');
     });
 
+    // SCRUM-48-TC02
     it('filters equipment requests by eventId when provided', async () => {
       const chain = setupSupabaseChain();
       fetchMany.mockResolvedValueOnce([SAMPLE_REQUEST]);
@@ -126,6 +128,7 @@ describe('SCRUM-48 Manage Equipment Request (Backend)', () => {
   });
 
   describe('AC 3: Technical Support Staff updates request status as arrangements are made', () => {
+    // SCRUM-48-TC03
     it('updates request status to PREPARING with arrangement notes', async () => {
       fetchOne
         .mockResolvedValueOnce(SAMPLE_REQUEST) // fetch request
@@ -157,6 +160,7 @@ describe('SCRUM-48 Manage Equipment Request (Backend)', () => {
       );
     });
 
+    // SCRUM-48-TC04
     it('updates request status to RESERVED and creates an equipment reservation record', async () => {
       fetchOne
         .mockResolvedValueOnce(SAMPLE_REQUEST)
@@ -189,6 +193,7 @@ describe('SCRUM-48 Manage Equipment Request (Backend)', () => {
       );
     });
 
+    // SCRUM-48-TC05
     it('supports updating status to READY when arrangements are prepped', async () => {
       fetchOne
         .mockResolvedValueOnce({ ...SAMPLE_REQUEST, status: 'RESERVED' })
@@ -211,6 +216,7 @@ describe('SCRUM-48 Manage Equipment Request (Backend)', () => {
       expect(res.body.request.status).toBe('READY');
     });
 
+    // SCRUM-48-TC06
     it('supports updating status to UNAVAILABLE when equipment cannot be provided', async () => {
       fetchOne
         .mockResolvedValueOnce(SAMPLE_REQUEST)
@@ -233,6 +239,7 @@ describe('SCRUM-48 Manage Equipment Request (Backend)', () => {
       expect(res.body.request.status).toBe('UNAVAILABLE');
     });
 
+    // SCRUM-48-TC07
     it('rejects update with 403 when called by a non-technical staff member', async () => {
       mockRoles = [ROLES.EVENT_COORDINATOR];
       mockUserId = COORD_USER_ID;
@@ -244,6 +251,7 @@ describe('SCRUM-48 Manage Equipment Request (Backend)', () => {
       expect(res.status).toBe(403);
     });
 
+    // SCRUM-48-TC08
     it('rejects update with 400 when an invalid status is provided', async () => {
       fetchOne.mockResolvedValueOnce(SAMPLE_REQUEST);
 
@@ -255,6 +263,7 @@ describe('SCRUM-48 Manage Equipment Request (Backend)', () => {
       expect(res.body.message).toMatch(/Invalid status/i);
     });
 
+    // SCRUM-48-TC09
     it('returns 404 when updating a non-existent equipment request', async () => {
       fetchOne.mockResolvedValueOnce(null);
 
@@ -267,6 +276,7 @@ describe('SCRUM-48 Manage Equipment Request (Backend)', () => {
   });
 
   describe('AC 4: Event Coordinator can view updated equipment request status', () => {
+    // SCRUM-48-TC10
     it('exposes updated status and technical specifications to Event Coordinator', async () => {
       mockRoles = [ROLES.EVENT_COORDINATOR];
       mockUserId = COORD_USER_ID;

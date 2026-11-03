@@ -28,7 +28,7 @@ jest.mock('../src/services/notifications.service', () => ({
   notifyVenueStaff: jest.fn().mockResolvedValue(undefined),
 }));
 
-const { supabase, fetchMany, insertOne, updateById } = require('../src/config/db');
+const { supabase, fetchOne, fetchMany, insertOne, updateById } = require('../src/config/db');
 const { notifyUser } = require('../src/services/audit.service');
 const venuesService = require('../src/services/venues.service');
 
@@ -244,5 +244,131 @@ describe('SCRUM-79 Coordinator notices for venue unavailability', () => {
     });
 
     expect(notifyUser.mock.calls.map(([userId]) => userId)).toEqual([21, 22]);
+  });
+
+  /*
+   * AC: SCRUM-79 AC4.
+   * Scenario: An affected booking belongs to an event that has no assigned Coordinator.
+   * Setup: coordinator_id is null.
+   * Expected: No notification is dispatched; operation succeeds without error.
+   * Type: boundary.
+   */
+  // SCRUM-79-TC07
+  it('does not send notice if the affected event has no assigned coordinator', async () => {
+    fetchMany.mockResolvedValueOnce([
+      affectedBooking({ id: 100, eventId: 30, coordinatorId: null }),
+    ]);
+
+    await venuesService.blockVenue(VENUE_STAFF, {
+      venueId: PERIOD.venue_id,
+      startAt: PERIOD.start_at,
+      endAt: PERIOD.end_at,
+      reason: PERIOD.reason,
+    });
+
+    expect(notifyUser).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC: SCRUM-79 AC1 & AC4.
+   * Scenario: An active tentative hold (with future expiry) overlaps the unavailability period.
+   * Setup: Booking status is TENTATIVE with future hold_expires_at.
+   * Expected: Coordinator is notified of the unavailability for the tentative hold.
+   * Type: normal.
+   */
+  // SCRUM-79-TC08
+  it('notifies the coordinator of an active tentative hold overlapping the period', async () => {
+    fetchMany.mockResolvedValueOnce([
+      {
+        ...affectedBooking({ id: 105, eventId: 35, coordinatorId: 25 }),
+        status: BOOKING_STATUS.TENTATIVE,
+        hold_expires_at: '2026-12-01T00:00:00.000Z',
+      },
+    ]);
+
+    await venuesService.blockVenue(VENUE_STAFF, {
+      venueId: PERIOD.venue_id,
+      startAt: PERIOD.start_at,
+      endAt: PERIOD.end_at,
+      reason: PERIOD.reason,
+    });
+
+    expect(notifyUser).toHaveBeenCalledTimes(1);
+    expect(notifyUser).toHaveBeenCalledWith(
+      25,
+      'VENUE_UNAVAILABLE',
+      'Alternative arrangements required',
+      expect.stringContaining('Tech Symposium at Grand Hall'),
+      35
+    );
+  });
+
+  /*
+   * AC: SCRUM-79 & SCRUM-60.
+   * Scenario: Venue Staff retrieves the affected bookings list for an existing unavailability period.
+   * Setup: Unavailability period exists; listBookingsAffectedByUnavailability is queried.
+   * Expected: Affected bookings are returned, but notifyUser is NOT called during read operations.
+   * Type: boundary.
+   */
+  // SCRUM-79-TC09
+  it('does not dispatch notices when viewing or listing affected bookings', async () => {
+    fetchOne.mockResolvedValueOnce(PERIOD);
+    fetchMany.mockResolvedValueOnce([affectedBooking({ id: 100, eventId: 30, coordinatorId: 21 })]);
+
+    await venuesService.listBookingsAffectedByUnavailability(VENUE_STAFF, PERIOD.id);
+
+    expect(notifyUser).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC: SCRUM-79 AC3 & AC4.
+   * Scenario: Coordinator A has two affected events, and Coordinator B has one affected event.
+   * Setup: 3 affected bookings across 2 coordinators and 3 different events.
+   * Expected: Coordinator A receives 2 notices (one per event); Coordinator B receives 1 notice. Total 3 notices.
+   * Type: normal.
+   */
+  // SCRUM-79-TC10
+  it('dispatches exactly one notice per event when multiple coordinators have multiple affected events', async () => {
+    fetchMany.mockResolvedValueOnce([
+      affectedBooking({ id: 100, eventId: 30, eventName: 'Event 1', coordinatorId: 21 }),
+      affectedBooking({ id: 101, eventId: 31, eventName: 'Event 2', coordinatorId: 21 }),
+      affectedBooking({ id: 102, eventId: 32, eventName: 'Event 3', coordinatorId: 22 }),
+    ]);
+
+    await venuesService.blockVenue(VENUE_STAFF, {
+      venueId: PERIOD.venue_id,
+      startAt: PERIOD.start_at,
+      endAt: PERIOD.end_at,
+      reason: PERIOD.reason,
+    });
+
+    expect(notifyUser).toHaveBeenCalledTimes(3);
+    expect(notifyUser).toHaveBeenCalledWith(21, 'VENUE_UNAVAILABLE', expect.any(String), expect.stringContaining('Event 1'), 30);
+    expect(notifyUser).toHaveBeenCalledWith(21, 'VENUE_UNAVAILABLE', expect.any(String), expect.stringContaining('Event 2'), 31);
+    expect(notifyUser).toHaveBeenCalledWith(22, 'VENUE_UNAVAILABLE', expect.any(String), expect.stringContaining('Event 3'), 32);
+  });
+
+  /*
+   * AC: SCRUM-79 AC2.
+   * Scenario: Venue unavailability is recorded with custom free-text reason (e.g. Renovation).
+   * Setup: reason is set to 'Emergency electrical inspection & repairs'.
+   * Expected: Notice body explicitly includes 'Reason: Emergency electrical inspection & repairs.'
+   * Type: normal.
+   */
+  // SCRUM-79-TC11
+  it('includes custom free-text reason in the notice body', async () => {
+    fetchMany.mockResolvedValueOnce([affectedBooking({ id: 100, eventId: 30, coordinatorId: 21 })]);
+
+    await venuesService.blockVenue(VENUE_STAFF, {
+      venueId: PERIOD.venue_id,
+      startAt: PERIOD.start_at,
+      endAt: PERIOD.end_at,
+      reason: 'Emergency electrical inspection & repairs',
+    });
+
+    expect(notifyUser).toHaveBeenCalledTimes(1);
+    const body = notifyUser.mock.calls[0][3];
+    expect(body).toContain('Reason: Emergency electrical inspection & repairs.');
+    expect(body).toContain('Please arrange an alternative venue.');
   });
 });

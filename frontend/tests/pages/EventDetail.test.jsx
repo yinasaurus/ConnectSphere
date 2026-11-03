@@ -48,6 +48,7 @@ describe('SCRUM-16 (Event Clarification & Review Panel)', () => {
    * Expected: Review remarks are sent via POST /api/events/5/clarification
    * Type:     normal
    */
+  // SCRUM-16-TC16
   it('US16-UI01 (AC1+AC2): allows coordinator to view review panel and request clarification with remarks', async () => {
     const user = userEvent.setup();
     let sentRemarks = null;
@@ -126,6 +127,7 @@ describe('SCRUM-16 (Event Clarification & Review Panel)', () => {
    * Expected: Organiser sees attention card, review remarks, edit link, and submits response
    * Type:     normal
    */
+  // SCRUM-16-TC17
   it('US16-UI02 (AC3+AC4): displays attention card to organizer when ACTION_REQUIRED and allows submitting response', async () => {
     const user = userEvent.setup();
     let sentResponse = null;
@@ -210,6 +212,7 @@ describe('SCRUM-16 (Event Clarification & Review Panel)', () => {
    * Expected: Displays Clarification Provided card to organiser and response text to coordinator
    * Type:     normal
    */
+  // SCRUM-16-TC18
   it('US16-UI03 (AC5): displays Clarification Provided banner and shows response notes to coordinator', async () => {
     useAuth.mockReturnValue({
       user: organiserUser,
@@ -259,6 +262,7 @@ describe('SCRUM-16 (Event Clarification & Review Panel)', () => {
    * Expected: Status history and the coordinator panel show all four notes, not only the latest
    * Type:     normal
    */
+  // SCRUM-16-TC19
   it('US16-UI04 (AC5): coordinator sees every clarification request and response in history', async () => {
     useAuth.mockReturnValue({
       user: coordinatorUser,
@@ -626,7 +630,8 @@ it('loads an attendee event without requesting restricted planning data', async 
  * Expected: The rejected booking displays its status, the rejection reason, and the suggested alternative on the event page
  * Type:     normal
  */
-it('US18-F01 (AC7): displays rejection reason and suggested alternative for rejected booking to coordinator', async () => {
+// SCRUM-18-TC13
+  it('US18-F01 (AC7): displays rejection reason and suggested alternative for rejected booking to coordinator', async () => {
   useAuth.mockReturnValue({
     user: { id: 2 },
     hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
@@ -657,7 +662,8 @@ it('US18-F01 (AC7): displays rejection reason and suggested alternative for reje
  * Expected: The approved booking displays the 'Confirmed venue booking' label
  * Type:     normal
  */
-it('US18-F02 (AC8): displays confirmed venue booking label for approved booking', async () => {
+// SCRUM-18-TC14
+  it('US18-F02 (AC8): displays confirmed venue booking label for approved booking', async () => {
   useAuth.mockReturnValue({
     user: { id: 2 },
     hasRole: (...roles) => roles.includes('EVENT_COORDINATOR'),
@@ -685,7 +691,8 @@ it('US18-F02 (AC8): displays confirmed venue booking label for approved booking'
  * Expected: The card displays event name, venue name, booking window with date and time, and event date
  * Type:     normal
  */
-it('US18-F03 (AC2): displays event name, venue name, booking window, and event date on pending card for Venue Staff', async () => {
+// SCRUM-18-TC15
+  it('US18-F03 (AC2): displays event name, venue name, booking window, and event date on pending card for Venue Staff', async () => {
   useAuth.mockReturnValue({
     user: { id: 40 },
     hasRole: (...roles) => roles.includes('VENUE_STAFF'),
@@ -797,6 +804,7 @@ describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () =>
    * Expected: ConflictModal opens displaying the conflict message
    * Type:     negative
    */
+  // SCRUM-19-TC12
   it('opens ConflictModal when a coordinator request returns BOOKING_CONFLICT', async () => {
     const user = userEvent.setup();
     useAuth.mockReturnValue({
@@ -830,6 +838,7 @@ describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () =>
    * Expected: ConflictModal is NOT opened; standard inline alert displays error
    * Type:     negative
    */
+  // SCRUM-19-TC13
   it('does not open ConflictModal when an action returns a non-conflict 409 error', async () => {
     const user = userEvent.setup();
     useAuth.mockReturnValue({
@@ -863,6 +872,7 @@ describe('SCRUM-19 AC7: Conflict modal vs standard errors in EventDetail', () =>
    * Setup:    Event in PLANNING; GET equipment-requests returns updated status PREPARING, specs, and arrangement note
    * Expected: Coordinator sees updated status pill/text, technical specs, and arrangement note in equipment card
    */
+  // SCRUM-48-TC14
   it('SCRUM-48 AC4: Event Coordinator can view updated equipment request status, specifications, and arrangement note', async () => {
     useAuth.mockReturnValue({
       user: { id: 10 },

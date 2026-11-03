@@ -10,7 +10,7 @@ function login(email, password) {
   cy.location('pathname').should('not.eq', '/');
 }
 
-describe('TC-DRAFT-04: Draft Saving & Resuming', () => {
+describe('SCRUM-15: Draft Saving & Resuming', () => {
   const draftName = `Draft Event ${Date.now()}`;
   const draftPurpose = 'Showcase new prototype';
 
@@ -45,9 +45,10 @@ describe('TC-DRAFT-04: Draft Saving & Resuming', () => {
   });
 });
 
-describe('SCUM-16: Request Clarification on Event Request', () => {
+describe('SCRUM-16: Request Clarification on Event Request', () => {
   const eventName = `Clarification Test ${Date.now()}`;
 
+  // SCRUM-16-TC01
   it('allows coordinator to request clarification and organizer to inspect attention view and respond', () => {
     // Step 1: Organiser submits an event
     login(ORGANISER_EMAIL, PASSWORD);

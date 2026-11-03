@@ -78,6 +78,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
      * Expected: HTTP 409 BOOKING_CONFLICT returned, booking is not created
      * Type:     negative
      */
+    // SCRUM-19-TC01
     it('returns 409 BOOKING_CONFLICT when a booking request overlaps an existing confirmed booking', async () => {
       mockUser = COORDINATOR;
 
@@ -118,6 +119,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
      * Expected: HTTP 201 Created, booking saved as PENDING
      * Type:     normal
      */
+    // SCRUM-19-TC02
     it('creates a pending booking when no confirmed bookings conflict', async () => {
       mockUser = COORDINATOR;
       fetchMany.mockResolvedValueOnce([]);
@@ -154,6 +156,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
      * Expected: Occupied window is 09:30 to 12:45
      * Type:     normal
      */
+    // SCRUM-19-TC03
     it('computes occupied window from event start minus setup to event end plus turnaround', () => {
       const { occupiedStart, occupiedEnd } = venuesService.computeOccupiedWindow(
         '2026-10-20T10:00:00.000Z',
@@ -174,6 +177,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
      * Expected: findConflict returns the conflicting confirmed booking
      * Type:     normal
      */
+    // SCRUM-19-TC04
     it('AC3 & AC5: identifies a conflict when new occupied window overlaps an existing confirmed booking occupied window', async () => {
       const confirmedBooking = {
         id: 1,
@@ -206,6 +210,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
      * Expected: findConflict returns null (no conflict for abutting windows)
      * Type:     boundary
      */
+    // SCRUM-19-TC05
     it('AC4: two bookings are not in conflict if one occupied window ends exactly when the other starts', async () => {
       const confirmedBooking = {
         id: 1,
@@ -239,6 +244,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
      * Expected: HTTP 409 BOOKING_CONFLICT returned, status not updated to APPROVED
      * Type:     negative
      */
+    // SCRUM-19-TC06
     it('AC6: prevents Venue Staff from approving a booking that conflicts with a confirmed booking (409 Conflict)', async () => {
       mockUser = STAFF;
 
@@ -284,6 +290,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
      * Expected: HTTP 200 OK, status updated to APPROVED
      * Type:     normal
      */
+    // SCRUM-19-TC07
     it('allows approval of a pending booking when no conflict exists', async () => {
       mockUser = STAFF;
 
@@ -327,6 +334,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
      * Expected: Items annotated with has_conflict and conflict_details
      * Type:     normal
      */
+    // SCRUM-19-TC08
     it('AC7: listBookings flags pending bookings that conflict with confirmed bookings', async () => {
       mockUser = STAFF;
 
@@ -394,6 +402,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
      * Expected: Approving booking 102 (Venue 2) succeeds with 200, approving booking 101 (Venue 1) returns 409
      * Type:     normal
      */
+    // SCRUM-19-TC09
     it('AC8: checks each booking separately against its own venue — proves 102 approves and 101 fails with 409', async () => {
       mockUser = STAFF;
 
@@ -470,6 +479,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
      * Expected: findConflict returns the active tentative hold
      * Type:     normal
      */
+    // SCRUM-19-TC10
     it('identifies an ACTIVE tentative hold as occupying the venue (conflict detected)', async () => {
       const activeHold = {
         id: 7,
@@ -504,6 +514,7 @@ describe('SCRUM-19 Venue Booking Conflict Detection', () => {
      * Expected: findConflict returns null
      * Type:     boundary
      */
+    // SCRUM-19-TC11
     it('ignores an EXPIRED tentative hold (no conflict detected)', async () => {
       const expiredHold = {
         id: 8,

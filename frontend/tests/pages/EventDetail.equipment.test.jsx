@@ -77,6 +77,7 @@ describe('SCRUM-47 EventDetail equipment integration', () => {
     jest.clearAllMocks();
   });
 
+  // SCRUM-47-TC28
   it('AC1: displays "Request equipment" link for assigned Event Coordinator', async () => {
     mockApi();
     renderEventDetail('EVENT_COORDINATOR', 2);
@@ -87,6 +88,7 @@ describe('SCRUM-47 EventDetail equipment integration', () => {
     expect(reqLink).toHaveAttribute('href', '/app/events/3/equipment-request');
   });
 
+  // SCRUM-47-TC29
   it('AC1: hides "Request equipment" link for Organiser and Attendee', async () => {
     mockApi();
     renderEventDetail('EVENT_ORGANISER', 10);
@@ -95,6 +97,7 @@ describe('SCRUM-47 EventDetail equipment integration', () => {
     expect(screen.queryByRole('link', { name: /Request equipment/i })).not.toBeInTheDocument();
   });
 
+  // SCRUM-47-TC30
   it('AC2–AC4: displays equipment type, quantity, technical specifications, and timing', async () => {
     mockApi();
     renderEventDetail('EVENT_COORDINATOR', 2);
@@ -104,6 +107,7 @@ describe('SCRUM-47 EventDetail equipment integration', () => {
     expect(screen.getByText(/Dual channel UHF receiver with XLR outputs/i)).toBeInTheDocument();
   });
 
+  // SCRUM-47-TC31
   it('shows success banner when returning with equipmentRequestSubmitted state', async () => {
     mockApi();
     renderEventDetail('EVENT_COORDINATOR', 2, { equipmentRequestSubmitted: true });

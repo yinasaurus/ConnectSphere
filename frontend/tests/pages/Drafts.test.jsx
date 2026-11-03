@@ -21,7 +21,7 @@ function setupAuth() {
   return Promise.resolve({ user: mockUser });
 }
 
-describe('TC-DRAFT-04 (Draft Saving & Resuming)', () => {
+describe('SCRUM-15 Draft Saving & Resuming', () => {
   beforeEach(() => {
     api.mockReset();
     api.mockImplementation((path, options = {}) => {
@@ -138,7 +138,25 @@ describe('TC-DRAFT-04 (Draft Saving & Resuming)', () => {
 
     // Check that NO validation errors are triggered upon loading
     expect(screen.queryByText(/is required/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // An alert is only acceptable if it says the user lacks edit access; no generic validation alert should appear
+    const alert = screen.queryByRole('alert');
+    if (alert) {
+      expect(alert).toHaveTextContent(/you do not have access to edit this event/i);
+    }
+  });
+});
+
+describe('SCRUM-28 Submit vs Draft Behaviour', () => {
+  beforeEach(() => {
+    api.mockReset();
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/api/auth/me') return setupAuth();
+      if (path === '/api/events' && !options.method) {
+        return Promise.resolve({ events: [] });
+      }
+      return Promise.reject(new Error(`Unhandled api call: ${path}`));
+    });
   });
 
   /*

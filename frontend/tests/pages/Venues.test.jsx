@@ -991,6 +991,7 @@ describe('SCRUM-19 AC7: Conflict indicators and conflict modal in Venues page', 
    * Expected: Table shows "⚠️ Conflict with Confirmed Gala" for conflicting row and "✓ No conflict" for clear row
    * Type:     normal
    */
+  // SCRUM-19-TC14
   it('displays ⚠️ Conflict badge when has_conflict is true and ✓ No conflict when false', async () => {
     api.mockImplementation(async (path) => {
       if (path === '/api/venues') return { venues: [] };
@@ -1034,6 +1035,7 @@ describe('SCRUM-19 AC7: Conflict indicators and conflict modal in Venues page', 
    * Expected: ConflictModal opens showing the server conflict message
    * Type:     negative
    */
+  // SCRUM-19-TC15
   it('opens ConflictModal with server error message when approving a conflicting booking', async () => {
     const user = userEvent.setup();
     const conflictError = new Error('Cannot approve booking: venue has an overlapping confirmed booking');
@@ -1132,6 +1134,7 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
    * Expected: Pending list shows event name, venue name, booking window, and event date for each request
    * Type:     normal
    */
+  // SCRUM-18-TC16
   it('US18-UI01 (AC1+AC2): pending queue shows event, venue, date and time for each booking', async () => {
     renderVenues();
 
@@ -1160,6 +1163,7 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
    * Expected: Clicking Approve on booking 101 sends decision to endpoint for booking 101 only; booking 102 remains pending
    * Type:     normal
    */
+  // SCRUM-18-TC17
   it('US18-UI02 (AC3+AC5+AC9): approving booking 101 hits decision endpoint for 101 only and keeps 102 pending', async () => {
     const user = userEvent.setup();
     renderVenues();
@@ -1197,6 +1201,7 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
    * Expected: Typing reason and alternative in card 102 and clicking Reject sends decision to endpoint for 102 only
    * Type:     normal
    */
+  // SCRUM-18-TC18
   it('US18-UI03 (AC3+AC4+AC9): rejecting booking 102 sends reason and alternative for 102 only', async () => {
     const user = userEvent.setup();
     renderVenues();
