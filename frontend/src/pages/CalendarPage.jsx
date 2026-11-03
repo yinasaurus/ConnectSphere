@@ -25,7 +25,7 @@ export default function CalendarPage() {
       <div className="topbar">
         <div>
           <h1>Event calendar</h1>
-          <p>Single combined view for now. A per-venue calendar can be added later without changing the API.</p>
+          <p className="single-line">Single combined view for now. A per-venue calendar can be added later without changing the API.</p>
         </div>
         <div className="actions">
           <Button variant="ghost"  onClick={() => setCursor(addMonths(cursor, -1))}>Prev</Button>

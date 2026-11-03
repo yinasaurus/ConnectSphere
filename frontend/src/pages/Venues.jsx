@@ -528,7 +528,7 @@ export default function Venues() {
       <div className="topbar">
         <div>
           <h1>Venues</h1>
-          <p>Catalogue, layouts, and booking queue. Conflict checks include setup and turnaround time.</p>
+          <p className="single-line">Catalogue, layouts, and booking queue. Conflict checks include setup and turnaround time.</p>
         </div>
       </div>
       {error && <AlertBanner>{error}</AlertBanner>}

@@ -18,7 +18,7 @@ export default function Profile() {
       <div className="topbar">
         <div>
           <h1>Profile</h1>
-          <p>Accounts are assumed to arrive from an external identity process. This screen only updates profile fields.</p>
+          <p className="single-line">Accounts are assumed to arrive from an external identity process. This screen only updates profile fields.</p>
         </div>
       </div>
       {message && <AlertBanner tone="success">{message}</AlertBanner>}

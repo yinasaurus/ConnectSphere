@@ -246,7 +246,7 @@ export default function NewEvent() {
               ? 'Edit event details'
               : isEditing ? (eventData?.subState === 'ACTION_REQUIRED' ? 'Amend event request' : 'Edit event request') : 'New event request'}
           </h1>
-          <p>
+          <p className="single-line">
             {isCoordinatorEdit
               ? 'Changes save straight to the event. Once the event is Confirmed, date, time and attendance changes need a change request.'
               : eventData?.subState === 'ACTION_REQUIRED'
