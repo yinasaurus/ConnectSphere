@@ -206,6 +206,7 @@ describe('SCUM-13 event ownership and assigned coordinator permissions', () => {
     });
   });
 
+  // SCRUM-13-TC45
   it('allows an assigned coordinator to review', async () => {
     event.status = 'UNDER_REVIEW';
     await service.changeStatus(coordinator, 3, 'APPROVED');

@@ -101,6 +101,7 @@ describe('Login page', () => {
     expect(banner).toHaveTextContent('Invalid email or password.');
     expect(banner).toHaveClass('alert');
     expect(banner).not.toHaveClass('field-error');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument();
   });
 

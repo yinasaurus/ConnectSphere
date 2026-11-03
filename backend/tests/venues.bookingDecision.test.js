@@ -382,6 +382,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: venuesService.decideBooking throws 409 ALREADY_DECIDED error
      * Type:     error
      */
+    // SCRUM-18-TC19
     it('service: rejects decision on an already APPROVED booking with 409 conflict', async () => {
       const alreadyApproved = { ...PENDING_BOOKING, status: BOOKING_STATUS.APPROVED };
       fetchOne.mockResolvedValueOnce(alreadyApproved);
@@ -402,6 +403,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: venuesService.decideBooking throws 409 ALREADY_DECIDED error
      * Type:     error
      */
+    // SCRUM-18-TC20
     it('service: rejects decision on an already REJECTED booking with 409 conflict', async () => {
       const alreadyRejected = { ...PENDING_BOOKING, status: BOOKING_STATUS.REJECTED };
       fetchOne.mockResolvedValueOnce(alreadyRejected);
@@ -550,6 +552,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: The list returns needs_review true so the Venues page can show Approve.
      * Type:     normal
      */
+    // SCRUM-58-TC15
     it('US58-L01 (AC6): the booking list includes the review mark', async () => {
       mockUser = STAFF;
       fetchMany.mockResolvedValueOnce([

@@ -58,6 +58,19 @@ describe('SCRUM-92 shared wording and controls', () => {
     );
   });
 
+  // SCRUM-92-TC12
+  it('replaces a raw database or API error and keeps a normal sentence', () => {
+    expect(displayError('duplicate key value violates unique constraint "events_pkey"')).toBe(
+      'Something went wrong. Please try again.'
+    );
+    expect(displayError('PGRST116: The result contains 0 rows')).toBe(
+      'Something went wrong. Please try again.'
+    );
+    expect(displayError('null value in column "name" of relation "events" violates not-null constraint')).toBe(
+      'Something went wrong. Please try again.'
+    );
+  });
+
   // SCRUM-92-TC05
   it('shows a field message without the field name', () => {
     const text = displayFieldErrors({

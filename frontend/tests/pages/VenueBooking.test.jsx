@@ -153,6 +153,11 @@ it('shows timing and requirements, then submits a pending request for this event
   await user.selectOptions(screen.getByLabelText('Choose a venue'), '5');
 
   expect(screen.getByText('30 min setup before, 45 min turnaround after')).toBeInTheDocument();
+  const requirements = screen.getByRole('heading', { name: 'Venue requirements' }).closest('section');
+  expect(within(requirements).getByText('THEATRE')).toBeInTheDocument();
+  expect(within(requirements).getByText('Air con')).toBeInTheDocument();
+  expect(within(requirements).getByText('Speaker, projector and e-dollars')).toBeInTheDocument();
+  expect(within(requirements).getByText('None')).toBeInTheDocument();
   expect(screen.getByText('Expected attendance (100) exceeds venue capacity (80).')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Submit request' })).toBeEnabled();
   expect(screen.queryByLabelText(/arrangement notes/i)).not.toBeInTheDocument();
@@ -186,6 +191,7 @@ it('shows timing and requirements, then submits a pending request for this event
  *           preventing an incomplete booking from being sent.
  * Type:     error
  */
+// SCRUM-26-TC09
 it('blocks submission when required details or venue timing are missing', async () => {
   const user = userEvent.setup();
   configureApi({ ...eventFixture, accessibilityNeeds: '' });

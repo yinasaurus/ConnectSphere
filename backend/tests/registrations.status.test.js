@@ -248,6 +248,7 @@ describe('SCRUM-51 registration status route', () => {
     expect(res.body.registrationStatus).toMatchObject({ state: 'OPEN', placesLeft: 40, myRegistration: null });
   });
 
+  // SCRUM-51-TC23
   it('US51-R02: the route needs a signed-in user', async () => {
     const res = await request(app).get('/api/events/3/registration-status');
     expect(res.status).toBe(401);

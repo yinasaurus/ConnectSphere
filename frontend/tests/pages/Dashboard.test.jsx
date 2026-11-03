@@ -69,3 +69,37 @@ it('US5-F07: the dashboard picks up status changes every 10 seconds and stops wh
   expect(api.mock.calls.length).toBe(callsAfterClose);
   jest.useRealTimers();
 });
+
+// AC5 · The same 10-second refresh applies on the dashboards used by the other roles.
+// The coordinator dashboard is SCRUM-5-TC59. These two do not repeat that case.
+it.each([
+  // SCRUM-5-TC60
+  ['EVENT_ORGANISER', 'Aisha Rahman'],
+  // SCRUM-5-TC61
+  ['VENUE_STAFF', 'Ben Lim'],
+])('US5-F13: the %s dashboard picks up a status change every 10 seconds', async (role, fullName) => {
+  jest.useFakeTimers();
+  const events = [{ id: 1, name: 'Live event', status: 'UNDER_REVIEW', organiserId: 1 }];
+  api.mockImplementation(async (path) => (path === '/api/events' ? { events: events.map((event) => ({ ...event })) } : { unread: 0 }));
+  useAuth.mockReturnValue({
+    user: { id: 1, fullName },
+    hasRole: (...roles) => roles.includes(role),
+  });
+
+  const { unmount } = render(
+    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <Dashboard />
+    </MemoryRouter>
+  );
+  await act(async () => {});
+  expect(screen.getByText('Under Review')).toBeInTheDocument();
+
+  events[0].status = 'APPROVED';
+  await act(async () => { jest.advanceTimersByTime(9999); });
+  expect(screen.queryByText('Approved')).not.toBeInTheDocument();
+  await act(async () => { jest.advanceTimersByTime(1); });
+  expect(screen.getByText('Approved')).toBeInTheDocument();
+
+  unmount();
+  jest.useRealTimers();
+});

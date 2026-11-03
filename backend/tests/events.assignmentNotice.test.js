@@ -293,6 +293,7 @@ describe('SCRUM-45 AC2: Coordinator notice for a clarification response', () => 
    *           the Coordinator on the event is still 2.
    * Type:     error
    */
+  // SCRUM-45-TC17
   it('US45-B04: a Coordinator reassignment request is rejected and notifies nobody', async () => {
     event.coordinator_id = 2;
     event.status = 'PLANNING';
@@ -317,6 +318,7 @@ describe('SCRUM-45 AC2: Coordinator notice for a clarification response', () => 
    *           and incoming 4 gets COORDINATOR_ASSIGNED. Nobody else is told.
    * Type:     normal
    */
+  // SCRUM-45-TC18
   it('US45-B05: a Lead reassignment notifies the Organiser and both Coordinators', async () => {
     event.coordinator_id = 2;
     event.status = 'PLANNING';
@@ -361,6 +363,7 @@ describe('SCRUM-45 AC2: Coordinator notice for a clarification response', () => 
    *           applies only after a Lead gets past this check.
    * Type:     error
    */
+  // SCRUM-45-TC19
   it('US45-B06: a Coordinator cannot accept a reassignment, so no notices are sent', async () => {
     await expect(events.acceptCoordinatorChange(otherCoordinator, 3)).rejects.toMatchObject({
       status: 403,
@@ -379,6 +382,7 @@ describe('SCRUM-45 AC2: Coordinator notice for a clarification response', () => 
    *           no Organiser notice and no third call.
    * Type:     boundary
    */
+  // SCRUM-45-TC20
   it('US45-B10: a Lead reassignment with no organiser notifies the two Coordinators', async () => {
     event.organiser_id = null;
     event.coordinator_id = 2;
@@ -417,6 +421,7 @@ describe('SCRUM-45 AC1 smoke (existing paths; no duplicate product behaviour)', 
    * Expected: One CLARIFICATION_REQUESTED to organiser 1 only.
    * Type:     normal
    */
+  // SCRUM-45-TC21
   it('US45-B08: clarification request notifies only that event Organiser', async () => {
     event.status = 'UNDER_REVIEW';
     event.coordinator_id = 2;
@@ -442,6 +447,7 @@ describe('SCRUM-45 AC1 smoke (existing paths; no duplicate product behaviour)', 
    * Expected: Organiser 1 receives EVENT_STATUS_CHANGED; only organiser/coordinator ids notified.
    * Type:     normal
    */
+  // SCRUM-45-TC22
   it('US45-B11: approving notifies only that event Organiser (and assigned Coordinator if distinct)', async () => {
     event.status = 'UNDER_REVIEW';
     event.coordinator_id = 2;
@@ -540,6 +546,7 @@ describe('SCRUM-45 assignment notice HTTP routes', () => {
    * Type:     normal
    * Side note: the same notices without the route are SCRUM-29-TC10.
    */
+  // SCRUM-45-TC10
   it('US45-R02: POST reassign-coordinator notifies the Organiser and both Coordinators', async () => {
     event.coordinator_id = 2;
     event.status = 'PLANNING';

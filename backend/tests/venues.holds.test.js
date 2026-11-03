@@ -301,6 +301,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC53
   it('US75-B19: 404 when the event does not exist', async () => {
     fetchOne.mockResolvedValueOnce(null);
     await expect(
@@ -309,6 +310,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC54
   it.each(['DRAFT', 'CANCELLED', 'COMPLETED', 'REJECTED', 'CONFIRMED', 'PREPARATION', 'AWAITING_SAFETY_CHECK'])(
     'US75-B36: a %s event cannot be held (409), and nothing is saved',
     async (status) => {
@@ -321,6 +323,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     }
   );
 
+  // SCRUM-75-TC55
   it.each(['SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'PLANNING'])(
     'US75-B37: a %s event can be held',
     async (status) => {
@@ -330,6 +333,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     }
   );
 
+  // SCRUM-75-TC56
   it('US75-B20: 404 when the venue does not exist', async () => {
     mockEventAndVenue(EVENT, null);
     await expect(
@@ -338,6 +342,7 @@ describe('SCRUM-75 place a hold (service rules)', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC57
   it('US75-B21: 400 when eventId or venueId is missing', async () => {
     await expect(
       venuesService.placeHold(STAFF, { venueId: 8, expiresAt: EXPIRES }, NOW)
@@ -451,6 +456,7 @@ describe('SCRUM-75 edge cases and defaults', () => {
     expect(insertOne.mock.calls[0][1]).toMatchObject({ setup_minutes: 0, teardown_minutes: 0 });
   });
 
+  // SCRUM-75-TC58
   it('US75-B32: with no body at all the request is rejected with 400', async () => {
     await expect(venuesService.placeHold(STAFF)).rejects.toMatchObject({
       status: 400,
@@ -503,6 +509,7 @@ describe('SCRUM-75 HTTP routes', () => {
   const FUTURE_EVENT = { ...EVENT, start_at: '2099-11-20T10:00:00.000Z', end_at: '2099-11-20T12:00:00.000Z' };
   const FUTURE_EXPIRES = '2099-11-18T09:00:00.000Z';
 
+  // SCRUM-75-TC59
   it('US75-R08: a direct request to hold a Draft event gets 409 and saves nothing', async () => {
     mockUser = STAFF;
     mockEventAndVenue({ ...FUTURE_EVENT, status: 'DRAFT' });

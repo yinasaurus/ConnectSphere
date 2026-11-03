@@ -134,11 +134,12 @@ it('US5-F05: AWAITING_SAFETY_CHECK offers the coordinator no step button', async
 });
 
 /*
- * AC:       SCRUM-5 AC6
+ * AC:       SCRUM-5 AC3, AC6
  * Scenario: The coordinator is planning but hasn't requested a venue yet.
  * Setup:    Event in PLANNING with no venue bookings.
- * Expected: "Send to safety check" is disabled, a hint says to request a venue first, and
- *           clicking it sends no status change.
+ * Expected: "Send to safety check" is disabled, a hint says to request a venue first, the status
+ *           is Planning, and the equipment request is available. Clicking the disabled button
+ *           sends no status change.
  * Type:     error
  */
 // SCRUM-5-TC54
@@ -148,6 +149,8 @@ it('US5-F09: "Send to safety check" is disabled until a venue is requested', asy
   const button = screen.getByRole('button', { name: 'Send to safety check' });
   expect(button).toBeDisabled();
   expect(screen.getByText(/Request a venue first/)).toBeInTheDocument();
+  expect(screen.getByText('Planning')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Request equipment' })).toBeInTheDocument();
   await user.click(button);
   expect(api).not.toHaveBeenCalledWith('/api/events/3/status', expect.anything());
 });

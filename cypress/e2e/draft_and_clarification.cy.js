@@ -24,6 +24,7 @@ describe('SCRUM-15: Draft Saving & Resuming', () => {
   const draftName = `Draft Event ${Date.now()}`;
   const draftPurpose = 'Showcase new prototype';
 
+  // SCRUM-15-TC10
   it('enters partial details into event form, saves as draft, and resumes editing without validation errors', () => {
     login(ORGANISER_EMAIL, PASSWORD);
 

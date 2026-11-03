@@ -318,6 +318,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Output: successful confirmation (CONFIRMED status).
    * Failure: fails if decision notes on approved bookings are incorrectly treated as blockers.
    */
+  // SCRUM-73-TC13
   it('confirms when an approved venue booking has an approval note in decision_reason', async () => {
     tables.venue_bookings[0] = { ...tables.venue_bookings[0], decision_reason: 'Approved with standard AV setup' };
 
@@ -333,6 +334,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Output: 409 NOT_READY_TO_CONFIRM and an unchanged event.
    * Failure: fails if an equipment issue is ignored.
    */
+  // SCRUM-73-TC14
   it('blocks confirmation when a reserved equipment request still needs review', async () => {
     tables.equipment_requests = [{
       id: 1,

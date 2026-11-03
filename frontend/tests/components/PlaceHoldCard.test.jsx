@@ -64,6 +64,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     expect(onPlaced).toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC60
   it('US75-F02: lists only events still being planned', async () => {
     mockApi();
     render(<PlaceHoldCard venues={venues} />);
@@ -127,12 +128,14 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Place hold' })).toBeEnabled());
   });
 
+  // SCRUM-75-TC61
   it('US75-F10: shows an error when the event list cannot be loaded', async () => {
     api.mockRejectedValueOnce(new Error('Could not load events'));
     render(<PlaceHoldCard venues={venues} />);
     expect(await screen.findByText('Could not load events')).toBeInTheDocument();
   });
 
+  // SCRUM-75-TC62
   it('US75-F11: an empty reply from the event list leaves only the placeholder option', async () => {
     api.mockResolvedValueOnce({});
     render(<PlaceHoldCard venues={venues} />);
@@ -150,6 +153,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     expect(screen.queryByRole('option', { name: 'Undated Talk' })).not.toBeInTheDocument();
   });
 
+  // SCRUM-75-TC63
   it('US75-F13: with nothing picked, sends no ids and no expiry (the API rejects it)', async () => {
     mockApi({ holdError: { code: 'VALIDATION_ERROR', message: 'eventId and venueId are required' } });
     render(<PlaceHoldCard venues={venues} />);
@@ -163,6 +167,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     expect(await screen.findByText('Choose an event and a venue.')).toBeInTheDocument();
   });
 
+  // SCRUM-75-TC64
   it('US75-F14: works with no venues passed in', async () => {
     mockApi();
     render(<PlaceHoldCard />);

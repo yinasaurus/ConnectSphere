@@ -90,6 +90,7 @@ describe('SCRUM-84 coordinator view', () => {
    *           the access-denied message is only for a Coordinator.
    * Type: boundary
    */
+  // SCRUM-84-TC18
   it('AC2: an organiser outside the organisation still gets not found', async () => {
     await expect(service.getEvent({ ...organiser, organisationId: 20 }, 3)).rejects.toMatchObject({
       status: 404,
@@ -249,6 +250,7 @@ describe('SCRUM-84 coordinator view', () => {
     });
   });
 
+  // SCRUM-84-TC19
   it('an organiser list stays inside their organisation', async () => {
     db.fetchMany.mockResolvedValue([mine]);
     const listed = await service.listEvents(organiser);
