@@ -13,7 +13,7 @@ function historyRows() {
     .map(([, row]) => [row.from_status, row.to_status]);
 }
 
-describe('SCUM-13 event ownership and assigned coordinator permissions', () => {
+describe('SCRUM-13 event ownership and assigned coordinator permissions', () => {
   const organiser = { id: 1, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] };
   const coordinator = { id: 2, roles: [ROLES.EVENT_COORDINATOR] };
   let event;
