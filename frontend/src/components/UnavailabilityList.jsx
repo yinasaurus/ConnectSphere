@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { displayError } from '../displayError';
+import AlertBanner from './AlertBanner';
+import Button from './Button';
+import { formatDateTime } from '../formatDateTime';
+
+const PAGE_SIZE = 10;
 
 /**
  * Purpose: show recorded venue unavailability periods.
@@ -10,13 +16,14 @@ import { api } from '../api';
 export default function UnavailabilityList({ venues, refreshKey }) {
   const [periods, setPeriods] = useState([]);
   const [error, setError] = useState('');
+  const [page, setPage] = useState(0);
 
   async function load() {
     try {
       const res = await api('/api/venues/unavailability');
       setPeriods(res?.unavailability || []);
     } catch (err) {
-      setError(err.message);
+      setError(displayError(err));
     }
   }
 
@@ -31,11 +38,15 @@ export default function UnavailabilityList({ venues, refreshKey }) {
 
   if (!periods.length && !error) return null;
 
+  const pageCount = Math.max(1, Math.ceil(periods.length / PAGE_SIZE));
+  const pageIndex = Math.min(page, pageCount - 1);
+  const visiblePeriods = periods.slice(pageIndex * PAGE_SIZE, pageIndex * PAGE_SIZE + PAGE_SIZE);
+
   return (
     <div className="card" style={{ marginTop: 18 }} data-testid="unavailability-list">
       <h3>Venue unavailability periods</h3>
-      {error && <div className="alert">{error}</div>}
-      <table>
+      {error && <AlertBanner>{error}</AlertBanner>}
+      <table className="table">
         <thead>
           <tr>
             <th>Venue</th>
@@ -45,16 +56,25 @@ export default function UnavailabilityList({ venues, refreshKey }) {
           </tr>
         </thead>
         <tbody>
-          {periods.map((period) => (
+          {visiblePeriods.map((period) => (
             <tr key={period.id}>
               <td>{venueName(period.venue_id)}</td>
               <td>{period.reason}</td>
-              <td>{new Date(period.start_at).toLocaleString()}</td>
-              <td>{new Date(period.end_at).toLocaleString()}</td>
+              <td>{formatDateTime(period.start_at)}</td>
+              <td>{formatDateTime(period.end_at)}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      {periods.length > PAGE_SIZE && (
+        <div className="venue-pager">
+          <Button variant="ghost" disabled={pageIndex === 0} onClick={() => setPage(pageIndex - 1)}>Previous</Button>
+          <span className="muted">
+            {pageIndex * PAGE_SIZE + 1}–{Math.min((pageIndex + 1) * PAGE_SIZE, periods.length)} of {periods.length}
+          </span>
+          <Button variant="ghost" disabled={pageIndex >= pageCount - 1} onClick={() => setPage(pageIndex + 1)}>Next</Button>
+        </div>
+      )}
     </div>
   );
 }

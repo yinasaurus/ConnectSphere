@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AttendeeRegistrationCard from '../../src/components/AttendeeRegistrationCard';
+import { formatDateTime } from '../../src/formatDateTime';
 
 /**
  * SCRUM-51: what the Attendee's Registration card shows for each registration state and
@@ -39,8 +40,8 @@ describe('SCRUM-51 AttendeeRegistrationCard', () => {
     const { onRegister } = renderCard(status());
 
     expect(screen.getByText('Registration is open.')).toBeInTheDocument();
-    expect(screen.getByText(new Date(OPENS).toLocaleString())).toBeInTheDocument();
-    expect(screen.getByText(new Date(CLOSES).toLocaleString())).toBeInTheDocument();
+    expect(screen.getByText(formatDateTime(OPENS))).toBeInTheDocument();
+    expect(screen.getByText(formatDateTime(CLOSES))).toBeInTheDocument();
     expect(screen.getByText('40 of 50')).toBeInTheDocument();
     expect(screen.getByText('Not registered')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Withdraw' })).not.toBeInTheDocument();
@@ -59,7 +60,7 @@ describe('SCRUM-51 AttendeeRegistrationCard', () => {
     const registeredAt = '2026-11-02T10:00:00.000Z';
     const { onWithdraw } = renderCard(status({ myRegistration: { status: 'REGISTERED', registeredAt, withdrawnAt: null } }));
 
-    expect(screen.getByText(`Registered on ${new Date(registeredAt).toLocaleString()}`)).toBeInTheDocument();
+    expect(screen.getByText(`Registered on ${formatDateTime(registeredAt)}`)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Register' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Withdraw' }));
     expect(onWithdraw).toHaveBeenCalledTimes(1);
@@ -75,7 +76,7 @@ describe('SCRUM-51 AttendeeRegistrationCard', () => {
     const withdrawnAt = '2026-11-03T10:00:00.000Z';
     renderCard(status({ myRegistration: { status: 'WITHDRAWN', registeredAt: OPENS, withdrawnAt } }));
 
-    expect(screen.getByText(`Withdrawn on ${new Date(withdrawnAt).toLocaleString()}`)).toBeInTheDocument();
+    expect(screen.getByText(`Withdrawn on ${formatDateTime(withdrawnAt)}`)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Register' })).toBeInTheDocument();
   });
 
@@ -98,8 +99,8 @@ describe('SCRUM-51 AttendeeRegistrationCard', () => {
    */
   // SCRUM-51-TC18
   it.each([
-    ['NOT_YET_OPEN', `Registration opens on ${new Date(OPENS).toLocaleString()}.`],
-    ['CLOSED', `Registration closed on ${new Date(CLOSES).toLocaleString()}.`],
+    ['NOT_YET_OPEN', `Registration opens on ${formatDateTime(OPENS)}.`],
+    ['CLOSED', `Registration closed on ${formatDateTime(CLOSES)}.`],
     ['FULL', 'This event is full.'],
     ['STARTED', 'This event has already started, so registration is closed.'],
   ])('US51-F05: when registration is %s it explains why and hides Register', (state, text) => {

@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { displayError } from '../displayError';
+import AlertBanner from '../components/AlertBanner';
+import { formatDateTime } from '../formatDateTime';
 
 /**
  * Purpose: format start/end so the Lead can compare request times at a glance.
@@ -9,9 +12,9 @@ import { api } from '../api';
  */
 function formatQueueDateTime(startAt, endAt) {
   if (!startAt) return 'TBC';
-  const start = new Date(startAt).toLocaleString();
+  const start = formatDateTime(startAt);
   if (!endAt) return start;
-  return `${start} – ${new Date(endAt).toLocaleString()}`;
+  return `${start} – ${formatDateTime(endAt)}`;
 }
 
 /**
@@ -39,7 +42,7 @@ export default function UnassignedQueue() {
   useEffect(() => {
     api('/api/events/unassigned-queue')
       .then((data) => setEvents(data.events || []))
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(displayError(err)));
   }, []);
 
   return (
@@ -50,7 +53,7 @@ export default function UnassignedQueue() {
           <p>Submitted requests with no Coordinator yet. Open a request to see the full details before you assign someone.</p>
         </div>
       </div>
-      {error && <div className="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
       <div className="card">
         <table className="table">
           <thead>

@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import Equipment from '../../src/pages/Equipment';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/auth';
+import { formatDateTime } from '../../src/formatDateTime';
 
 jest.mock('../../src/api', () => ({ api: jest.fn() }));
 jest.mock('../../src/auth', () => ({ useAuth: jest.fn() }));
@@ -20,7 +21,7 @@ const REQUEST = {
 };
 
 const WINDOW = { from: '2026-11-12T09:00:00.000Z', to: '2026-11-12T17:00:00.000Z' };
-const CHECKED_WINDOW = `${new Date(WINDOW.from).toLocaleString()} – ${new Date(WINDOW.to).toLocaleString()}`;
+const CHECKED_WINDOW = `${formatDateTime(WINDOW.from)} – ${formatDateTime(WINDOW.to)}`;
 
 const SUFFICIENT = {
   sufficient: true,

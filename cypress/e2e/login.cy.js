@@ -7,7 +7,7 @@ function login(email, password) {
   cy.contains('button', 'Continue').click();
 }
 
-describe('SCUM-12 login', () => {
+describe('SCRUM-12 login', () => {
   // SCRUM-12-TC17
   it('logs in with valid credentials and lands on the organiser dashboard', () => {
     cy.visit('/');

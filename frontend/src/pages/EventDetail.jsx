@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { api } from '../api';
+import { displayError } from '../displayError';
 import { useAuth } from '../auth';
 import ConflictModal from '../components/ConflictModal';
 import EventDecisionPanel from '../components/EventDecisionPanel';
@@ -10,50 +11,9 @@ import EventRegistrationsCard from '../components/EventRegistrationsCard';
 import RescheduleBookingForm from '../components/RescheduleBookingForm';
 import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
-
-/** SCRUM-18: colour-coded booking status badge. */
-function BookingStatusBadge({ status }) {
-  const colours = {
-    PENDING: '#b45309',
-    APPROVED: '#15803d',
-    REJECTED: '#b91c1c',
-    TENTATIVE: '#1d4ed8',
-    CANCELLED: '#6b7280',
-    EXPIRED: '#6b7280',
-  };
-  return (
-    <span style={{
-      display: 'inline-block',
-      padding: '2px 10px',
-      borderRadius: 12,
-      fontSize: '0.78rem',
-      fontWeight: 600,
-      background: colours[status] || '#374151',
-      color: '#fff',
-      marginLeft: 6,
-    }}>
-      {/* SCRUM-75 AC1: a hold is stored as TENTATIVE and shown as Held. */}
-      {status === 'TENTATIVE' ? 'HELD' : status}
-    </span>
-  );
-}
-
-/*
- * Purpose: format a booking's start or end time with day, month, and time so dates are visible.
- * AC: SCRUM-62 feedback fix — show date on both ends to prevent hiding cross-day bookings.
- * Inputs: ISO timestamp. Output: formatted string like "31 Oct 13:45".
- * Failure: returns an empty string for invalid dates.
- */
-function formatBookingTime(value) {
-  const d = new Date(value);
-  const datePart = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  const timePart = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  return `${datePart} ${timePart}`;
-}
-
-function formatSubmittedDate(value) {
-  return new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
+import Button from '../components/Button';
+import AlertBanner from '../components/AlertBanner';
+import { formatDate, formatDateTime, formatTime } from '../formatDateTime';
 
 // Show API status constants as readable labels in the event's booking card.
 function formatBookingStatus(status) {
@@ -177,7 +137,7 @@ export default function EventDetail() {
       // SCRUM-39 AC1: a failure here is shown in the equipment card only, so it can't stop
       // the user from viewing the rest of the event.
       canViewPlanning
-        ? api(`/api/events/${id}/equipment-requests`).catch((err) => ({ requests: [], loadError: err.message }))
+        ? api(`/api/events/${id}/equipment-requests`).catch((err) => ({ requests: [], loadError: displayError(err) }))
         : Promise.resolve({ requests: [] }),
       // SCRUM-51: an Attendee's registration details and own status; a failure only hides that card's details.
       isAttendee
@@ -215,7 +175,7 @@ export default function EventDetail() {
     } else {
       const changeRes = await api(`/api/events/${id}/change-requests`).catch((err) => ({
         changeRequests: [],
-        loadError: err.message,
+        loadError: displayError(err),
       }));
       setChangeRequests(changeRes.changeRequests || []);
       setChangeRequestError(changeRes.loadError || '');
@@ -231,7 +191,7 @@ export default function EventDetail() {
   }, [id, canViewPlanning, isLead, isAttendee, user]);
 
   useEffect(() => {
-    const refresh = () => reload().catch((err) => setError(err.message));
+    const refresh = () => reload().catch((err) => setError(displayError(err)));
     refresh();
     const timer = setInterval(refresh, LIVE_REFRESH_MS);
     return () => clearInterval(timer);
@@ -252,9 +212,9 @@ export default function EventDetail() {
       return true;
     } catch (err) {
       if (err.code === 'BOOKING_CONFLICT') {
-        setConflictModalMsg(err.message);
+        setConflictModalMsg(displayError(err));
       } else {
-        showError(err.message);
+        showError(displayError(err));
       }
       return false;
     }
@@ -302,10 +262,10 @@ export default function EventDetail() {
         </div>
         <StatusBadge status={event.status} subState={event.subState} />
       </div>
-      {error && <div className="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
       {/* Keep the submitted-request confirmation visible after returning from booking or equipment request. */}
       {(message || location.state?.venueBookingSubmitted || location.state?.replacementBookingSubmitted || location.state?.equipmentRequestSubmitted) && (
-        <div className="alert success" role="status">
+        <AlertBanner tone="success">
           {location.state?.venueBookingSubmitted
             ? 'Venue booking request submitted. Venue Staff will review it as Pending.'
             : location.state?.replacementBookingSubmitted
@@ -313,7 +273,7 @@ export default function EventDetail() {
             : location.state?.equipmentRequestSubmitted
             ? 'Equipment request submitted. Technical Support Staff can now review and prepare the equipment.'
             : message}
-        </div>
+        </AlertBanner>
       )}
 
       <div className="grid-2">
@@ -321,7 +281,7 @@ export default function EventDetail() {
           <div className="card">
             <h3>Request details</h3>
             <p>{event.description || 'No description yet.'}</p>
-            <p><strong>When:</strong> {event.startAt ? `${new Date(event.startAt).toLocaleString()} – ${new Date(event.endAt).toLocaleString()}` : 'TBC'}</p>
+            <p><strong>When:</strong> {event.startAt ? `${formatDateTime(event.startAt)} – ${formatDateTime(event.endAt)}` : 'TBC'}</p>
             <p><strong>Attendance:</strong> {event.expectedAttendance || '—'}</p>
             <p><strong>Layout:</strong> {event.layoutPreference || '—'}</p>
             <p><strong>Accessibility:</strong> {event.accessibilityNeeds || 'None recorded'}</p>
@@ -340,7 +300,7 @@ export default function EventDetail() {
               )}
               {event.safetyCheck.decidedAt && (
                 <p className="muted">
-                  Recorded {new Date(event.safetyCheck.decidedAt).toLocaleString()}
+                  Recorded {formatDateTime(event.safetyCheck.decidedAt)}
                 </p>
               )}
             </div>
@@ -368,9 +328,9 @@ export default function EventDetail() {
                   <option key={row.id} value={row.id}>{row.fullName}</option>
                 ))}
               </select>
-              <button
-                className="btn"
-                type="button"
+              <Button
+                
+               
                 disabled={!assignCoordinatorId}
                 onClick={() => run(() => api(`/api/events/${id}/assign-coordinator`, {
                   method: 'POST',
@@ -378,7 +338,7 @@ export default function EventDetail() {
                 }))}
               >
                 Assign coordinator
-              </button>
+              </Button>
             </div>
           )}
 
@@ -408,9 +368,9 @@ export default function EventDetail() {
                   <option key={row.id} value={row.id}>{row.fullName}</option>
                 ))}
               </select>
-              <button
-                className="btn"
-                type="button"
+              <Button
+                
+               
                 disabled={!assignCoordinatorId}
                 onClick={() => run(() => api(`/api/events/${id}/reassign-coordinator`, {
                   method: 'POST',
@@ -418,16 +378,16 @@ export default function EventDetail() {
                 }))}
               >
                 Reassign coordinator
-              </button>
+              </Button>
             </div>
           )}
 
           {isOrganiser && event.status === 'DRAFT' && (
             <div className="card actions">
-              <Link className="btn secondary" to={`/app/events/${id}/edit`}>Continue editing</Link>
-              <button className="btn" onClick={() => run(() => api(`/api/events/${id}/submit`, { method: 'POST' }))}>
+              <Button variant="secondary"  to={`/app/events/${id}/edit`}>Continue editing</Button>
+              <Button  onClick={() => run(() => api(`/api/events/${id}/submit`, { method: 'POST' }))}>
                 Submit for review
-              </button>
+              </Button>
             </div>
           )}
 
@@ -438,15 +398,15 @@ export default function EventDetail() {
                 <StatusBadge status={event.status} subState={event.subState} />
               </div>
               <p>The event coordinator has reviewed your request and needs additional details or amendments before moving to planning.</p>
-              <div className="alert warning" style={{ whiteSpace: 'pre-wrap', margin: '4px 0 12px' }}>
+              <AlertBanner tone="warning" style={{ whiteSpace: 'pre-wrap', margin: '4px 0 12px' }}>
                 <strong>Coordinator review remarks:</strong>
                 <p style={{ marginTop: 4 }}>{event.reviewRemarks}</p>
-              </div>
+              </AlertBanner>
               <div className="actions">
-                <Link className="btn" to={`/app/events/${id}/edit`}>Edit & Amend Details</Link>
-                <button className="btn secondary" onClick={() => setShowRespondForm(!showRespondForm)}>
+                <Button  to={`/app/events/${id}/edit`}>Edit & Amend Details</Button>
+                <Button variant="secondary"  onClick={() => setShowRespondForm(!showRespondForm)}>
                   {showRespondForm ? 'Close Response Form' : 'Send Clarification Response'}
-                </button>
+                </Button>
               </div>
 
               {showRespondForm && (
@@ -458,8 +418,8 @@ export default function EventDetail() {
                     placeholder="Describe the changes made or answer the coordinator's questions..."
                   />
                   <div className="actions">
-                    <button
-                      className="btn"
+                    <Button
+                      
                       disabled={!clarificationReply.trim()}
                       onClick={() => run(async () => {
                         await api(`/api/events/${id}/clarification/respond`, {
@@ -471,8 +431,8 @@ export default function EventDetail() {
                       })}
                     >
                       Submit Response
-                    </button>
-                    <button className="btn ghost" onClick={() => setShowRespondForm(false)}>Cancel</button>
+                    </Button>
+                    <Button variant="ghost"  onClick={() => setShowRespondForm(false)}>Cancel</Button>
                   </div>
                 </div>
               )}
@@ -499,7 +459,7 @@ export default function EventDetail() {
             <div className="card stack">
               <h3>Request a change</h3>
               <p className="muted">Ask the assigned coordinator to update date, time, attendance, venue requirements or equipment requirements. Other fields cannot be requested here.</p>
-              {changeRequestError && <div className="alert">{changeRequestError}</div>}
+              {changeRequestError && <AlertBanner>{changeRequestError}</AlertBanner>}
               <label htmlFor="change-start">Proposed start</label>
               <input
                 id="change-start"
@@ -534,9 +494,9 @@ export default function EventDetail() {
                 value={changeForm.equipmentNotes}
                 onChange={(e) => setChangeForm((prev) => ({ ...prev, equipmentNotes: e.target.value }))}
               />
-              <button
-                className="btn"
-                type="button"
+              <Button
+                
+               
                 disabled={!Object.keys(buildChangePayload(changeForm)).length}
                 onClick={() => run(async () => {
                   await api(`/api/events/${id}/change-requests`, {
@@ -547,7 +507,7 @@ export default function EventDetail() {
                 })}
               >
                 Submit change request
-              </button>
+              </Button>
             </div>
           )}
 
@@ -557,8 +517,8 @@ export default function EventDetail() {
               {changeRequests.map((row) => (
                 <div key={row.id} style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
                   <p><strong>{row.status}</strong></p>
-                  {row.startAt && <p>Proposed start: {new Date(row.startAt).toLocaleString()}</p>}
-                  {row.endAt && <p>Proposed end: {new Date(row.endAt).toLocaleString()}</p>}
+                  {row.startAt && <p>Proposed start: {formatDateTime(row.startAt)}</p>}
+                  {row.endAt && <p>Proposed end: {formatDateTime(row.endAt)}</p>}
                   {row.expectedAttendance != null && <p>Proposed attendance: {row.expectedAttendance}</p>}
                   {row.venueRequirements && <p>Proposed venue requirements: {row.venueRequirements}</p>}
                   {row.equipmentNotes && <p>Proposed equipment requirements: {row.equipmentNotes}</p>}
@@ -574,19 +534,19 @@ export default function EventDetail() {
                       {/* SCRUM-69 AC2: page-level run() so a 400 (invalid requested values)
                           shows in the alert above the event, not only in Coordinator actions. */}
                       <div className="actions">
-                        <button
-                          className="btn"
-                          type="button"
+                        <Button
+                          
+                         
                           onClick={() => run(() => api(
                             `/api/events/${id}/change-requests/${row.id}/decision`,
                             { method: 'POST', body: { approve: true } }
                           ))}
                         >
                           Approve change
-                        </button>
-                        <button
-                          className="btn danger"
-                          type="button"
+                        </Button>
+                        <Button variant="danger"
+                          
+                         
                           onClick={() => run(() => api(
                             `/api/events/${id}/change-requests/${row.id}/decision`,
                             {
@@ -599,7 +559,7 @@ export default function EventDetail() {
                           ))}
                         >
                           Reject change
-                        </button>
+                        </Button>
                       </div>
                     </>
                   )}
@@ -611,14 +571,14 @@ export default function EventDetail() {
           {isCoordinator && (
             <div className="card stack review-panel">
               <h3>Coordinator {event.status === 'UNDER_REVIEW' ? 'review actions' : 'actions'}</h3>
-              {coordinatorError && <div className="alert" role="alert">{coordinatorError}</div>}
+              {coordinatorError && <AlertBanner>{coordinatorError}</AlertBanner>}
               {/*
                 Purpose: assigned Coordinator opens the shared edit form before Confirmed.
                 AC: SCRUM-40 1C, 2A — Confirmed/terminal statuses stay on change requests only.
               */}
               {!COORD_EDIT_LOCKED_STATUSES.includes(event.status) && (
                 <div className="actions">
-                  <Link className="btn secondary" to={`/app/events/${id}/edit`}>Edit event details</Link>
+                  <Button variant="secondary"  to={`/app/events/${id}/edit`}>Edit event details</Button>
                 </div>
               )}
               {event.status === 'CONFIRMED' && (
@@ -628,9 +588,9 @@ export default function EventDetail() {
               )}
               {event.status === 'SUBMITTED' && (
                 <div className="actions">
-                  <button className="btn" onClick={() => run(() => api(`/api/events/${id}/review`, { method: 'POST' }))}>
+                  <Button  onClick={() => run(() => api(`/api/events/${id}/review`, { method: 'POST' }))}>
                     Open for review
-                  </button>
+                  </Button>
                 </div>
               )}
               {event.status === 'UNDER_REVIEW' && (
@@ -666,24 +626,29 @@ export default function EventDetail() {
                       method: 'POST',
                       body: { decision, reason: text },
                     }))}
+                    extra={(
+                      <Button variant="secondary"
+                        
+                       
+                        onClick={() => setShowClarificationInput(true)}
+                      >
+                        {event.subState === 'ACTION_REQUIRED' ? 'Update Clarification' : 'Request Clarification / Amendments'}
+                      </Button>
+                    )}
                   />
-                  <div className="actions">
-                    <button className="btn secondary" onClick={() => setShowClarificationInput(!showClarificationInput)}>
-                      {event.subState === 'ACTION_REQUIRED' ? 'Update Clarification' : 'Request Clarification / Amendments'}
-                    </button>
-                  </div>
 
                   {showClarificationInput && (
-                    <div className="stack" style={{ marginTop: 8, padding: 12, background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 12 }}>
-                      <label style={{ margin: 0 }}><strong>Review remarks / requested amendments *</strong></label>
+                    <div className="review-inline">
+                      <label htmlFor="clarification-remarks">Review remarks / requested amendments *</label>
                       <textarea
+                        id="clarification-remarks"
                         value={clarificationNotes}
                         onChange={(e) => setClarificationNotes(e.target.value)}
                         placeholder="State incomplete details or amendments needed from the organizer..."
                       />
                       <div className="actions">
-                        <button
-                          className="btn"
+                        <Button
+                          
                           disabled={!clarificationNotes.trim()}
                           onClick={() => runCoordinatorAction(async () => {
                             await api(`/api/events/${id}/clarification`, {
@@ -695,40 +660,40 @@ export default function EventDetail() {
                           })}
                         >
                           Send Clarification Request
-                        </button>
-                        <button className="btn ghost" onClick={() => setShowClarificationInput(false)}>Cancel</button>
+                        </Button>
+                        <Button variant="ghost"  onClick={() => setShowClarificationInput(false)}>Cancel</Button>
                       </div>
                     </div>
                   )}
                 </>
               )}
               {event.status === 'APPROVED' && (
-                <button className="btn" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'PLANNING' } }))}>
+                <Button  onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'PLANNING' } }))}>
                   Start planning
-                </button>
+                </Button>
               )}
               {event.status === 'PLANNING' && (
                 <>
-                  <button
-                    className="btn"
+                  <Button
+                    
                     disabled={!venuesReadyForSafetyCheck}
                     aria-describedby={safetyCheckHint ? 'safety-check-hint' : undefined}
                     onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'AWAITING_SAFETY_CHECK' } }))}
                   >
                     Send to safety check
-                  </button>
+                  </Button>
                   {safetyCheckHint && <p className="muted" id="safety-check-hint">{safetyCheckHint}</p>}
                 </>
               )}
               {event.status === 'PREPARATION' && (
-                <button className="btn" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'CONFIRMED' } }))}>
+                <Button  onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'CONFIRMED' } }))}>
                   Confirm event
-                </button>
+                </Button>
               )}
               {event.status === 'CONFIRMED' && (
-                <button className="btn secondary" onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'COMPLETED' } }))}>
+                <Button variant="secondary"  onClick={() => runCoordinatorAction(() => api(`/api/events/${id}/status`, { method: 'POST', body: { status: 'COMPLETED' } }))}>
                   Mark completed
-                </button>
+                </Button>
               )}
               {event.status !== 'UNDER_REVIEW' && (
                 <>
@@ -750,7 +715,7 @@ export default function EventDetail() {
                   <p style={{ fontWeight: 600, marginBottom: 4 }}>
                     {event.name && <span style={{ marginRight: 6 }}>{event.name} —</span>}
                     {booking.venue_name || `Venue #${booking.venue_id}`}
-                    <BookingStatusBadge status={booking.status} />
+                    <StatusBadge kind="booking" status={booking.status} />
                   </p>
                   {booking.needs_review && booking.status === 'APPROVED' && (
                     <p className="muted">Approving again clears Requires review. The booking stays approved.</p>
@@ -758,13 +723,13 @@ export default function EventDetail() {
                   <p className="muted" style={{ margin: '3px 0', fontSize: '0.88rem' }}>
                     <strong>Booking window:</strong>{' '}
                     {booking.start_at && booking.end_at
-                      ? `${new Date(booking.start_at).toLocaleString()} – ${new Date(booking.end_at).toLocaleString()}`
+                      ? `${formatDateTime(booking.start_at)} – ${formatDateTime(booking.end_at)}`
                       : 'TBC'}
                   </p>
                   {event.startAt && (
                     <p className="muted" style={{ margin: '3px 0', fontSize: '0.88rem' }}>
                       <strong>Event date:</strong>{' '}
-                      {`${new Date(event.startAt).toLocaleString()} – ${new Date(event.endAt).toLocaleString()}`}
+                      {`${formatDateTime(event.startAt)} – ${formatDateTime(event.endAt)}`}
                     </p>
                   )}
                   {booking.status === 'PENDING' && (
@@ -784,18 +749,18 @@ export default function EventDetail() {
                     </>
                   )}
                   <div className="actions">
-                    <button
-                      className="btn"
+                    <Button
+                      
                       onClick={() => run(() => api(`/api/venues/bookings/${booking.id}/decision`, {
                         method: 'POST',
                         body: { approve: true },
                       }))}
                     >
-                      Approve venue
-                    </button>
+                Approve venue
+                    </Button>
                     {booking.status === 'PENDING' && (
-                      <button
-                        className="btn danger"
+                      <Button variant="danger"
+                        
                         onClick={() => run(() => api(`/api/venues/bookings/${booking.id}/decision`, {
                           method: 'POST',
                           body: {
@@ -805,8 +770,8 @@ export default function EventDetail() {
                           },
                         }))}
                       >
-                        Reject venue
-                      </button>
+                Reject venue
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -853,13 +818,13 @@ export default function EventDetail() {
               </div>
             ))}
             <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Leave a planning note" />
-            <button className="btn secondary" onClick={() => run(async () => {
+            <Button variant="secondary"  onClick={() => run(async () => {
               await api(`/api/comments/${id}`, { method: 'POST', body: { body: comment } });
               setComment('');
             })}
             >
               Post comment
-            </button>
+            </Button>
           </div>}
         </div>
 
@@ -886,7 +851,7 @@ export default function EventDetail() {
                       {booking.venue_name || `Venue #${booking.venue_id}`}: {booking.status === 'TENTATIVE' ? 'HELD' : booking.status}
                     </span>
                     <strong>{booking.venue_name || `Venue #${booking.venue_id}`}</strong>
-                    <BookingStatusBadge status={booking.status} />
+                    <StatusBadge kind="booking" status={booking.status} />
                     {booking.needs_review && <span className="needs-review-flag">Requires review</span>}
                   </p>
                   {/* SCRUM-75 AC1: a hold already shows HELD in its badge, so the stored
@@ -897,13 +862,13 @@ export default function EventDetail() {
                 </div>
                 <p className="muted" style={{ margin: '2px 0', fontSize: '0.85rem' }}>
                   {booking.start_at && booking.end_at
-                    ? `Occupied ${formatBookingTime(
+                    ? `Occupied ${formatTime(
                       new Date(new Date(booking.start_at).getTime() - Number(booking.setup_minutes || 0) * 60_000)
-                    )} to ${formatBookingTime(
+                    )} to ${formatTime(
                       new Date(new Date(booking.end_at).getTime() + Number(booking.teardown_minutes || 0) * 60_000)
                     )}`
                     : 'Occupied window unavailable'}
-                  {booking.created_at && ` · Submitted ${formatSubmittedDate(booking.created_at)}`}
+                  {booking.created_at && ` · Submitted ${formatDate(booking.created_at)}`}
                 </p>
                 {/* SCRUM-62 AC5: show the previous booking window after a reschedule. */}
                 {(() => {
@@ -913,7 +878,7 @@ export default function EventDetail() {
                   if (!reschedule?.metadata?.previousStartAt || !reschedule?.metadata?.previousEndAt) return null;
                   return (
                     <p style={{margin: '2px 0', fontSize: '0.85rem', color: '#6b7280'}}>
-                      Previous time: {formatBookingTime(new Date(reschedule.metadata.previousStartAt).getTime())} to {formatBookingTime(new Date(reschedule.metadata.previousEndAt).getTime())}
+                      Previous time: {formatDateTime(reschedule.metadata.previousStartAt)} to {formatDateTime(reschedule.metadata.previousEndAt)}
                     </p>
                   );
                 })()}
@@ -935,12 +900,12 @@ export default function EventDetail() {
                   </p>
                 )}
                 {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && booking.needs_review && (
-                  <Link
-                    className="btn secondary"
+                  <Button variant="secondary"
+                    
                     to={`/app/events/${id}/venue-booking?replacementFor=${encodeURIComponent(booking.id)}`}
                   >
                     Request replacement venue
-                  </Link>
+                  </Button>
                 )}
                 {/*
                  * Purpose: show a rescheduling form only to the assigned Coordinator for active, non-rejected bookings on active events.
@@ -978,34 +943,34 @@ export default function EventDetail() {
                   && event.status !== 'COMPLETED'
                   && event.status !== 'CANCELLED'
                   && ['PENDING', 'TENTATIVE', 'APPROVED'].includes(booking.status) && (
-                  <button
-                    className="btn ghost"
+                  <Button variant="ghost"
+                    
                     onClick={() => run(() => api(`/api/venues/bookings/${booking.id}/cancel`, { method: 'POST' }))}
                   >
                     Cancel booking
-                  </button>
+                  </Button>
                 )}
               </div>
             )) : <p className="muted">No booking yet. Essential arrangements must be approved before confirmation.</p>}
             {/* A coordinator may create independent requests for the same event. */}
             {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && canBookVenue && (
-              <Link className="btn venue-book-link" to={`/app/events/${id}/venue-booking`}>Book a venue</Link>
+              <Button className="venue-book-link" to={`/app/events/${id}/venue-booking`}>Book a venue</Button>
             )}
           </div>
           {hasRole(ROLES.SAFETY_OFFICER) && (
             <div className="card stack">
               <h3>Safety check</h3>
               <p className="muted">Only a Safety Officer can open a safety check or record its outcome.</p>
-              <Link className="btn ghost" to="/app/events/safety-queue">Safety queue</Link>
+              <Button variant="ghost"  to="/app/events/safety-queue">Safety queue</Button>
               {event.status === 'AWAITING_SAFETY_CHECK' && (
-                <Link className="btn" to={`/app/events/${id}/safety-check`}>Open safety check</Link>
+                <Button  to={`/app/events/${id}/safety-check`}>Open safety check</Button>
               )}
             </div>
           )}
 
           {canViewPlanning && <div className="card">
             <h3>Equipment requests</h3>
-            {equipmentError ? <p className="alert">Equipment requests could not be loaded: {equipmentError}</p>
+            {equipmentError ? <AlertBanner>Equipment requests could not be loaded: {equipmentError}</AlertBanner>
               : equipmentRequests.length ? equipmentRequests.map((item) => (
               <div key={item.id} className="equipment-request-row" style={{ marginBottom: 10 }}>
                 <p style={{ margin: '2px 0' }}>
@@ -1024,7 +989,7 @@ export default function EventDetail() {
                 )}
                 {(item.start_at && item.end_at) && (
                   <p className="muted" style={{ margin: '2px 0', fontSize: '0.82rem' }}>
-                    Timing: {new Date(item.start_at).toLocaleString()} – {new Date(item.end_at).toLocaleString()}
+                    Timing: {formatDateTime(item.start_at)} – {formatDateTime(item.end_at)}
                   </p>
                 )}
                 {item.decision_reason && (
@@ -1036,9 +1001,9 @@ export default function EventDetail() {
             )) : <p className="muted">No equipment requested yet.</p>}
             {isCoordinator && hasRole(ROLES.EVENT_COORDINATOR) && !['CANCELLED', 'REJECTED'].includes(event.status) && (
               <div style={{ marginTop: 10 }}>
-                <Link className="btn equipment-request-link" to={`/app/events/${id}/equipment-request`}>
+                <Button className="equipment-request-link" to={`/app/events/${id}/equipment-request`}>
                   Request equipment
-                </Link>
+                </Button>
               </div>
             )}
           </div>}

@@ -4,6 +4,8 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
+import Button from '../components/Button';
+import { formatDateTime } from '../formatDateTime';
 
 export default function Dashboard() {
   const { user, hasRole } = useAuth();
@@ -58,7 +60,7 @@ export default function Dashboard() {
           <p>This home view is role-aware. Wire more widgets here as stories land.</p>
         </div>
         {hasRole(ROLES.EVENT_ORGANISER) && (
-          <Link className="btn" to="/app/events/new">New event request</Link>
+          <Button  to="/app/events/new">New event request</Button>
         )}
       </div>
       <div className="grid-3">
@@ -100,12 +102,12 @@ export default function Dashboard() {
                   </p>
                 )}
                 <div className="actions" style={{ marginTop: 6 }}>
-                  <Link className="btn" to={`/app/events/${event.id}/edit`} style={{ padding: '6px 14px', fontSize: '0.85rem' }}>
+                  <Button  to={`/app/events/${event.id}/edit`} style={{ padding: '6px 14px', fontSize: '0.85rem' }}>
                     Amend Request Details
-                  </Link>
-                  <Link className="btn secondary" to={`/app/events/${event.id}`} style={{ padding: '6px 14px', fontSize: '0.85rem' }}>
+                  </Button>
+                  <Button variant="secondary"  to={`/app/events/${event.id}`} style={{ padding: '6px 14px', fontSize: '0.85rem' }}>
                     View & Respond
-                  </Link>
+                  </Button>
                 </div>
               </div>
             ))}
@@ -132,7 +134,7 @@ export default function Dashboard() {
               <tr key={event.id}>
                 <td><Link to={`/app/events/${event.id}`}>{event.name}</Link></td>
                 <td><StatusBadge status={event.status} subState={event.subState} /></td>
-                <td>{event.startAt ? new Date(event.startAt).toLocaleString() : 'TBC'}</td>
+                <td>{event.startAt ? formatDateTime(event.startAt) : 'TBC'}</td>
                 {/* SCRUM-29 AC1: assigned Coordinator's name, or "Unassigned" until the Lead assigns. */}
                 <td>{event.coordinatorName || 'Unassigned'}</td>
               </tr>

@@ -4,6 +4,8 @@ import { api } from '../api';
 import StatusBadge from '../components/StatusBadge';
 import { STATUS_LABELS, ROLES } from '../constants';
 import { useAuth } from '../auth';
+import Button from '../components/Button';
+import { formatDateTime } from '../formatDateTime';
 
 export default function Events() {
   const { user, hasRole } = useAuth();
@@ -60,7 +62,7 @@ export default function Events() {
           <p>Coordinators see events assigned to them. Leads and other staff see the planning list.</p>
         </div>
         {hasRole(ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR) && (
-          <Link className="btn" to="/app/events/new">Create</Link>
+          <Button  to="/app/events/new">Create</Button>
         )}
       </div>
       <div className="card" style={{ marginBottom: 16 }}>
@@ -86,13 +88,13 @@ export default function Events() {
             ))}
           </select>
           {hasRole(ROLES.EVENT_COORDINATOR) && !seesOnlyAssigned && (
-            <label>
+            <label className="checkbox-field">
               <input
                 type="checkbox"
                 checked={assignedToMe}
                 onChange={(e) => toggleAssignedToMe(e.target.checked)}
               />
-              {' '}Assigned to me
+              Assigned to me
             </label>
           )}
         </div>
@@ -113,7 +115,7 @@ export default function Events() {
             </div>
             <h3>{event.name}</h3>
             <p className="muted">{event.organisationName || 'ConnectSphere'} · {event.category}</p>
-            <p>{event.startAt ? new Date(event.startAt).toLocaleString() : 'Dates to be confirmed'}</p>
+            <p>{event.startAt ? formatDateTime(event.startAt) : 'Dates to be confirmed'}</p>
             {/*
               Purpose: flag a newly submitted request as Unassigned on the organiser's event list.
               AC: SCRUM-30 AC1 (every submitted event with no Coordinator shows Unassigned)

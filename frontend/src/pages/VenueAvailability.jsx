@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import { displayError } from '../displayError';
 import { useAuth } from '../auth';
 import { ROLES } from '../constants';
+import Button from '../components/Button';
+import AlertBanner from '../components/AlertBanner';
+import { formatDateTime } from '../formatDateTime';
 
 // SCRUM-66: venue availability view. The backend decides what is available
 // (GET /api/venues/:id/availability); this page only picks the range and shows it.
@@ -17,7 +21,7 @@ const REASON_LABELS = {
 };
 
 function formatTime(value) {
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }
 
 export default function VenueAvailability() {
@@ -40,7 +44,7 @@ export default function VenueAvailability() {
   useEffect(() => {
     api('/api/venues')
       .then((res) => setVenues(res.venues || []))
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(displayError(err)));
   }, []);
 
   async function check(e) {
@@ -72,14 +76,14 @@ export default function VenueAvailability() {
           setBookingsVenue(res.venue.name);
         })
         .catch((err) => {
-          if (searchId === latestSearch.current) setBookingsError(err.message);
+          if (searchId === latestSearch.current) setBookingsError(displayError(err));
         });
     }
     try {
       setResult(await api(`/api/venues/${venueId}/availability?${params.toString()}`));
     } catch (err) {
       setResult(null);
-      setError(err.message);
+      setError(displayError(err));
     } finally {
       setLoading(false);
     }
@@ -90,10 +94,8 @@ export default function VenueAvailability() {
       <div className="topbar">
         <div>
           <h1>Venue availability</h1>
-          <p>
-            Confirmed bookings (including setup and turnaround time), active tentative holds and
-            recorded unavailability are marked unavailable. Everything else is marked available.
-            Pending booking requests are not shown.
+          <p className="single-line">
+            Confirmed bookings (with setup and turnaround), active holds, and blocked time are unavailable. Pending requests are not shown.
           </p>
         </div>
       </div>
@@ -110,14 +112,14 @@ export default function VenueAvailability() {
           <label htmlFor="availability-to" className="muted">To</label>
           <input id="availability-to" type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} />
           <div className="actions">
-            <button className="btn" type="submit" disabled={loading}>
+            <Button  type="submit" disabled={loading}>
               {loading ? 'Checking…' : 'Check availability'}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
 
-      {error && <div className="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
 
       {result && (
         <div className="card">
@@ -160,7 +162,7 @@ export default function VenueAvailability() {
       {canSeeBookings && (bookings || bookingsError) && (
         <div className="card" style={{ marginTop: 18 }}>
           <h3>{bookingsVenue ? `Existing bookings at ${bookingsVenue}` : 'Existing bookings'}</h3>
-          {bookingsError && <div className="alert">{bookingsError}</div>}
+          {bookingsError && <AlertBanner>{bookingsError}</AlertBanner>}
           {bookings && bookings.length === 0 && <p className="muted">No confirmed bookings or active holds in this period.</p>}
           {bookings && bookings.length > 0 && (
             <table className="table" aria-label="Existing bookings">

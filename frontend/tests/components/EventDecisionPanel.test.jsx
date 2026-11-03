@@ -33,12 +33,13 @@ describe('SCRUM-17 EventDecisionPanel', () => {
     expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
   });
 
-  // AC3 · Happy path: the optional comment is trimmed before it's sent with APPROVE.
+  // AC3 · Happy path: Approve opens the optional comment, which is trimmed before it is sent.
   // SCRUM-17-TC41
   it('US17-F02: approving sends APPROVE with the trimmed optional comment', async () => {
     const { onDecide, user } = renderPanel();
-    await user.type(screen.getByLabelText(/comment for the organiser/i), '  Looks good  ');
     await user.click(screen.getByRole('button', { name: 'Approve' }));
+    await user.type(screen.getByLabelText(/comment for the organiser/i), '  Looks good  ');
+    await user.click(screen.getByRole('button', { name: 'Confirm approval' }));
     expect(onDecide).toHaveBeenCalledWith('APPROVE', 'Looks good');
   });
 
@@ -47,6 +48,7 @@ describe('SCRUM-17 EventDecisionPanel', () => {
   it('US17-F03: approving without a comment is allowed', async () => {
     const { onDecide, user } = renderPanel();
     await user.click(screen.getByRole('button', { name: 'Approve' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm approval' }));
     expect(onDecide).toHaveBeenCalledWith('APPROVE', '');
   });
 
@@ -140,6 +142,7 @@ describe('SCRUM-17 EventDecisionPanel', () => {
     const onDecide = jest.fn(() => new Promise((resolve) => { finish = resolve; }));
     const { user } = renderPanel(onDecide);
     await user.click(screen.getByRole('button', { name: 'Approve' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm approval' }));
     expect(screen.getByRole('button', { name: 'Approving…' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Reject' })).toBeDisabled();
     finish();

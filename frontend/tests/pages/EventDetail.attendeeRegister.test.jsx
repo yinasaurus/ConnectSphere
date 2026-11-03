@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../../src/auth';
 import { api } from '../../src/api';
 import EventDetail from '../../src/pages/EventDetail';
+import { formatDateTime } from '../../src/formatDateTime';
 
 jest.mock('../../src/api', () => ({
   api: jest.fn(),
@@ -224,11 +225,11 @@ describe('SCRUM-52 Register button (event page)', () => {
     renderEvent();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Register' }));
-    expect(await screen.findByText(`Registered on ${new Date(registeredAt).toLocaleString()}`)).toBeInTheDocument();
+    expect(await screen.findByText(`Registered on ${formatDateTime(registeredAt)}`)).toBeInTheDocument();
     expect(screen.getByText('39 of 50')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Withdraw' }));
-    expect(await screen.findByText(`Withdrawn on ${new Date(withdrawnAt).toLocaleString()}`)).toBeInTheDocument();
+    expect(await screen.findByText(`Withdrawn on ${formatDateTime(withdrawnAt)}`)).toBeInTheDocument();
     expect(calls).toContainEqual(expect.objectContaining({ path: '/api/events/3/registrations/withdraw', method: 'POST' }));
     expect(screen.getByRole('button', { name: 'Register' })).toBeInTheDocument();
   });

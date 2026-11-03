@@ -14,6 +14,7 @@ import userEvent from '@testing-library/user-event';
 import VenueAvailability from '../../src/pages/VenueAvailability';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/auth';
+import { formatDateTime } from '../../src/formatDateTime';
 
 jest.mock('../../src/api', () => ({ api: jest.fn() }));
 jest.mock('../../src/auth', () => ({ useAuth: jest.fn() }));
@@ -81,7 +82,7 @@ async function search() {
 }
 
 function range(value) {
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }
 
 beforeEach(() => {

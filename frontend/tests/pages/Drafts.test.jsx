@@ -139,27 +139,14 @@ describe('SCRUM-15 Draft Saving & Resuming', () => {
     expect(await screen.findByDisplayValue('AI Innovation Hackathon')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Quarterly engineering showcase')).toBeInTheDocument();
 
-    // Check that NO validation errors are triggered upon loading
+    // Check that NO validation errors are triggered upon loading.
+    // The access sentence can still be on screen from the load that runs before the organiser is known. It is not a field error.
     expect(screen.queryByText(/is required/i)).not.toBeInTheDocument();
-
-    // An alert is only acceptable if it says the user lacks edit access; no generic validation alert should appear
     const alert = screen.queryByRole('alert');
     if (alert) {
-      expect(alert).toHaveTextContent(/you do not have access to edit this event/i);
+      expect(alert).toHaveTextContent('You do not have access to edit this event.');
+      expect(alert).not.toHaveTextContent(/is required/i);
     }
-  });
-});
-
-describe('SCRUM-28 Submit vs Draft Behaviour', () => {
-  beforeEach(() => {
-    api.mockReset();
-    api.mockImplementation((path, options = {}) => {
-      if (path === '/api/auth/me') return setupAuth();
-      if (path === '/api/events' && !options.method) {
-        return Promise.resolve({ events: [] });
-      }
-      return Promise.reject(new Error(`Unhandled api call: ${path}`));
-    });
   });
 
   /*
