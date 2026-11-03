@@ -118,6 +118,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: The booking is updated with new times and PENDING status, and an audit entry is written.
    * Type: normal
    */
+  // SCRUM-62-TC01
   it('changes a PENDING booking and records an audit entry', async () => {
     setupChange();
 
@@ -149,6 +150,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: The changed booking is reset to PENDING for Venue Staff approval.
    * Type: normal
    */
+  // SCRUM-62-TC02
   it('resets an APPROVED booking to PENDING after changing its time', async () => {
     setupChange(APPROVED_BOOKING);
 
@@ -168,6 +170,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: Exactly one venue_bookings row is updated and the sibling fixture stays unchanged.
    * Type: boundary
    */
+  // SCRUM-62-TC03
   it('updates only the targeted booking when sibling bookings exist', async () => {
     const siblingBooking = { ...PENDING_BOOKING, id: 15, venue_id: 9 };
     setupChange();
@@ -190,6 +193,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: Only the target venue booking is passed to updateById.
    * Type: boundary
    */
+  // SCRUM-62-TC04
   it('does not update an event that is already PLANNING', async () => {
     setupChange(PENDING_BOOKING, EVENT_ROW);
 
@@ -206,6 +210,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: updateById updates the event status to PLANNING with an updated_at timestamp.
    * Type: normal
    */
+  // SCRUM-62-TC05
   it('reverts a CONFIRMED event to PLANNING', async () => {
     setupChange(PENDING_BOOKING, CONFIRMED_EVENT_ROW);
 
@@ -225,6 +230,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: writeAudit metadata contains both previous and new timestamps.
    * Type: normal
    */
+  // SCRUM-62-TC06
   it('records previous and new date/time values in the audit metadata', async () => {
     setupChange();
 
@@ -253,6 +259,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: The service rejects with 404 NOT_FOUND and performs no update.
    * Type: error
    */
+  // SCRUM-62-TC07
   it('returns 404 when the booking is missing', async () => {
     fetchOne.mockResolvedValueOnce(null);
 
@@ -269,6 +276,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: The service rejects with 409 BOOKING_CANCELLED before any write.
    * Type: error
    */
+  // SCRUM-62-TC08
   it('rejects a CANCELLED booking with 409', async () => {
     fetchOne.mockResolvedValueOnce(CANCELLED_BOOKING);
 
@@ -285,6 +293,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: 400 with error code INVALID_TIME_RANGE; updateById and fetchOne are never called.
    * Type: error
    */
+  // SCRUM-62-TC09
   it('rejects a payload where endAt is before startAt with 400', async () => {
     const invalidPayload = {
       startAt: '2026-10-21T13:00:00.000Z',
@@ -305,6 +314,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: The service rejects with 403 FORBIDDEN before reading or writing booking data.
    * Type: security
    */
+  // SCRUM-62-TC10
   it('rejects Organisers before reading booking data', async () => {
     await expect(
       venuesService.changeBooking(ORGANISER, PENDING_BOOKING.id, NEW_PAYLOAD)
@@ -320,6 +330,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: The service rejects with 403 FORBIDDEN before reading or writing booking data.
    * Type: security
    */
+  // SCRUM-62-TC11
   it('rejects Venue Staff before reading booking data', async () => {
     await expect(
       venuesService.changeBooking(STAFF, PENDING_BOOKING.id, NEW_PAYLOAD)
@@ -335,6 +346,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: The service rejects with 403 FORBIDDEN without updating the booking.
    * Type: security
    */
+  // SCRUM-62-TC12
   it('rejects a Coordinator who is not assigned to the event', async () => {
     setupChange(PENDING_BOOKING, { ...EVENT_ROW, coordinator_id: OTHER_COORD.id });
 
@@ -351,6 +363,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: The service rejects with 409 BOOKING_CONFLICT and does not update any row.
    * Type: error
    */
+  // SCRUM-62-TC13
   it('rejects a conflicting occupied window without changing the booking', async () => {
     setupChange();
     fetchMany.mockResolvedValueOnce([{
@@ -373,6 +386,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: The service succeeds and updates the target booking rather than reporting a conflict.
    * Type: boundary
    */
+  // SCRUM-62-TC14
   it('excludes the target booking from the conflict query', async () => {
     const sameSlotBooking = {
       ...PENDING_BOOKING,
@@ -399,6 +413,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: Both update patches contain status PENDING.
    * Type: boundary
    */
+  // SCRUM-62-TC15, SCRUM-62-TC16
   it.each([
     ['PENDING', PENDING_BOOKING],
     ['APPROVED', APPROVED_BOOKING],
@@ -421,6 +436,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: Only the CONFIRMED event receives an events-table update.
    * Type: boundary
    */
+  // SCRUM-62-TC17
   it('reverts the event only when its status is CONFIRMED', async () => {
     setupChange(PENDING_BOOKING, EVENT_ROW);
     await venuesService.changeBooking(COORDINATOR, PENDING_BOOKING.id, NEW_PAYLOAD);
@@ -443,6 +459,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: The service logs and throws EVENT_STATUS_UPDATE_FAILED without inserting status history.
    * Type: error
    */
+  // SCRUM-62-TC18
   it('reports partial success when the Confirmed event status update returns no row', async () => {
     setupChange(PENDING_BOOKING, CONFIRMED_EVENT_ROW);
     const updatedBooking = {
@@ -501,6 +518,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: 409 with error code BOOKING_REJECTED; updateById is never called.
    * Type: error
    */
+  // SCRUM-62-TC19
   it('rejects modifying a REJECTED booking with 409', async () => {
     fetchOne.mockResolvedValueOnce(REJECTED_BOOKING);
 
@@ -517,6 +535,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: 409 with error code EVENT_COMPLETED; updateById is never called.
    * Type: error
    */
+  // SCRUM-62-TC20
   it('rejects modifying a booking when event is COMPLETED with 409', async () => {
     setupChange(PENDING_BOOKING, COMPLETED_EVENT_ROW);
 
@@ -533,6 +552,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: 409 with error code EVENT_CANCELLED; updateById is never called.
    * Type: error
    */
+  // SCRUM-62-TC21
   it('rejects modifying a booking when event is CANCELLED with 409', async () => {
     setupChange(PENDING_BOOKING, CANCELLED_EVENT_ROW);
 
@@ -549,6 +569,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: The route returns 401 UNAUTHENTICATED and reads or writes no booking data.
    * Type: security
    */
+  // SCRUM-62-TC22
   it('rejects unauthenticated PATCH requests with 401', async () => {
     const result = await request(app).patch('/api/venues/bookings/10').send(NEW_PAYLOAD);
 
@@ -565,6 +586,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: The route returns 403 before calling the service or reading booking data.
    * Type: security
    */
+  // SCRUM-62-TC23
   it('rejects non-Coordinator roles at the HTTP route', async () => {
     mockUser = ORGANISER;
 
@@ -583,6 +605,7 @@ describe('SCRUM-62 change one venue booking', () => {
    * Expected: The route returns 403 and makes no database write.
    * Type: security
    */
+  // SCRUM-62-TC24
   it('rejects an unassigned Coordinator at the HTTP route without writing', async () => {
     mockUser = COORDINATOR;
     setupChange(PENDING_BOOKING, { ...EVENT_ROW, coordinator_id: OTHER_COORD.id });

@@ -142,6 +142,7 @@ beforeEach(() => {
  */
 // SCRUM-26 AC1-AC6, AC8-AC9: review a configured venue, submit the exact event request, and return.
 // Tests Successful Request Submission
+// SCRUM-25-TC01
 it('shows timing and requirements, then submits a pending request for this event', async () => {
   const user = userEvent.setup();
   renderBookingRoute();
@@ -206,6 +207,7 @@ it('blocks submission when required details or venue timing are missing', async 
  *           submittable because suitability is advisory; the result label is not asserted.
  * Type:     boundary
  */
+// SCRUM-25-TC02
 it('shows all selected-venue mismatch reasons without preventing request submission', async () => {
   const user = userEvent.setup();
   const event = {
@@ -245,6 +247,7 @@ it('shows all selected-venue mismatch reasons without preventing request submiss
  *           unsuitable result and reasons for one do not change the other's suitable result.
  * Type:     normal
  */
+// SCRUM-25-TC03
 it('shows independent suitability results and reasons for each existing request', async () => {
   const event = {
     ...eventFixture,
@@ -281,6 +284,7 @@ it('shows independent suitability results and reasons for each existing request'
  * Expected: The page uses that request's venue snapshot to display a suitable result.
  * Type:     boundary
  */
+// SCRUM-25-TC04
 it('uses each historical request venue snapshot when the venue is no longer active', async () => {
   const event = {
     ...eventFixture,

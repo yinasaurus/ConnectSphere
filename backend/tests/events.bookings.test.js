@@ -54,15 +54,6 @@ describe('event-specific venue booking access', () => {
   });
 
   /*
-   * AC:       SCRUM-25 AC3 + AC4 (API capability data support)
-   * Scenario: An event organizer loads a booking's venue capability data for suitability review.
-   * Setup:    The event has a booking whose venue record contains facilities, accessibility
-   *           features, and supported room layouts, as well as capacity.
-   * Expected: The event-scoped response includes these venue attributes; this test checks
-   *           data availability, not the frontend's suitability comparison or result.
-   * Type:     normal
-   */
-  /*
    * AC:       SCRUM-26 AC2 + AC9 (booking-summary timing data support)
    * Scenario: An event organizer loads an event's existing venue request summary.
    * Setup:    The event has an Approved booking with saved event times, setup/turnaround
@@ -73,6 +64,7 @@ describe('event-specific venue booking access', () => {
    * Type:     normal
    */
   // SCRUM-13-TC20
+  // SCRUM-26-TC01
   it('lets an organiser read their event booking summary, scoped in the database', async () => {
     const res = await request(app).get('/api/events/3/venue-bookings');
     expect(res.status).toBe(200);
@@ -95,6 +87,7 @@ describe('event-specific venue booking access', () => {
   });
 
   // SCRUM-13-TC21
+  // SCRUM-26-TC02
   it('denies another organisation before reading bookings', async () => {
     mockUser.organisationId = 20;
     const res = await request(app).get('/api/events/3/venue-bookings');
@@ -103,6 +96,7 @@ describe('event-specific venue booking access', () => {
   });
 
   // SCRUM-13-TC22
+  // SCRUM-26-TC03
   it('does not query bookings for a missing event', async () => {
     fetchOne.mockResolvedValue(null);
     const res = await request(app).get('/api/events/999/venue-bookings');
@@ -120,12 +114,14 @@ describe('event-specific venue booking access', () => {
    * Type:     normal
    */
   // SCRUM-13-TC23
+  // SCRUM-26-TC04
   it.each([ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF])('allows existing internal event access for %s', async (role) => {
     mockUser.roles = [role];
     expect((await request(app).get('/api/events/3/venue-bookings')).status).toBe(200);
   });
 
   // SCRUM-13-TC24
+  // SCRUM-26-TC05
   it('denies attendees access to an unconfirmed event', async () => {
     mockUser.roles = [ROLES.ATTENDEE];
     expect((await request(app).get('/api/events/3/venue-bookings')).status).toBe(404);

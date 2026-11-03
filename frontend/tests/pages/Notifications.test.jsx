@@ -44,12 +44,13 @@ describe('SCRUM-44 Notifications Page — Happy Path', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC3
+   * AC: SCRUM-44 AC2
    * Scenario: Happy Path — Render unread notification with visual distinction
    * Setup: One unread notification (read_at === null)
    * Expected: Blue dot (●), bold title, blue left border, light background, "Mark read" button
    * Type: normal
    */
+  // SCRUM-44-TC18
   it('US44-F01: unread notification displays with blue dot, bold title, and Mark read button', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/auth/me') return setupAuth();
@@ -98,12 +99,13 @@ describe('SCRUM-44 Notifications Page — Happy Path', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC3
+   * AC: SCRUM-44 AC2 + AC3
    * Scenario: Happy Path — Render read notification without visual indicators
    * Setup: One read notification (read_at is a valid timestamp)
    * Expected: No blue dot, no bold title, no "Mark read" button
    * Type: normal
    */
+  // SCRUM-44-TC19
   it('US44-F02: read notification displays without blue dot or Mark read button', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/auth/me') return setupAuth();
@@ -156,6 +158,7 @@ describe('SCRUM-44 Notifications Page — Happy Path', () => {
    * Expected: POST /api/notifications/:id/read called; notification list reloaded
    * Type: normal
    */
+  // SCRUM-44-TC20
   it('US44-F03: clicking Mark read calls API and reloads notifications', async () => {
     const user = userEvent.setup();
     let markReadCalled = false;
@@ -235,12 +238,13 @@ describe('SCRUM-44 Notifications Page — Happy Path', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC3
+   * AC: SCRUM-44 AC2 + AC3
    * Scenario: Happy Path — Multiple notifications with mixed read/unread states
    * Setup: Three notifications: 2 unread, 1 read
    * Expected: Unread ones show blue dot and Mark read; read one does not
    * Type: normal
    */
+  // SCRUM-44-TC21
   it('US44-F04: mixed read/unread list displays correct visual states', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/auth/me') return setupAuth();
@@ -310,12 +314,13 @@ describe('SCRUM-44 Notifications Page — Happy Path', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC3
+   * AC: SCRUM-44 AC4
    * Scenario: Happy Path — Notification without event_id does not show Open event link
    * Setup: Notification with event_id = null
    * Expected: Title and body rendered, but no "Open event" link
    * Type: normal
    */
+  // SCRUM-44-TC22
   it('US44-F05: notification without event_id does not display Open event link', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/auth/me') return setupAuth();
@@ -368,12 +373,13 @@ describe('SCRUM-44 Notifications Page — Sad Path', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC3
+   * AC: SCRUM-44 AC1
    * Scenario: Sad Path — Empty notification list displays placeholder message
    * Setup: API returns empty notifications array
    * Expected: "You are up to date." message displayed
    * Type: error
    */
+  // SCRUM-44-TC23
   it('US44-F06: empty notification list displays "You are up to date" message', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/auth/me') return setupAuth();
@@ -411,12 +417,13 @@ describe('SCRUM-44 Notifications Page — Boundary Cases', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC3
-   * Scenario: Boundary — Notification with read_at as empty string treated as read
-   * Setup: Notification with read_at = '' (truthy but not null)
-   * Expected: Treated as read since empty string is truthy in !item.read_at check
+   * AC: SCRUM-44 AC2 + AC3
+   * Scenario: Boundary — Notification with read_at as empty string treated as unread
+   * Setup: Notification with read_at = '' (falsy)
+   * Expected: !item.read_at evaluates to true -> renders unread styling
    * Type: boundary
    */
+  // SCRUM-44-TC24
   it('US44-F07: notification with empty string read_at displays with unread styling', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/auth/me') return setupAuth();
@@ -430,7 +437,7 @@ describe('SCRUM-44 Notifications Page — Boundary Cases', () => {
               type: 'EVENT_UPDATED',
               title: 'Event details updated',
               body: 'Workshop Z has updated venue requirements.',
-              read_at: '', // Empty string (truthy in JavaScript)
+              read_at: '', // Empty string (falsy in JavaScript)
               created_at: '2026-11-11T11:00:00Z',
             },
           ],
@@ -451,18 +458,19 @@ describe('SCRUM-44 Notifications Page — Boundary Cases', () => {
       expect(screen.getByText('Event details updated')).toBeInTheDocument();
     });
 
-    // Empty string is truthy, so !item.read_at is false -> shows as unread
+    // Empty string is falsy, so !item.read_at is true -> shows as unread
     expect(screen.getByText('●')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /mark read/i })).toBeInTheDocument();
   });
 
   /*
-   * AC: SCRUM-44 AC3
+   * AC: SCRUM-44 AC1
    * Scenario: Boundary — Very long notification body text renders without breaking layout
    * Setup: Notification with 500-character body
    * Expected: Page renders without layout issues
    * Type: boundary
    */
+  // SCRUM-44-TC25
   it('US44-F08: long notification body renders without breaking layout', async () => {
     const longBody = 'Innovation Summit has been updated with the following changes: '.repeat(10);
 
@@ -516,12 +524,13 @@ describe('SCRUM-44 Notifications Page — Cross-Cutting (UI & Auth)', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC3
+   * AC: SCRUM-44 AC5
    * Scenario: Cross-Cutting — Page renders within authenticated context
    * Setup: User authenticated as coordinator
    * Expected: Page heading and structure render correctly
    * Type: security
    */
+  // SCRUM-44-TC26
   it('US44-F09: notifications page renders within auth context', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/auth/me') return setupAuth();
@@ -547,12 +556,13 @@ describe('SCRUM-44 Notifications Page — Cross-Cutting (UI & Auth)', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC3
-   * Scenario: Cross-Cutting — Open event link navigates to correct event detail page
+   * AC: SCRUM-44 AC4
+   * Scenario: Open event link navigates to correct event detail page
    * Setup: Notification with event_id = 15
    * Expected: Link href points to /app/events/15
    * Type: normal
    */
+  // SCRUM-44-TC27
   it('US44-F10: Open event link points to correct event detail URL', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/auth/me') return setupAuth();
@@ -595,12 +605,13 @@ describe('SCRUM-44 Notifications Page — Cross-Cutting (UI & Auth)', () => {
   });
 
   /*
-   * AC: SCRUM-44 AC3
-   * Scenario: Cross-Cutting — All unread notifications have consistent styling
+   * AC: SCRUM-44 AC2
+   * Scenario: All unread notifications have consistent styling
    * Setup: Multiple unread notifications
    * Expected: Each unread notification has blue dot and styling applied
    * Type: normal
    */
+  // SCRUM-44-TC28
   it('US44-F11: all unread notifications have consistent visual styling', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/auth/me') return setupAuth();

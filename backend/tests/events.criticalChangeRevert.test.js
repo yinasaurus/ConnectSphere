@@ -122,6 +122,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: event status patch and CONFIRMED → PLANNING status-history row.
    * Failure: test fails if either write is missing or occurs in the wrong order.
    */
+  // SCRUM-85-TC01
   it('AC1: approving a date change on a Confirmed event reverts status to Planning', async () => {
     configureDecision(confirmedEvent(), criticalRequest());
 
@@ -154,6 +155,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: event status is set to Planning and history records the transition.
    * Failure: test fails if attendance changes do not trigger reversion.
    */
+  // SCRUM-85-TC02
   it('AC1: approving an attendance change on a Confirmed event reverts status to Planning', async () => {
     configureDecision(confirmedEvent(), criticalRequest({
       start_at: null,
@@ -177,6 +179,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: status/history updates and needs_review patches without status changes.
    * Failure: test fails if arrangements are not flagged or their statuses are modified.
    */
+  // SCRUM-85-TC03
   it('AC1+AC5: status reverts and affected bookings are flagged for review', async () => {
     configureDecision(confirmedEvent(), criticalRequest({
       start_at: null,
@@ -221,6 +224,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: history insert and CHANGE_REQUEST_APPROVED audit record.
    * Failure: test fails if either audit trail omits the transition/change.
    */
+  // SCRUM-85-TC04
   it('AC5: CONFIRMED → PLANNING transition and approved field changes are recorded', async () => {
     configureDecision(confirmedEvent(), criticalRequest());
 
@@ -254,6 +258,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: event fields update without a Planning status patch or transition history.
    * Failure: test fails if non-revert fields change the event status.
    */
+  // SCRUM-85-TC05
   it('AC2: approving a non-critical change on a Confirmed event leaves status Confirmed', async () => {
     configureDecision(confirmedEvent(), nonCriticalRequest());
 
@@ -278,6 +283,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: event fields update, active arrangements need review, and approval audit is written.
    * Failure: test fails if status/history changes, arrangements are not flagged, or statuses are mutated.
    */
+  // SCRUM-85-TC06
   it('AC2: approving venue or equipment changes leaves status Confirmed but flags arrangements for review', async () => {
     configureDecision(confirmedEvent(), nonCriticalRequest());
     db.fetchMany
@@ -340,6 +346,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: event receives Planning status.
    * Failure: test fails if mixed changes are incorrectly treated as non-critical.
    */
+  // SCRUM-85-TC07
   it('AC2 boundary: mixed critical and non-critical fields trigger reversion', async () => {
     configureDecision(confirmedEvent(), nonCriticalRequest({ expected_attendance: 80 }));
 
@@ -355,6 +362,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: no event, request, or history writes.
    * Failure: test fails if merely having a pending request mutates event state.
    */
+  // SCRUM-85-TC08
   it('AC3: a pending change request leaves the Confirmed event unchanged', () => {
     const event = confirmedEvent();
     const pending = criticalRequest();
@@ -372,6 +380,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: request becomes Rejected; no event or history write occurs.
    * Failure: test fails if rejected values trigger reversion or arrangement review.
    */
+  // SCRUM-85-TC09
   it('AC4: rejecting a critical change request leaves the Confirmed event unchanged', async () => {
     configureDecision(confirmedEvent(), criticalRequest());
 
@@ -398,6 +407,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: reason is stored; event, history, bookings, and equipment are not written.
    * Failure: test fails if rejection applies or flags proposed changes.
    */
+  // SCRUM-85-TC10
   it('AC4: reject with a reason leaves the event fully unchanged', async () => {
     configureDecision(confirmedEvent(), criticalRequest());
 
@@ -426,6 +436,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: approved fields apply, with no status patch or transition history.
    * Failure: test fails if Planning state is redundantly rewritten/history-recorded.
    */
+  // SCRUM-85-TC11
   it('AC1 boundary: approval on a Planning event does not re-write Planning status', async () => {
     configureDecision(planningEvent(), criticalRequest());
 
@@ -443,6 +454,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: event status is set to Planning.
    * Failure: test fails if one timestamp alone does not trigger reversion.
    */
+  // SCRUM-85-TC12
   it('AC1 boundary: approving only a start_at change triggers reversion', async () => {
     configureDecision(confirmedEvent(), criticalRequest({
       start_at: '2026-11-10T10:00:00.000Z',
@@ -462,6 +474,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: service rejects with 403 before any write.
    * Failure: test fails if an unauthorized user can trigger the status transition.
    */
+  // SCRUM-85-TC13
   it('AC1 security: a non-assigned coordinator cannot approve or trigger reversion', async () => {
     db.fetchOne.mockResolvedValueOnce(confirmedEvent());
 
@@ -478,6 +491,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: route returns 403 before any event/request write.
    * Failure: test fails if an organiser can trigger the reversion.
    */
+  // SCRUM-85-TC14
   it('AC1 security: an organiser cannot approve a change request', async () => {
     const organiserToken = jwt.sign({ sub: 1 }, env.jwtSecret);
     asUser(1, ROLES.EVENT_ORGANISER);
@@ -498,6 +512,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: route returns 401 without event, request, or history writes.
    * Failure: test fails if the decision endpoint accepts an anonymous caller.
    */
+  // SCRUM-85-TC15
   it('AC1 security: an unauthenticated decision request is rejected with 401', async () => {
     const response = await request(app)
       .post('/api/events/3/change-requests/50/decision')
@@ -516,6 +531,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: Planning status and history are written, with no arrangement updates.
    * Failure: test fails if empty arrangement lists skip or break the status transition.
    */
+  // SCRUM-85-TC16
   it('AC5 boundary: reversion occurs when there are no active arrangements', async () => {
     configureDecision(confirmedEvent(), criticalRequest());
     db.fetchMany.mockResolvedValue([]);
@@ -538,6 +554,7 @@ describe('SCRUM-85 confirmed-event reversion', () => {
    * Output: service rejects and does not mark the change request Approved.
    * Failure: test fails if status-update errors are swallowed.
    */
+  // SCRUM-85-TC17
   it('propagates status-update failures without approving the change request', async () => {
     configureDecision(confirmedEvent(), criticalRequest());
     db.updateById.mockImplementation(async (table, id, patch) => {

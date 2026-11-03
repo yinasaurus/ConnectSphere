@@ -139,6 +139,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Output: confirmed event, status history, audit entry, and organiser notification.
    * Failure: any unmet prerequisite rejects without confirming.
    */
+  // SCRUM-73-TC01
   it('confirms a Preparation event with an approved venue booking and no equipment requested', async () => {
     const result = await events.confirmEvent(coordinator, 3);
 
@@ -169,6 +170,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Output: 403 FORBIDDEN with no writes or status change.
    * Failure: fails if another Coordinator can confirm or inspect through a successful response.
    */
+  // SCRUM-73-TC02
   it('rejects confirmation by a Coordinator who is not assigned to the event', async () => {
     await expectBlocked(
       events.confirmEvent(otherCoordinator, 3),
@@ -184,6 +186,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Output: 403 FORBIDDEN before any confirmation write.
    * Failure: fails if a non-Coordinator can confirm.
    */
+  // SCRUM-73-TC03
   it('rejects confirmation by a user without the Coordinator role', async () => {
     await expectBlocked(events.confirmEvent(organiser, 3), 403, 'FORBIDDEN');
   });
@@ -195,6 +198,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Output: 409 INVALID_STATUS and unchanged event state.
    * Failure: fails if any other status is accepted.
    */
+  // SCRUM-73-TC04
   it.each([
     'DRAFT',
     'SUBMITTED',
@@ -217,6 +221,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Output: 409 NOT_READY_TO_CONFIRM without changing the Preparation status.
    * Failure: fails if cancelled bookings count as active arrangements.
    */
+  // SCRUM-73-TC05
   it.each([
     ['no venue bookings', []],
     ['only a cancelled venue booking', [{ id: 8, event_id: 3, status: 'CANCELLED' }]],
@@ -236,6 +241,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Output: 409 with the event still Preparation; cancelled bookings are ignored.
    * Failure: fails if an unapproved active booking is ignored or cancellation blocks approval.
    */
+  // SCRUM-73-TC06
   it('blocks a pending booking while ignoring a cancelled booking', async () => {
     tables.venue_bookings.push(
       { id: 8, event_id: 3, status: 'PENDING' },
@@ -256,6 +262,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Output: successful transition from Preparation to Confirmed.
    * Failure: fails if a cancelled booking is treated as an outstanding arrangement.
    */
+  // SCRUM-73-TC07
   it('confirms when every active booking is approved and other bookings are cancelled', async () => {
     tables.venue_bookings.push({ id: 8, event_id: 3, status: 'CANCELLED' });
 
@@ -272,6 +279,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Output: 409 NOT_READY_TO_CONFIRM with no event write.
    * Failure: fails if partially arranged equipment is accepted.
    */
+  // SCRUM-73-TC08
   it('blocks confirmation when any requested equipment is not reserved', async () => {
     tables.equipment_requests = [
       { id: 1, event_id: 3, status: 'RESERVED' },
@@ -292,6 +300,7 @@ describe('SCRUM-73 event confirmation service rules', () => {
    * Output: 409 NOT_READY_TO_CONFIRM and an unchanged event.
    * Failure: fails if outstanding alternative arrangements are overlooked.
    */
+  // SCRUM-73-TC09
   it('blocks confirmation when a venue booking has an alternative suggestion', async () => {
     tables.venue_bookings[0] = { ...tables.venue_bookings[0], alternative_suggestion: 'Use another room' };
 
@@ -348,6 +357,7 @@ describe('SCRUM-73 confirmation route authorization', () => {
    * Output: 401 UNAUTHENTICATED and no event update.
    * Failure: fails if an anonymous request reaches confirmation logic.
    */
+  // SCRUM-73-TC10
   it('rejects an unauthenticated confirmation request', async () => {
     const response = await request(app).post('/api/events/3/confirm');
 
@@ -363,6 +373,7 @@ describe('SCRUM-73 confirmation route authorization', () => {
    * Output: 403 FORBIDDEN without event details or writes.
    * Failure: fails if the route bypasses its Coordinator role guard.
    */
+  // SCRUM-73-TC11
   it('rejects an authenticated user without the Coordinator role', async () => {
     const response = await request(app)
       .post('/api/events/3/confirm')

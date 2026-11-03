@@ -71,6 +71,7 @@ describe('SCRUM-77 flagged bookings on the Venues page', () => {
    *           review"; Gala is not in that list.
    * Type:     normal
    */
+  // SCRUM-77-TC29
   it('US77-P01: Venue Staff see the flagged bookings listed and marked', async () => {
     asRole('VENUE_STAFF');
     mockApi({ bookings: [bookingRow(1, 'Forum', true), bookingRow(2, 'Workshop', true), bookingRow(3, 'Gala', false)] });
@@ -94,6 +95,7 @@ describe('SCRUM-77 flagged bookings on the Venues page', () => {
    *           shows its APPROVED status badge next to the flag (the page shows the raw status).
    * Type:     normal
    */
+  // SCRUM-77-TC30
   it('US77-P02: a flagged booking keeps its status and the page says nothing changed', async () => {
     asRole('VENUE_STAFF');
     mockApi({ bookings: [bookingRow(1, 'Forum', true)] });
@@ -115,6 +117,7 @@ describe('SCRUM-77 flagged bookings on the Venues page', () => {
    * Expected: The "Flagged for review" list is not shown.
    * Type:     boundary
    */
+  // SCRUM-77-TC31
   it('US77-P03: with nothing flagged the list is not shown', async () => {
     asRole('VENUE_STAFF');
     mockApi({ bookings: [bookingRow(1, 'Forum', false), bookingRow(2, 'Workshop', false)] });
@@ -134,6 +137,7 @@ describe('SCRUM-77 flagged bookings on the Venues page', () => {
    * Expected: No "Flagged for review" list (Coordinators see their flag on their event page).
    * Type:     boundary
    */
+  // SCRUM-77-TC32
   it('US77-P04: the flagged list is not offered to a non-Venue-Staff user', async () => {
     asRole('EVENT_COORDINATOR');
     mockApi({ bookings: [bookingRow(1, 'Forum', true)] });
@@ -167,6 +171,7 @@ describe('SCRUM-77 saving the venue times shows how many bookings were flagged',
    * Expected: The confirmation says the venue was updated and 2 bookings are flagged.
    * Type:     normal
    */
+  // SCRUM-77-TC33
   it('US77-P05: the confirmation says how many bookings were flagged', async () => {
     await saveTimes({ venue: { ...VENUE, setupMinutes: 30, flaggedBookingIds: [1, 2] } });
 
@@ -182,6 +187,7 @@ describe('SCRUM-77 saving the venue times shows how many bookings were flagged',
    * Expected: "1 booking now overlaps another and is flagged for review."
    * Type:     boundary
    */
+  // SCRUM-77-TC34
   it('US77-P06: the confirmation uses the singular for one booking', async () => {
     await saveTimes({ venue: { ...VENUE, setupMinutes: 30, flaggedBookingIds: [7] } });
 
@@ -197,6 +203,7 @@ describe('SCRUM-77 saving the venue times shows how many bookings were flagged',
    * Expected: The plain "Helix Hall updated" confirmation, with no mention of flagged bookings.
    * Type:     normal
    */
+  // SCRUM-77-TC35
   it('US77-P07: no flagged bookings gives the plain confirmation', async () => {
     await saveTimes({ venue: { ...VENUE, setupMinutes: 30, flaggedBookingIds: [] } });
 

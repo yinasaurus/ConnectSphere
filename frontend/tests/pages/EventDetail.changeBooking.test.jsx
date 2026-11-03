@@ -83,6 +83,7 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
    * Expected: An accessible form named for booking 10 is rendered.
    * Type: normal
    */
+  // SCRUM-62-TC25
   it('shows the reschedule form for a PENDING booking', async () => {
     renderBookingPage('PENDING');
 
@@ -96,6 +97,7 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
    * Expected: An accessible form named for booking 10 is rendered.
    * Type: normal
    */
+  // SCRUM-62-TC26
   it('shows the reschedule form for an APPROVED booking', async () => {
     renderBookingPage('APPROVED');
 
@@ -109,6 +111,7 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
    * Expected: No reschedule form or save button is rendered.
    * Type: boundary
    */
+  // SCRUM-62-TC27
   it('does not show a reschedule form for a CANCELLED booking', async () => {
     renderBookingPage('CANCELLED');
     await screen.findByText('Innovation Hall');
@@ -124,6 +127,7 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
    * Expected: No reschedule form or save button is rendered.
    * Type: boundary
    */
+  // SCRUM-62-TC28
   it('does not show a reschedule form for a REJECTED booking', async () => {
     renderBookingPage('REJECTED');
     await screen.findByText('Innovation Hall');
@@ -139,6 +143,7 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
    * Expected: No reschedule form or save button is rendered.
    * Type: boundary
    */
+  // SCRUM-62-TC29
   it('does not show a reschedule form when the event is COMPLETED', async () => {
     renderBookingPage('PENDING', true, 'COMPLETED');
     await screen.findByText('Innovation Hall');
@@ -154,6 +159,7 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
    * Expected: No reschedule form or save button is rendered.
    * Type: boundary
    */
+  // SCRUM-62-TC30
   it('does not show a reschedule form when the event is CANCELLED', async () => {
     renderBookingPage('PENDING', true, 'CANCELLED');
     await screen.findByText('Innovation Hall');
@@ -169,6 +175,7 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
    * Expected: The status card shows PLANNING → CONFIRMED only, and the booking shows its previous time.
    * Type: boundary
    */
+  // SCRUM-62-TC31
   it('shows previous booking times without including reschedule audits in Status history', async () => {
     const previousStartAt = '2026-10-20T00:00:00.000Z';
     const previousEndAt = '2026-10-20T03:00:00.000Z';
@@ -213,6 +220,7 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
    * Expected: No reschedule form is rendered.
    * Type: security
    */
+  // SCRUM-62-TC32
   it('does not show the form to a Coordinator who is not assigned', async () => {
     renderBookingPage('PENDING', false);
     await screen.findByText('Innovation Hall');
@@ -227,6 +235,7 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
    * Expected: The page sends PATCH /api/venues/bookings/10 with the entered times.
    * Type: normal
    */
+  // SCRUM-62-TC33
   it('sends the entered times to the booking-specific PATCH endpoint', async () => {
     renderBookingPage('PENDING');
     const user = userEvent.setup();
@@ -251,6 +260,7 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
    * Expected: Pressing Enter submits the form and sends the PATCH request.
    * Type: boundary
    */
+  // SCRUM-62-TC34
   it('provides a named, keyboard-operable Save new time button', async () => {
     renderBookingPage('PENDING');
     const user = userEvent.setup();
@@ -277,6 +287,7 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
    * Expected: The page reports the error and retains the entered values for correction.
    * Type: error
    */
+  // SCRUM-62-TC35
   it('retains the entered times when the reschedule request fails', async () => {
     renderBookingPage('PENDING');
     const user = userEvent.setup();

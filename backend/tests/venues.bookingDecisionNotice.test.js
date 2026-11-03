@@ -266,6 +266,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    *           calculation; this test does not calculate or display that window.
    * Type:     boundary
    */
+  // SCRUM-26-TC07
   it('preserves zero setup and turnaround minutes in a venue booking request', async () => {
     fetchMany.mockResolvedValueOnce([]);
     const coordinator = { id: 21, roles: [ROLES.EVENT_COORDINATOR] };
@@ -294,6 +295,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    * Type:     normal
    */
   // SCRUM-78-TC11
+  // SCRUM-26-TC06
   it('US78-N11 (AC6): a pending request sends the Coordinator no decision notice', async () => {
     fetchMany.mockResolvedValue([]);
     await venuesService.requestBooking(
@@ -314,7 +316,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
   });
 
   /*
-  * AC:       Not covered by SCRUM-25/26 (authorization and scheduling-conflict guardrails)
+  * AC:       SCRUM-26 (authorization and scheduling-conflict guardrails) AC1 + AC6
   * Scenario: Submitting an unauthorized or conflicting venue booking request.
   * Setup:    Tests two rejection conditions:
   *           1. Sender is Venue Staff instead of an Event Coordinator (403 Forbidden).
@@ -332,6 +334,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
    * Type:     error
    */
   // SCRUM-78-TC12
+  // SCRUM-26-TC08
   it.each([
     ['the sender is not a Coordinator', STAFF, [], 403],
     ['the venue already has an overlapping booking', { id: 21, roles: [ROLES.EVENT_COORDINATOR] }, [{ id: 77 }], 409],
@@ -371,7 +374,7 @@ describe('SCRUM-78 booking decision notice (decideBooking)', () => {
   });
 });
 
-describe('SCRUM-78 notifyUser (the write path every decision notice goes through)', () => {
+describe('SCRUM-78 notify user (the write path every decision notice goes through)', () => {
   const { notifyUser } = require('../src/services/audit.service');
 
   /*
