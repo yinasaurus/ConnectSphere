@@ -172,6 +172,7 @@ describe('Venues page inputs', () => {
     mockDatabaseApi();
   });
 
+  // SCRUM-7-TC18
   it('loads venue catalogue data into the page', async () => {
     renderVenues();
 
@@ -180,6 +181,7 @@ describe('Venues page inputs', () => {
     expect(screen.getAllByText('THEATRE').length).toBeGreaterThan(0);
   });
 
+  // SCRUM-7-TC19
   it('accepts add-venue input values and sends them to the mocked database', async () => {
     const user = userEvent.setup();
     renderVenues();
@@ -207,6 +209,7 @@ describe('Venues page inputs', () => {
     }));
   });
 
+  // SCRUM-7-TC20
   it('loads selected venue values into update inputs and sends edited values', async () => {
     const user = userEvent.setup();
     renderVenues();
@@ -239,10 +242,11 @@ describe('Venues page inputs', () => {
    * Scenario: Venue Staff clear the capacity box on the Update venue form and save.
    * Setup:    Helix Hall selected. A cleared number box is sent as '', and the mocked API
    *           answers with the same messages the real validator gives for a non-number.
-   * Expected: The form shows why the value was rejected, without the raw field name, and the
-   *           saved venue is unchanged, because an empty value is not a number and is rejected.
+   * Expected: The form shows which field is wrong and why, and the saved venue is unchanged,
+   *           because an empty value is not a number and is rejected rather than saved.
    * Type:     error
    */
+  // SCRUM-7-TC21
   it('shows the rejection when the capacity box is cleared', async () => {
     const user = userEvent.setup();
     mockDatabaseApi({ validateUpdate: true });
@@ -268,6 +272,8 @@ describe('Venues page inputs', () => {
    * Type:     error
    */
   // SCRUM-59-TC15
+  // SCRUM-7-TC22
+  // SCRUM-7-TC23
   it.each([
     ['capacity', 'Capacity', 'Capacity must be a number'],
     ['setup minutes', 'Setup (mins)', 'Setup minutes must be a number.'],
@@ -286,6 +292,7 @@ describe('Venues page inputs', () => {
     expect(database.venues[0].name).toBe('Helix Hall');
   });
 
+  // SCRUM-7-TC24
   it('shows a validation error when operating hours contain letters instead of a time range', async () => {
     const user = userEvent.setup();
     mockDatabaseApi({ validateUpdate: true });
@@ -311,6 +318,7 @@ describe('Venues page inputs', () => {
    *           one step.
    * Type:     normal
    */
+  // SCRUM-7-TC25
   it('sends every AC1 detail, including several layouts, when adding a venue', async () => {
     const user = userEvent.setup();
     renderVenues();
@@ -353,6 +361,7 @@ describe('Venues page inputs', () => {
    * Expected: The page shows which field is wrong, and the catalogue isn't changed.
    * Type:     error
    */
+  // SCRUM-7-TC26
   it('shows the field error when a new venue is rejected for missing capacity', async () => {
     const user = userEvent.setup();
     const normal = api.getMockImplementation();
@@ -388,6 +397,7 @@ describe('Venues page inputs', () => {
    *           without one, which is how the API tells the three changes apart.
    * Type:     normal
    */
+  // SCRUM-7-TC27
   it('sends layout renames, removals and additions when updating a venue', async () => {
     const user = userEvent.setup();
     renderVenues();
@@ -423,6 +433,7 @@ describe('Venues page inputs', () => {
    *           record but takes it out of the active catalogue.
    * Type:     normal
    */
+  // SCRUM-7-TC28
   it('sends isActive false when the venue is deactivated', async () => {
     const user = userEvent.setup();
     renderVenues();
@@ -449,6 +460,7 @@ describe('Venues page inputs', () => {
    *           layouts listed, instead of showing "undefined" or crashing.
    * Type:     boundary
    */
+  // SCRUM-7-TC29
   it('opens a venue with missing details using empty values and defaults', async () => {
     const user = userEvent.setup();
     database.venues = [{ id: 3, name: 'Bare Room', layouts: ['BANQUET'] }];
@@ -470,6 +482,7 @@ describe('Venues page inputs', () => {
    * Expected: The form closes without sending anything, and the saved venue is unchanged.
    * Type:     boundary
    */
+  // SCRUM-7-TC30
   it('closes the update form without saving when Cancel is clicked', async () => {
     const user = userEvent.setup();
     renderVenues();
@@ -495,6 +508,7 @@ describe('Venues page inputs', () => {
    * Type:     boundary
    */
   // SCRUM-59-TC12
+  // SCRUM-7-TC31
   it('shows the saved setup and turnaround minutes when the venue is reopened', async () => {
     const user = userEvent.setup();
     renderVenues();
@@ -532,6 +546,7 @@ describe('Venues page inputs', () => {
    * Type:     error
    */
   // SCRUM-59-TC13
+  // SCRUM-7-TC32
   it('shows the rejection for a negative setup time and keeps the saved value', async () => {
     const user = userEvent.setup();
     const normal = api.getMockImplementation();
@@ -569,6 +584,7 @@ describe('Venues page inputs', () => {
    * Type:     error
    */
   // SCRUM-59-TC14
+  // SCRUM-7-TC33
   it('does not offer the setup and turnaround fields to a non-Venue-Staff user', async () => {
     const user = userEvent.setup();
     useAuth.mockReturnValue({ hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
@@ -632,6 +648,7 @@ describe('SCRUM-24 venue search results', () => {
    * Type:     normal
    */
   // SCRUM-24-TC01
+  // SCRUM-7-TC34
   it('shows name, location, capacity, facilities, accessibility and layouts for each result', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -655,6 +672,7 @@ describe('SCRUM-24 venue search results', () => {
    * Type:     normal
    */
   // SCRUM-24-TC02
+  // SCRUM-7-TC35
   it('lets the coordinator select a result to view more details, and close it again', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -677,6 +695,7 @@ describe('SCRUM-24 venue search results', () => {
    * Type:     boundary
    */
   // SCRUM-23-TC24
+  // SCRUM-7-TC36
   it('shows a clear message when no venue matches', async () => {
     mockSearchApi({ venues: [] });
     render(<Venues />);
@@ -694,6 +713,7 @@ describe('SCRUM-24 venue search results', () => {
    * Type:     normal
    */
   // SCRUM-24-TC03
+  // SCRUM-7-TC37
   it('always renders whatever the latest search response says, not a stale previous one', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -716,6 +736,7 @@ describe('SCRUM-24 venue search results', () => {
    * Type:     boundary
    */
   // SCRUM-24-TC04
+  // SCRUM-7-TC38
   it('clears the selected venue detail panel when a new search is run', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -737,6 +758,7 @@ describe('SCRUM-24 venue search results', () => {
    * Type:     boundary
    */
   // SCRUM-24-TC05
+  // SCRUM-7-TC39
   it('shows "None listed" and no layout pills for a venue with no facilities, accessibility or layouts', async () => {
     const bareVenue = {
       id: 2,
@@ -771,6 +793,7 @@ describe('SCRUM-24 venue search results', () => {
    * Type:     normal
    */
   // SCRUM-24-TC06
+  // SCRUM-7-TC40
   it('closes the detail panel and the results when Clear is clicked', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -792,6 +815,7 @@ describe('SCRUM-24 venue search results', () => {
    * Type:     normal
    */
   // SCRUM-24-TC07
+  // SCRUM-7-TC41
   it('shows the details of whichever result is selected, and switches between results', async () => {
     const otherVenue = {
       ...SEARCH_RESULT_VENUE,
@@ -825,6 +849,7 @@ describe('SCRUM-24 venue search results', () => {
    * Type:     error
    */
   // SCRUM-24-TC08
+  // SCRUM-7-TC42
   it('ignores a search response that arrives after Clear was pressed', async () => {
     const pending = mockDeferredSearchApi();
     render(<Venues />);
@@ -846,6 +871,7 @@ describe('SCRUM-24 venue search results', () => {
    * Type:     error
    */
   // SCRUM-24-TC09
+  // SCRUM-7-TC43
   it('keeps the newer results when an older search finishes last', async () => {
     const pending = mockDeferredSearchApi();
     const { container } = render(<Venues />);
@@ -871,6 +897,7 @@ describe('SCRUM-24 venue search results', () => {
    * Type:     error
    */
   // SCRUM-24-TC10
+  // SCRUM-7-TC44
   it('still shows the error when the latest search fails', async () => {
     const pending = mockDeferredSearchApi();
     render(<Venues />);
@@ -891,6 +918,7 @@ describe('SCRUM-24 venue search results', () => {
    * Type:     error
    */
   // SCRUM-24-TC11
+  // SCRUM-7-TC45
   it('ignores a failed search that finishes after Clear was pressed', async () => {
     const pending = mockDeferredSearchApi();
     render(<Venues />);

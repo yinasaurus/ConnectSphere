@@ -54,6 +54,7 @@ function renderConfirmationPage() {
  * Output: the confirmation request is submitted once.
  * Failure: fails if the control is unnamed, not keyboard operable, or does not submit.
  */
+// SCRUM-73-TC12
 it('exposes a keyboard-operable Confirm event button with an accessible name', async () => {
   api.mockReset();
   renderConfirmationPage();

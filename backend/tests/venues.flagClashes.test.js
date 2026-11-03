@@ -171,6 +171,7 @@ describe('SCRUM-77 which bookings are flagged when the venue times are saved', (
    * Expected: Both A and B get needs_review; both ids are returned.
    * Type:     normal
    */
+  // SCRUM-77-TC01
   it('US77-U01: bookings that now overlap are both flagged', async () => {
     tables.venue_bookings.push(booking(1, '10:00', '12:00'), booking(2, '12:30', '14:00'));
 
@@ -191,6 +192,7 @@ describe('SCRUM-77 which bookings are flagged when the venue times are saved', (
    * Expected: Both flagged. This proves the setup time moves the start earlier.
    * Type:     boundary
    */
+  // SCRUM-77-TC02
   it('US77-U02: a setup time on its own can create the clash', async () => {
     tables.venue_bookings.push(booking(1, '10:00', '12:00'), booking(2, '12:20', '14:00'));
 
@@ -207,6 +209,7 @@ describe('SCRUM-77 which bookings are flagged when the venue times are saved', (
    * Expected: Both flagged. This proves the turnaround time moves the end later.
    * Type:     boundary
    */
+  // SCRUM-77-TC03
   it('US77-U03: a turnaround time on its own can create the clash', async () => {
     tables.venue_bookings.push(booking(1, '10:00', '12:00'), booking(2, '12:20', '14:00'));
 
@@ -223,6 +226,7 @@ describe('SCRUM-77 which bookings are flagged when the venue times are saved', (
    * Expected: Nothing flagged: touching is not overlapping.
    * Type:     boundary
    */
+  // SCRUM-77-TC04
   it('US77-U04: windows that only touch are not flagged', async () => {
     tables.venue_bookings.push(booking(1, '10:00', '12:00'), booking(2, '13:00', '15:00'));
 
@@ -241,6 +245,7 @@ describe('SCRUM-77 which bookings are flagged when the venue times are saved', (
    * Expected: Nothing flagged, no booking updated, no audit entry written.
    * Type:     normal
    */
+  // SCRUM-77-TC05
   it('US77-U05: no overlap means nothing is flagged or written', async () => {
     tables.venue_bookings.push(booking(1, '10:00', '12:00'), booking(2, '15:00', '17:00'));
 
@@ -260,6 +265,7 @@ describe('SCRUM-77 which bookings are flagged when the venue times are saved', (
    * Expected: Nothing flagged (touching at 12:00).
    * Type:     boundary
    */
+  // SCRUM-77-TC06
   it('US77-U06: zero-minute times with back-to-back bookings flag nothing', async () => {
     tables.venue_bookings.push(booking(1, '10:00', '12:00'), booking(2, '12:00', '14:00'));
 
@@ -277,6 +283,7 @@ describe('SCRUM-77 which bookings are flagged when the venue times are saved', (
    * Expected: A and B flagged; C is not.
    * Type:     normal
    */
+  // SCRUM-77-TC07
   it('US77-U07: only the bookings that clash are flagged', async () => {
     tables.venue_bookings.push(
       booking(1, '10:00', '12:00'),
@@ -296,6 +303,7 @@ describe('SCRUM-77 which bookings are flagged when the venue times are saved', (
    * Expected: They are flagged, which only happens if the new venue times are used.
    * Type:     normal
    */
+  // SCRUM-77-TC08
   it('US77-U08: the venue times are used, not the times stored on each booking', async () => {
     tables.venue_bookings.push(
       booking(1, '10:00', '12:00', { setup_minutes: 0, teardown_minutes: 0 }),
@@ -321,6 +329,7 @@ describe('SCRUM-77 AC4: other venues are not flagged', () => {
    *           across different venues, which is not a clash.
    * Type:     boundary
    */
+  // SCRUM-77-TC09
   it('US77-V01: bookings at other venues are not flagged', async () => {
     tables.venue_bookings.push(
       booking(1, '10:00', '12:00'),
@@ -343,6 +352,7 @@ describe('SCRUM-77 AC4: other venues are not flagged', () => {
    * Expected: B is ignored, so nothing is flagged and nothing is written.
    * Type:     error
    */
+  // SCRUM-77-TC10
   it('US77-V02: a row from another venue that slips into the result is ignored', async () => {
     tables.venue_bookings.push(booking(1, '10:00', '12:00'), booking(2, '11:00', '13:00', { venue_id: 2 }));
     db.fetchMany.mockResolvedValueOnce(tables.venue_bookings);
@@ -368,6 +378,7 @@ describe('SCRUM-77 assumption: only confirmed bookings and active holds are cons
    * Expected: Nothing is flagged, including A: ignored rows must not count as the other side.
    * Type:     boundary
    */
+  // SCRUM-77-TC11
   it('US77-A01: pending, cancelled, rejected, expired and past bookings are ignored', async () => {
     tables.venue_bookings.push(
       booking(1, '10:00', '12:00'),
@@ -398,6 +409,7 @@ describe('SCRUM-77 assumption: only confirmed bookings and active holds are cons
    *           it does not rely on the query to leave them out.
    * Type:     error
    */
+  // SCRUM-77-TC12
   it('US77-A04: pending, cancelled and rejected rows are never treated as holds', async () => {
     tables.venue_bookings.push(
       booking(1, '10:00', '12:00'),
@@ -425,6 +437,7 @@ describe('SCRUM-77 assumption: only confirmed bookings and active holds are cons
    *           reason it is skipped is that it has ended.
    * Type:     boundary
    */
+  // SCRUM-77-TC13
   it('US77-A05: a booking that has already ended is not flagged, even if it overlaps one still to come', async () => {
     tables.venue_bookings.push(
       booking(1, '10:00', '12:00'),
@@ -449,6 +462,7 @@ describe('SCRUM-77 assumption: only confirmed bookings and active holds are cons
    * Expected: Both flagged, which shows the hold is padded like a confirmed booking.
    * Type:     boundary
    */
+  // SCRUM-77-TC14
   it('US77-A02: an active hold counts, padded like a confirmed booking', async () => {
     tables.venue_bookings.push(
       booking(1, '10:00', '12:00'),
@@ -467,6 +481,7 @@ describe('SCRUM-77 assumption: only confirmed bookings and active holds are cons
    * Expected: Both flagged: an undated hold is treated as active (same as SCRUM-66).
    * Type:     boundary
    */
+  // SCRUM-77-TC15
   it('US77-A03: a hold with no expiry is treated as active', async () => {
     tables.venue_bookings.push(
       booking(1, '10:00', '12:00'),
@@ -488,6 +503,7 @@ describe('SCRUM-77 AC6: flagging only marks, it never changes a booking', () => 
    *           only needs_review (and updated_at) changed; both rows still exist.
    * Type:     normal
    */
+  // SCRUM-77-TC16
   it('US77-F01: venue, date, time and status are unchanged after flagging', async () => {
     tables.venue_bookings.push(booking(1, '10:00', '12:00'), booking(2, '12:30', '14:00'));
     const before = tables.venue_bookings.map((item) => ({ ...item }));
@@ -515,6 +531,7 @@ describe('SCRUM-77 AC6: flagging only marks, it never changes a booking', () => 
    * Expected: A keeps its flag and is not rewritten; B and C get flagged; the audit lists B, C.
    * Type:     boundary
    */
+  // SCRUM-77-TC17
   it('US77-F02: an existing flag is kept and not rewritten', async () => {
     tables.venue_bookings.push(
       booking(1, '08:00', '09:00', { needs_review: true }),
@@ -543,6 +560,7 @@ describe('SCRUM-77 AC6: flagging only marks, it never changes a booking', () => 
    *           is rewritten.
    * Type:     boundary
    */
+  // SCRUM-77-TC18
   it('US77-F03: already flagged clashing bookings are reported but not rewritten', async () => {
     tables.venue_bookings.push(
       booking(1, '10:00', '12:00', { needs_review: true }),
@@ -564,6 +582,7 @@ describe('SCRUM-77 AC6: flagging only marks, it never changes a booking', () => 
    * Expected: The error is thrown to the caller and no booking is written.
    * Type:     error
    */
+  // SCRUM-77-TC19
   it('US77-F04: a database error is thrown and nothing is flagged', async () => {
     db.fetchMany.mockRejectedValueOnce(new Error('db down'));
 
@@ -601,6 +620,7 @@ describe('SCRUM-77 saving the venue through the real route (AC1, AC5, AC6)', () 
    *           needs_review true for 1 and 2 and false for 3.
    * Type:     normal
    */
+  // SCRUM-77-TC20
   it('US77-R01: saving the times flags the clash and Venue Staff see it in the list', async () => {
     seedClash();
 
@@ -626,6 +646,7 @@ describe('SCRUM-77 saving the venue through the real route (AC1, AC5, AC6)', () 
    *           event 3's booking not flagged.
    * Type:     normal
    */
+  // SCRUM-77-TC21
   it('US77-R02: each Coordinator sees their own event booking flagged', async () => {
     seedClash();
     await patchVenue({ setupMinutes: 30, teardownMinutes: 30 });
@@ -651,6 +672,7 @@ describe('SCRUM-77 saving the venue through the real route (AC1, AC5, AC6)', () 
    *           same start and end times.
    * Type:     normal
    */
+  // SCRUM-77-TC22
   it('US77-R03: saving the times does not cancel, move or remove any booking', async () => {
     seedClash();
     const before = tables.venue_bookings.map((item) => ({ ...item }));
@@ -674,6 +696,7 @@ describe('SCRUM-77 saving the venue through the real route (AC1, AC5, AC6)', () 
    *           only when a time is part of the save.
    * Type:     boundary
    */
+  // SCRUM-77-TC23
   it('US77-R04: saving other details does not run the check', async () => {
     tables.venues[0].setup_minutes = 30;
     tables.venues[0].teardown_minutes = 30;
@@ -695,6 +718,7 @@ describe('SCRUM-77 saving the venue through the real route (AC1, AC5, AC6)', () 
    * Expected: 200 and no flag: the times did not change, so this save did not cause the overlap.
    * Type:     boundary
    */
+  // SCRUM-77-TC24
   it('US77-R08: re-sending unchanged times with another edit does not run the check', async () => {
     tables.venues[0].setup_minutes = 30;
     tables.venues[0].teardown_minutes = 30;
@@ -716,6 +740,7 @@ describe('SCRUM-77 saving the venue through the real route (AC1, AC5, AC6)', () 
    * Expected: 200 and both bookings flagged.
    * Type:     boundary
    */
+  // SCRUM-77-TC25
   it('US77-R09: changing only one of the two times still runs the check', async () => {
     seedClash();
 
@@ -733,6 +758,7 @@ describe('SCRUM-77 saving the venue through the real route (AC1, AC5, AC6)', () 
    * Expected: 200, flaggedBookingIds is an empty list and no booking is flagged.
    * Type:     normal
    */
+  // SCRUM-77-TC26
   it('US77-R05: a save that creates no overlap flags nothing', async () => {
     seedClash();
 
@@ -750,6 +776,7 @@ describe('SCRUM-77 saving the venue through the real route (AC1, AC5, AC6)', () 
    * Expected: 400 and no booking flagged; the venue's saved times are unchanged.
    * Type:     error
    */
+  // SCRUM-77-TC27
   it('US77-R06: a rejected save flags nothing', async () => {
     seedClash();
 
@@ -767,6 +794,7 @@ describe('SCRUM-77 saving the venue through the real route (AC1, AC5, AC6)', () 
    * Expected: 403, no booking flagged, venue times unchanged.
    * Type:     error
    */
+  // SCRUM-77-TC28
   it('US77-R07: a user who is not Venue Staff cannot trigger flagging', async () => {
     seedClash();
 
