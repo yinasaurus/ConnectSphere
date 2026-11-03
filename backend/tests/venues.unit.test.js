@@ -33,7 +33,7 @@ describe('venue catalogue unit behavior', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC4 (incomplete entries, e.g. missing capacity)
+   * AC:       SCRUM-7 AC4 (incomplete entries, e.g. missing capacity)
    * Scenario: Venue Staff submit a new venue with no capacity, a non-number, or 0.
    * Setup:    createVenueSchema only, as run by the POST /api/venues route.
    * Expected: Each is rejected with a clear message, so an incomplete venue never reaches
@@ -49,7 +49,7 @@ describe('venue catalogue unit behavior', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC4 (duplicate entries)
+   * AC:       SCRUM-7 AC4 (duplicate entries)
    * Scenario: A new venue lists the same layout twice.
    * Setup:    createVenueSchema with layouts ['THEATRE', 'THEATRE', 'BANQUET'].
    * Expected: The repeat is removed, so the venue doesn't end up with duplicate layouts.
@@ -61,7 +61,7 @@ describe('venue catalogue unit behavior', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC4
+   * AC:       SCRUM-7 AC4
    * Scenario: The smallest valid capacity, on create and on a partial update.
    * Setup:    createVenueSchema with capacity 1; updateVenueSchema without capacity.
    * Expected: Both are accepted: 1 is the lower limit, and an edit that doesn't touch
@@ -74,7 +74,7 @@ describe('venue catalogue unit behavior', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC2 + AC4
+   * AC:       SCRUM-7 AC2 + AC4
    * Scenario: An edit tries to set capacity to 0 or a negative number.
    * Setup:    updateVenueSchema, as run by PATCH /api/venues/:id.
    * Expected: Rejected, so an edit can't make a complete venue incomplete.
@@ -86,7 +86,7 @@ describe('venue catalogue unit behavior', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC2 (editing layouts)
+   * AC:       SCRUM-7 AC2 (editing layouts)
    * Scenario: An update sends an existing layout with no name and without deleting it.
    * Setup:    updateVenueSchema with { id: 3 }, then { id: 3, deleted: true }.
    * Expected: The first is rejected (it would leave a blank layout); the second is a valid
@@ -188,7 +188,7 @@ describe('venue catalogue unit behavior', () => {
   });
 });
 
-describe('SCUM-7 venue create and update (service)', () => {
+describe('SCRUM-7 venue create and update (service)', () => {
   const STAFF = { id: 1, roles: ['VENUE_STAFF'] };
   let query;
 
@@ -206,7 +206,7 @@ describe('SCUM-7 venue create and update (service)', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC1
+   * AC:       SCRUM-7 AC1
    * Scenario: Venue Staff add a complete new venue.
    * Setup:    No existing venue with that name and location. The payload has every AC1
    *           field, including a repeated and a blank layout.
@@ -252,7 +252,7 @@ describe('SCUM-7 venue create and update (service)', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC1
+   * AC:       SCRUM-7 AC1
    * Scenario: Venue Staff add a venue with only the required details.
    * Setup:    Payload with name and capacity only; no layouts.
    * Expected: Optional details are stored as empty (null) rather than blank strings, and no
@@ -272,7 +272,7 @@ describe('SCUM-7 venue create and update (service)', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC4
+   * AC:       SCRUM-7 AC4
    * Scenario: The service is called without a venue name, e.g. bypassing the route validator.
    * Setup:    Venue Staff; payload with a capacity but no name.
    * Expected: 400 "Venue name is required" and nothing is inserted.
@@ -285,7 +285,7 @@ describe('SCUM-7 venue create and update (service)', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC4
+   * AC:       SCRUM-7 AC4
    * Scenario: The service is called without a capacity, e.g. bypassing the route validator.
    * Setup:    Venue Staff; payload with a name only.
    * Expected: 400, and nothing is inserted, so the database never holds an incomplete venue.
@@ -298,7 +298,7 @@ describe('SCUM-7 venue create and update (service)', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC2
+   * AC:       SCRUM-7 AC2
    * Scenario: Venue Staff edit a venue's ordinary details.
    * Setup:    Venue 7 exists; no other venue has the new name. The payload changes name,
    *           capacity, facilities and operating hours only.
@@ -329,7 +329,7 @@ describe('SCUM-7 venue create and update (service)', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC2 + AC4
+   * AC:       SCRUM-7 AC2 + AC4
    * Scenario: An edit sets capacity to 0.
    * Setup:    Venue 7 exists with capacity 20.
    * Expected: 400 and no update, so the saved capacity stays 20.
@@ -343,7 +343,7 @@ describe('SCUM-7 venue create and update (service)', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC5
+   * AC:       SCRUM-7 AC5
    * Scenario: A user who isn't Venue Staff tries to add or edit a venue.
    * Setup:    hasRole returns false for this call (e.g. an Event Coordinator).
    * Expected: 403 for both, before any database read or write, so the catalogue can't be
@@ -363,7 +363,7 @@ describe('SCUM-7 venue create and update (service)', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC2 (editing layouts)
+   * AC:       SCRUM-7 AC2 (editing layouts)
    * Scenario: An edit refers to a layout id that doesn't belong to this venue.
    * Setup:    Venue 7 has no layout rows; the request renames layout 99.
    * Expected: 404 "Venue layout not found", and no layout is changed or added.
@@ -380,7 +380,7 @@ describe('SCUM-7 venue create and update (service)', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC4 (duplicate entries)
+   * AC:       SCRUM-7 AC4 (duplicate entries)
    * Scenario: An edit adds a layout the venue already supports.
    * Setup:    Venue 7 already has THEATRE; the request adds THEATRE again.
    * Expected: 409 "Duplicate venue layout", and no new layout row is inserted.

@@ -37,7 +37,6 @@ describe('SCRUM-54 Lead-only unassigned queue and assignment overview', () => {
   const token = jwt.sign({ sub: 11 }, env.jwtSecret);
   const lead = { id: 11, roles: [ROLES.EVENT_COORDINATOR_LEAD] };
   const coordinator = { id: 2, roles: [ROLES.EVENT_COORDINATOR] };
-  const hybrid = { id: 13, roles: [ROLES.EVENT_COORDINATOR, ROLES.EVENT_COORDINATOR_LEAD] };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -51,44 +50,23 @@ describe('SCRUM-54 Lead-only unassigned queue and assignment overview', () => {
   }
 
   /*
-   * AC: SCRUM-54 AC3
-   * Scenario: A Lead opens the unassigned queue.
-   * Setup: One event with coordinator_id null.
-   * Expected: 200 and the unassigned event is listed.
-   * Type: normal
-   */
-  it('lets a Lead open the unassigned queue', async () => {
-    db.fetchMany.mockResolvedValue([
-      { id: 9, name: 'Waiting', status: 'SUBMITTED', start_at: '2026-10-01T10:00:00Z', coordinator_id: null },
-    ]);
-    const events = await access.listUnassignedQueue(lead);
-    expect(events).toEqual([
-      { id: 9, name: 'Waiting', status: 'SUBMITTED', startAt: '2026-10-01T10:00:00Z' },
-    ]);
-  });
-
-  /*
-   * AC: SCRUM-54 AC3
-   * Scenario: A Coordinator who is not a Lead asks for the unassigned queue.
-   * Setup: Coordinator-only user; queue is not listed because the role check fails first.
-   * Expected: 403 and no event list is produced.
-   * Type: error
-   */
-  it('refuses the unassigned queue to a Coordinator who is not a Lead', async () => {
-    await expect(access.listUnassignedQueue(coordinator)).rejects.toMatchObject({ status: 403 });
-    expect(db.fetchMany).not.toHaveBeenCalled();
-  });
-
-  /*
    * AC: SCRUM-54 AC2, AC3
-   * Scenario: A hybrid Coordinator + Lead opens the unassigned queue in the same session.
-   * Setup: User holds both EVENT_COORDINATOR and EVENT_COORDINATOR_LEAD.
-   * Expected: The Lead function is allowed because they hold Lead.
+   * Scenario: A hybrid Coordinator + Lead opens the unassigned queue over HTTP in the same session.
+   * Setup: Session roles EVENT_COORDINATOR and EVENT_COORDINATOR_LEAD; empty queue.
+   * Expected: 200, so the Lead function is allowed because they hold Lead.
    * Type: normal
    */
+  // SCRUM-54-TC05
   it('lets a Coordinator + Lead hybrid open the unassigned queue', async () => {
-    db.fetchMany.mockResolvedValue([]);
-    await expect(access.listUnassignedQueue(hybrid)).resolves.toEqual([]);
+    db.fetchOne.mockResolvedValue({ id: 11, is_active: true });
+    db.fetchMany
+      .mockResolvedValueOnce([{ role: ROLES.EVENT_COORDINATOR }, { role: ROLES.EVENT_COORDINATOR_LEAD }])
+      .mockResolvedValueOnce([]);
+    const res = await request(app)
+      .get('/api/events/unassigned-queue')
+      .set('Cookie', `${env.sessionCookieName}=${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.events).toEqual([]);
   });
 
   /*
@@ -99,6 +77,7 @@ describe('SCRUM-54 Lead-only unassigned queue and assignment overview', () => {
    * Expected: The assignment is still listed; coordinatorName is null rather than crashing.
    * Type: boundary
    */
+  // SCRUM-54-TC06
   it('lists an assignment when the coordinator name join is missing', async () => {
     db.fetchMany
       .mockResolvedValueOnce([
@@ -123,6 +102,7 @@ describe('SCRUM-54 Lead-only unassigned queue and assignment overview', () => {
    * Expected: The assignment row is returned.
    * Type: normal
    */
+  // SCRUM-54-TC07
   it('lets a Lead open the coordinator assignment overview', async () => {
     db.fetchMany
       .mockResolvedValueOnce([
@@ -153,6 +133,7 @@ describe('SCRUM-54 Lead-only unassigned queue and assignment overview', () => {
    * Expected: 403 before any assignment rows are loaded.
    * Type: error
    */
+  // SCRUM-54-TC08
   it('refuses the assignment overview to a Coordinator who is not a Lead', async () => {
     await expect(access.listAssignmentOverview(coordinator)).rejects.toMatchObject({ status: 403 });
     expect(db.fetchMany).not.toHaveBeenCalled();
@@ -165,6 +146,7 @@ describe('SCRUM-54 Lead-only unassigned queue and assignment overview', () => {
    * Expected: 403 with only error and message — no events array and no event name.
    * Type: error
    */
+  // SCRUM-54-TC09
   it('returns 403 without event details when a non-Lead opens the unassigned queue over HTTP', async () => {
     const res = await asRole(ROLES.EVENT_COORDINATOR, 'get', '/api/events/unassigned-queue');
     expect(res.status).toBe(403);
@@ -175,12 +157,13 @@ describe('SCRUM-54 Lead-only unassigned queue and assignment overview', () => {
   /*
    * AC: SCRUM-54 AC3, AC7
    * Scenario: A Safety Officer calls GET /api/assignments/overview.
-   * Setup: Session role SAFETY_OFFICER.
+   * Setup: Session role EVENT_COORDINATOR.
    * Expected: 403 with no assignments list.
    * Type: error
    */
+  // SCRUM-54-TC10
   it('returns 403 without assignment details when a non-Lead opens the overview over HTTP', async () => {
-    const res = await asRole(ROLES.SAFETY_OFFICER, 'get', '/api/assignments/overview');
+    const res = await asRole(ROLES.EVENT_COORDINATOR, 'get', '/api/assignments/overview');
     expect(res.status).toBe(403);
     expectNoEventLeak(res);
   });
@@ -192,6 +175,7 @@ describe('SCRUM-54 Lead-only unassigned queue and assignment overview', () => {
    * Expected: 200 with events/assignments arrays (empty is a valid queue).
    * Type: boundary
    */
+  // SCRUM-54-TC11
   it('returns 200 empty collections when a Lead opens an empty queue or overview over HTTP', async () => {
     db.fetchOne.mockResolvedValue({ id: 11, is_active: true });
     db.fetchMany

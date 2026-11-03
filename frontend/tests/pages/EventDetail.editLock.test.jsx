@@ -61,6 +61,7 @@ describe('SCRUM-40 EventDetail edit affordances', () => {
    * Expected: "Edit event details" links to /app/events/3/edit.
    * Type:     normal
    */
+  // SCRUM-40-TC08
   it('US40-F01 (AC1/1C): Planning shows Edit event details for the assigned Coordinator', async () => {
     mockEvent('PLANNING');
     await renderAsAssignedCoordinator();
@@ -75,6 +76,7 @@ describe('SCRUM-40 EventDetail edit affordances', () => {
    * Expected: No edit link; Confirmed note points at change requests.
    * Type:     error / UI lock
    */
+  // SCRUM-40-TC09
   it('US40-F02 (AC3/2A): Confirmed hides Edit event details and shows the change-request note', async () => {
     mockEvent('CONFIRMED');
     await renderAsAssignedCoordinator();

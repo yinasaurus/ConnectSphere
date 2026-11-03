@@ -17,6 +17,7 @@ jest.mock('../../src/auth', () => ({ useAuth: jest.fn() }));
  * Expected: People shows Chloe Lim. The word Unassigned is not on the page.
  * Type: normal
  */
+// SCRUM-30-TC15
 it('US30-F07: an assigned event shows the Coordinator name instead of Unassigned', async () => {
   useAuth.mockReturnValue({
     user: { id: 1, fullName: 'Aisha Rahman' },

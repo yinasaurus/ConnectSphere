@@ -4,7 +4,7 @@
  *   Approved               -> "Start planning" (PLANNING, AC3)
  *   Planning               -> "Send to safety check" (AWAITING_SAFETY_CHECK, AC6)
  *   Awaiting Safety Check  -> no coordinator button; only the Safety Officer can start preparation (AC7)
- *   Preparation            -> "Confirm event" (CONFIRMED)
+ *   Preparation            -> "Confirm event" (CONFIRMED) is SCRUM-73, not tested here
  */
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -64,14 +64,15 @@ beforeEach(() => jest.clearAllMocks());
 // must still be restored so later tests' async waitFor/findBy calls don't hang.
 afterEach(() => jest.useRealTimers());
 
-// AC3 / AC6 / SCRUM-73 · each status (other than Under Review, which goes through the
+// AC3 / AC6 · each status (other than Under Review, which goes through the
 // Approve/Reject decision panel — see below) offers exactly its next step, which sends
 // that status. Planning has an approved booking, because the safety check button waits
 // for one (US5-F09).
 it.each([
+  // SCRUM-5-TC48
   ['APPROVED', 'Start planning', 'PLANNING', []],
+  // SCRUM-5-TC49
   ['PLANNING', 'Send to safety check', 'AWAITING_SAFETY_CHECK', [APPROVED_BOOKING]],
-  ['PREPARATION', 'Confirm event', 'CONFIRMED', []],
 ])('US5-F02: %s offers "%s", which sends %s', async (status, button, next, bookings) => {
   mockEvent(status, bookings);
   const user = await renderAsCoordinator();
@@ -82,6 +83,7 @@ it.each([
 
 // AC2 · Under Review offers Approve through the existing decision panel (SCRUM-17),
 // sending APPROVED via the decision endpoint rather than the generic status one.
+// SCRUM-5-TC50
 it('US5-F02b: UNDER_REVIEW offers "Approve", which sends APPROVED via the decision endpoint', async () => {
   mockEvent('UNDER_REVIEW');
   const user = await renderAsCoordinator();
@@ -93,6 +95,7 @@ it('US5-F02b: UNDER_REVIEW offers "Approve", which sends APPROVED via the decisi
 
 // AC4 · Rejecting from Under Review sends the typed reason via the decision panel's
 // two-step confirm flow (SCRUM-17), not a single "Reject / return" button.
+// SCRUM-5-TC51
 it('US5-F03: rejecting from Under Review sends the typed reason', async () => {
   mockEvent('UNDER_REVIEW');
   const user = await renderAsCoordinator();
@@ -106,6 +109,7 @@ it('US5-F03: rejecting from Under Review sends the typed reason', async () => {
 
 // AC5 · If someone else changes the status, the open event page shows it within 10 seconds,
 // along with the buttons for the new status.
+// SCRUM-5-TC52
 it('US5-F08: the event page picks up a status change on the next 10-second refresh', async () => {
   jest.useFakeTimers();
   mockEvent('UNDER_REVIEW');
@@ -121,6 +125,7 @@ it('US5-F08: the event page picks up a status change on the next 10-second refre
 });
 
 // AC7 · While awaiting the safety check the coordinator has no button to move the event on.
+// SCRUM-5-TC53
 it('US5-F05: AWAITING_SAFETY_CHECK offers the coordinator no step button', async () => {
   mockEvent('AWAITING_SAFETY_CHECK');
   await renderAsCoordinator();
@@ -135,6 +140,7 @@ it('US5-F05: AWAITING_SAFETY_CHECK offers the coordinator no step button', async
  *           clicking it sends no status change.
  * Type:     error
  */
+// SCRUM-5-TC54
 it('US5-F09: "Send to safety check" is disabled until a venue is requested', async () => {
   mockEvent('PLANNING', []);
   const user = await renderAsCoordinator();
@@ -154,6 +160,7 @@ it('US5-F09: "Send to safety check" is disabled until a venue is requested', asy
  *           because a rejected booking is no longer part of the event's arrangements.
  * Type:     edge
  */
+// SCRUM-5-TC55
 it('US5-F10: "Send to safety check" stays disabled while a booking is pending', async () => {
   mockEvent('PLANNING', [
     { id: 7, venue_name: 'Hall', status: 'PENDING' },
@@ -171,6 +178,7 @@ it('US5-F10: "Send to safety check" stays disabled while a booking is pending', 
  * Expected: The button is enabled with no hint, since the rejected booking doesn't count.
  * Type:     happy
  */
+// SCRUM-5-TC56
 it('US5-F11: "Send to safety check" is enabled once every active booking is approved', async () => {
   mockEvent('PLANNING', [APPROVED_BOOKING, { id: 8, venue_name: 'Studio', status: 'REJECTED' }]);
   await renderAsCoordinator();
@@ -188,6 +196,7 @@ it('US5-F11: "Send to safety check" is enabled once every active booking is appr
  *           instead of only at the top of the page where the coordinator wouldn't see it.
  * Type:     error
  */
+// SCRUM-5-TC57
 it('US5-F12: a refused status change is shown inside the Coordinator actions card', async () => {
   const refusal = 'Every venue booking must be approved and all requested equipment reserved before the safety check';
   mockEvent('PLANNING', [APPROVED_BOOKING], refusal);

@@ -100,6 +100,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: sufficient, indication SUFFICIENT, availableQuantity 8, type AUDIO on the result.
    * Type: normal
    */
+  // SCRUM-21-TC01
   it('AC1/AC5: enough unused available stock is sufficient and names the type', async () => {
     fetchOne.mockResolvedValue(MIC);
     fetchMany.mockResolvedValue([]);
@@ -120,6 +121,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: committed 5, available 3, still sufficient for 2.
    * Type: normal
    */
+  // SCRUM-21-TC02
   it('AC3/AC5: overlapping reservations are excluded and leftover stock can still be enough', async () => {
     fetchOne.mockResolvedValue(MIC);
     fetchMany.mockResolvedValue([reservation()]);
@@ -137,6 +139,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: not committed — rejected events do not hold kit.
    * Type: boundary
    */
+  // SCRUM-21-TC03
   it('AC3: rejected events do not keep equipment committed', async () => {
     fetchOne.mockResolvedValue(MIC);
     fetchMany.mockResolvedValue([
@@ -154,6 +157,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: available 0 (never negative), insufficient.
    * Type: boundary
    */
+  // SCRUM-21-TC04
   it('AC4: committed quantity above catalogue stock still reports zero free', async () => {
     fetchOne.mockResolvedValue(MIC);
     fetchMany.mockResolvedValue([reservation({ quantity: 10 })]);
@@ -169,6 +173,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: available 1, insufficient.
    * Type: boundary
    */
+  // SCRUM-21-TC05
   it('AC4/AC6: leftover stock below the requested quantity is insufficient', async () => {
     fetchOne.mockResolvedValue(MIC);
     fetchMany.mockResolvedValue([reservation({ quantity: 7 })]);
@@ -185,6 +190,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: available 2, sufficient (boundary of AC4).
    * Type: boundary
    */
+  // SCRUM-21-TC06
   it('AC4: requesting exactly the remaining quantity is sufficient', async () => {
     fetchOne.mockResolvedValue(MIC);
     fetchMany.mockResolvedValue([reservation({ quantity: 6 })]);
@@ -200,6 +206,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: available 0, indication UNAVAILABLE, not sufficient.
    * Type: error
    */
+  // SCRUM-21-TC07
   it('AC2/AC6: maintenance stock is not treated as available', async () => {
     fetchOne.mockResolvedValue({ ...MIC, status: 'MAINTENANCE' });
     fetchMany.mockResolvedValue([]);
@@ -216,6 +223,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: available 0, indication UNAVAILABLE, not sufficient.
    * Type: error
    */
+  // SCRUM-21-TC08
   it('AC2/AC6: damaged stock is not treated as available', async () => {
     fetchOne.mockResolvedValue({ ...MIC, status: 'DAMAGED' });
     fetchMany.mockResolvedValue([]);
@@ -232,6 +240,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: available 0, indication UNAVAILABLE — only AVAILABLE catalogue stock is in the pool.
    * Type: error
    */
+  // SCRUM-21-TC09
   it('AC2/AC6: catalogue status RESERVED is not treated as available', async () => {
     fetchOne.mockResolvedValue({ ...MIC, status: 'RESERVED' });
     fetchMany.mockResolvedValue([]);
@@ -248,6 +257,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: committed 0 — cancelled events must not keep holding kit.
    * Type: boundary
    */
+  // SCRUM-21-TC10
   it('AC3: cancelled events do not keep equipment committed', async () => {
     fetchOne.mockResolvedValue(MIC);
     fetchMany.mockResolvedValue([
@@ -266,6 +276,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: not committed; full stock remains available.
    * Type: boundary
    */
+  // SCRUM-21-TC11
   it('AC3: a reservation that does not overlap the requested time stays available', async () => {
     fetchOne.mockResolvedValue(MIC);
     fetchMany.mockResolvedValue([
@@ -291,6 +302,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: not incompatible — touching ends do not overlap.
    * Type: boundary
    */
+  // SCRUM-21-TC12
   it('AC3: touching windows are not treated as incompatible', async () => {
     fetchOne.mockResolvedValue(MIC);
     fetchMany.mockResolvedValue([
@@ -315,6 +327,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: own reservation is not counted as “another” event.
    * Type: boundary
    */
+  // SCRUM-21-TC13
   it('AC3: a reservation on the same event is not treated as another commitment', async () => {
     fetchOne.mockResolvedValue(MIC);
     fetchMany.mockResolvedValue([reservation()]);
@@ -330,6 +343,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: not committed (cannot mark incompatible without a window).
    * Type: boundary
    */
+  // SCRUM-21-TC14
   it('AC3: a reservation without event times is not treated as committed', async () => {
     fetchOne.mockResolvedValue(MIC);
     fetchMany.mockResolvedValue([
@@ -346,6 +360,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: 403; catalogue is not read.
    * Type: error
    */
+  // SCRUM-21-TC15
   it('AC1: refuses the check to a Coordinator', async () => {
     await expect(
       equipmentService.checkEquipmentAvailability(COORDINATOR, { equipmentId: 1, quantity: 2, ...WINDOW })
@@ -360,6 +375,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: 400 for each.
    * Type: error
    */
+  // SCRUM-21-TC16
   it('AC1: refuses a check that is missing equipmentId, quantity, or a valid window', async () => {
     await expect(equipmentService.checkEquipmentAvailability(TECH, { quantity: 2, ...WINDOW }))
       .rejects.toMatchObject({ status: 400 });
@@ -382,6 +398,7 @@ describe('SCRUM-21 checkEquipmentAvailability (service)', () => {
    * Expected: 404.
    * Type: error
    */
+  // SCRUM-21-TC17
   it('AC1: returns 404 when the catalogue item is missing', async () => {
     fetchOne.mockResolvedValue(null);
     await expect(check()).rejects.toMatchObject({ status: 404 });
@@ -396,6 +413,7 @@ describe('SCRUM-21 checkRequestAvailability (service)', () => {
    * Expected: same sufficient result, with requestId and eventId attached.
    * Type: normal
    */
+  // SCRUM-21-TC18
   it('AC7: checks a request using its quantity and the event date/time', async () => {
     fetchOne
       .mockResolvedValueOnce({ id: 20, event_id: 8, equipment_id: 1, quantity: 2 })
@@ -416,6 +434,7 @@ describe('SCRUM-21 checkRequestAvailability (service)', () => {
    * Expected: 400.
    * Type: error
    */
+  // SCRUM-21-TC19
   it('AC7: refuses a request that has no catalogue item', async () => {
     fetchOne.mockResolvedValue({ id: 21, event_id: 8, equipment_id: null, quantity: 2 });
     await expect(equipmentService.checkRequestAvailability(TECH, 21))
@@ -429,6 +448,7 @@ describe('SCRUM-21 checkRequestAvailability (service)', () => {
    * Expected: 400.
    * Type: error
    */
+  // SCRUM-21-TC20
   it('AC1/AC7: refuses a request whose event has no date and time', async () => {
     fetchOne
       .mockResolvedValueOnce({ id: 22, event_id: 8, equipment_id: 1, quantity: 2 })
@@ -444,6 +464,7 @@ describe('SCRUM-21 checkRequestAvailability (service)', () => {
    * Expected: 404.
    * Type: error
    */
+  // SCRUM-21-TC21
   it('AC7: returns 404 when the request is missing', async () => {
     fetchOne.mockResolvedValue(null);
     await expect(equipmentService.checkRequestAvailability(TECH, 99))
@@ -457,6 +478,7 @@ describe('SCRUM-21 checkRequestAvailability (service)', () => {
    * Expected: 403 before the request row is loaded.
    * Type: error
    */
+  // SCRUM-21-TC22
   it('AC7: refuses the request-level check to a Coordinator', async () => {
     await expect(equipmentService.checkRequestAvailability(COORDINATOR, 20))
       .rejects.toMatchObject({ status: 403 });
@@ -474,6 +496,7 @@ describe('SCRUM-21 availability HTTP', () => {
    * Expected: 200 with sufficient true.
    * Type: normal
    */
+  // SCRUM-21-TC23
   it('AC7: Tech receives 200 and a sufficient indication for a request', async () => {
     mockQuery();
     fetchOne
@@ -494,6 +517,7 @@ describe('SCRUM-21 availability HTTP', () => {
    * Expected: 200 sufficient.
    * Type: normal
    */
+  // SCRUM-21-TC24
   it('AC1: Tech can check availability with type, quantity, date and time', async () => {
     mockQuery();
     fetchOne.mockResolvedValue(MIC);
@@ -512,6 +536,7 @@ describe('SCRUM-21 availability HTTP', () => {
    * Expected: 403, no sufficient flag leaked as a success body.
    * Type: error
    */
+  // SCRUM-21-TC25
   it('AC1: Coordinators receive 403 on the availability routes', async () => {
     mockRoles = [ROLES.EVENT_COORDINATOR];
     const adHoc = await request(app).get('/api/equipment/availability')
@@ -528,6 +553,7 @@ describe('SCRUM-21 availability HTTP', () => {
    * Expected: 400.
    * Type: error
    */
+  // SCRUM-21-TC26
   it('AC1: missing query fields return 400', async () => {
     mockQuery();
     const res = await request(app).get('/api/equipment/availability')
@@ -542,6 +568,7 @@ describe('SCRUM-21 availability HTTP', () => {
    * Expected: 404.
    * Type: error
    */
+  // SCRUM-21-TC27
   it('AC1: unknown catalogue item returns 404', async () => {
     mockQuery();
     fetchOne.mockResolvedValue(null);

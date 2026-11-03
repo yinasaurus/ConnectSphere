@@ -17,6 +17,7 @@ describe('SCRUM-55 Safety queue page', () => {
    * Expected: The event name links to its safety-check page.
    * Type:     normal
    */
+  // SCRUM-55-TC14
   it('lists awaiting events with a link to the safety check', async () => {
     api.mockResolvedValue({
       events: [{

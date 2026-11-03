@@ -39,6 +39,7 @@ describe('SCRUM-30 Unassigned flag on the dashboard', () => {
    * Expected: The event is in Upcoming and the Coordinator cell says Unassigned.
    * Type: normal
    */
+  // SCRUM-30-TC10
   it('US30-F04: the submitting organiser sees the event flagged Unassigned', async () => {
     renderDashboard(
       { id: 1, fullName: 'Aisha Rahman' },
@@ -58,6 +59,7 @@ describe('SCRUM-30 Unassigned flag on the dashboard', () => {
    * Expected: The Lead can see the event, flagged Unassigned.
    * Type: normal
    */
+  // SCRUM-30-TC11
   it('US30-F05: the Lead sees the unassigned event on the dashboard', async () => {
     renderDashboard(
       { id: 11, fullName: 'Ivy Chen' },
@@ -76,6 +78,7 @@ describe('SCRUM-30 Unassigned flag on the dashboard', () => {
    * Expected: The event is still listed under that name. Unassigned is not shown.
    * Type: normal
    */
+  // SCRUM-30-TC12
   it('US30-F06: after assignment the dashboard shows the Coordinator and not Unassigned', async () => {
     renderDashboard(
       { id: 1, fullName: 'Aisha Rahman' },
@@ -101,6 +104,7 @@ describe('SCRUM-30 Unassigned flag on the dashboard', () => {
    *           "assigned to me" filter does not hide it.
    * Type: boundary
    */
+  // SCRUM-30-TC13
   it('US30-F08: a Lead who is also a Coordinator still sees the unassigned event', async () => {
     renderDashboard(
       { id: 11, fullName: 'Ivy Chen' },
@@ -119,6 +123,7 @@ describe('SCRUM-30 Unassigned flag on the dashboard', () => {
    * Expected: It is not in Upcoming. Visible events is 0.
    * Type: boundary
    */
+  // SCRUM-30-TC14
   it('US30-F09: a Coordinator who is not a Lead does not see an unassigned event', async () => {
     renderDashboard(
       { id: 2, fullName: 'Chloe Lim' },

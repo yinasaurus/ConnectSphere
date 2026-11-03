@@ -157,6 +157,7 @@ describe('SCRUM-46 Venue Staff notices', () => {
    *           No decision notice. The Coordinator is not told.
    * Type:     normal
    */
+  // SCRUM-46-TC01
   it('US46-V01: a new booking request notifies active Venue Staff only', async () => {
     const created = await venuesService.requestBooking(coordinator, {
       eventId: 3,
@@ -184,6 +185,7 @@ describe('SCRUM-46 Venue Staff notices', () => {
    * Expected: User 40 is not told about their own request. Nobody else is active Venue Staff.
    * Type:     boundary
    */
+  // SCRUM-46-TC02
   it('US46-V02: the Venue Staff member who sent the request is not notified', async () => {
     await venuesService.requestBooking(
       { id: 40, roles: [ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF] },
@@ -205,6 +207,7 @@ describe('SCRUM-46 Venue Staff notices', () => {
    * Expected: No notice. Nothing was created.
    * Type:     error
    */
+  // SCRUM-46-TC03
   it('US46-V03: a refused booking request notifies nobody', async () => {
     tables.venue_bookings.push({
       id: 9,
@@ -236,6 +239,7 @@ describe('SCRUM-46 Venue Staff notices', () => {
    *           is not changed.
    * Type:     normal
    */
+  // SCRUM-46-TC04
   it('US46-V04: flagging an approved booking notifies the other Venue Staff', async () => {
     tables.user_roles.push({ user_id: 2, role: ROLES.VENUE_STAFF });
     tables.venue_bookings.push({
@@ -271,6 +275,7 @@ describe('SCRUM-46 Venue Staff notices', () => {
    * Expected: Venue Staff are not told. The approved-booking rule is not met.
    * Type:     boundary
    */
+  // SCRUM-46-TC05
   it('US46-V05: a change that flags no approved booking does not notify Venue Staff', async () => {
     tables.venue_bookings.push({
       id: 7, event_id: 3, venue_id: 8, status: 'PENDING',
@@ -294,6 +299,7 @@ describe('SCRUM-46 Venue Staff notices', () => {
    * Expected: Active Venue Staff are told. The booking is not cancelled.
    * Type:     normal
    */
+  // SCRUM-46-TC06
   it('US46-V06: cancelling an event with an approved booking notifies Venue Staff', async () => {
     tables.venue_bookings.push({
       id: 7, event_id: 3, venue_id: 8, status: 'APPROVED',
@@ -313,6 +319,7 @@ describe('SCRUM-46 Venue Staff notices', () => {
    * Expected: Venue Staff get no booking notice.
    * Type:     boundary
    */
+  // SCRUM-46-TC07
   it('US46-V07: cancelling an event with no approved booking does not notify Venue Staff', async () => {
     tables.venue_bookings.push({
       id: 7, event_id: 3, venue_id: 8, status: 'PENDING',
@@ -331,6 +338,7 @@ describe('SCRUM-46 Venue Staff notices', () => {
    * Expected: Both active members are told. The inactive one is not.
    * Type:     normal
    */
+  // SCRUM-46-TC08
   it('US46-V08: every active Venue Staff member is told about a new request', async () => {
     tables.users.push({ id: 42, is_active: true });
     tables.user_roles.push({ user_id: 42, role: ROLES.VENUE_STAFF });
@@ -358,6 +366,7 @@ describe('SCRUM-46 Attendee notices', () => {
    * Expected: Only that Attendee is told they are registered.
    * Type:     normal
    */
+  // SCRUM-46-TC09
   it('US46-A01: registering notifies that Attendee and nobody else', async () => {
     confirmedEvent();
 
@@ -374,6 +383,7 @@ describe('SCRUM-46 Attendee notices', () => {
    * Expected: No notice.
    * Type:     error
    */
+  // SCRUM-46-TC10
   it('US46-A02: a refused registration notifies nobody', async () => {
     confirmedEvent();
     db.fetchCount.mockResolvedValueOnce(50);
@@ -389,6 +399,7 @@ describe('SCRUM-46 Attendee notices', () => {
    * Expected: That Attendee is told. A withdrawn registration is not a waitlist promotion.
    * Type:     normal
    */
+  // SCRUM-46-TC11
   it('US46-A03: withdrawing notifies the Attendee who withdrew', async () => {
     tables.registrations.push({
       id: 10, event_id: 3, attendee_id: 30, status: 'REGISTERED',
@@ -403,12 +414,14 @@ describe('SCRUM-46 Attendee notices', () => {
   /*
    * AC:       SCRUM-46 AC2, AC3
    * Scenario: The event date changes. One Attendee is registered, one withdrew, one is waitlisted.
-   * Setup:    Coordinator edits the start time. Approved booking so Venue Staff are also told,
-   *           which this test does not treat as an Attendee notice.
+   * Setup:    Coordinator edits the start and end time. All three accounts are active, so
+   *           only the registration status can leave 31 and 32 out.
    * Expected: Only the registered Attendee gets the event-updated notice.
    * Type:     normal
    */
+  // SCRUM-46-TC12
   it('US46-A04: a date change notifies registered Attendees only', async () => {
+    tables.users.push({ id: 31, is_active: true }, { id: 32, is_active: true });
     tables.registrations.push(
       { id: 10, event_id: 3, attendee_id: 30, status: 'REGISTERED' },
       { id: 11, event_id: 3, attendee_id: 31, status: 'WITHDRAWN' },
@@ -437,6 +450,7 @@ describe('SCRUM-46 Attendee notices', () => {
    * Expected: The Attendee is not told. Attendance is not a date, time or venue change.
    * Type:     boundary
    */
+  // SCRUM-46-TC13
   it('US46-A05: an attendance-only change does not notify Attendees', async () => {
     tables.registrations.push({ id: 10, event_id: 3, attendee_id: 30, status: 'REGISTERED' });
 
@@ -448,11 +462,13 @@ describe('SCRUM-46 Attendee notices', () => {
   /*
    * AC:       SCRUM-46 AC2, AC3
    * Scenario: The event is cancelled.
-   * Setup:    Registered, withdrawn and waitlisted Attendees.
+   * Setup:    Registered, withdrawn and waitlisted Attendees, all with active accounts.
    * Expected: Only the registered Attendee is told it was cancelled.
    * Type:     normal
    */
+  // SCRUM-46-TC14
   it('US46-A06: cancelling the event notifies registered Attendees only', async () => {
+    tables.users.push({ id: 31, is_active: true }, { id: 32, is_active: true });
     tables.registrations.push(
       { id: 10, event_id: 3, attendee_id: 30, status: 'REGISTERED' },
       { id: 11, event_id: 3, attendee_id: 31, status: 'WITHDRAWN' },
@@ -471,6 +487,7 @@ describe('SCRUM-46 Attendee notices', () => {
    * Expected: That Attendee is told the venue changed.
    * Type:     normal
    */
+  // SCRUM-46-TC15
   it('US46-A07: an approved venue change notifies registered Attendees', async () => {
     tables.registrations.push({ id: 10, event_id: 3, attendee_id: 30, status: 'REGISTERED' });
     tables.event_change_requests = [{
@@ -504,6 +521,7 @@ describe('SCRUM-46 Attendee notices', () => {
    * Expected: Only attendee 30 is told when event 3's date changes, and again when it is cancelled.
    * Type:     boundary
    */
+  // SCRUM-46-TC16
   it('US46-A08: an Attendee of another event is not notified', async () => {
     tables.users.push({ id: 34, is_active: true });
     tables.registrations.push(
@@ -528,6 +546,7 @@ describe('SCRUM-46 Attendee notices', () => {
    * Expected: The Attendee is not told, because the event was not changed.
    * Type:     boundary
    */
+  // SCRUM-46-TC17
   it('US46-A09: rejecting a change request does not notify Attendees', async () => {
     tables.registrations.push({ id: 10, event_id: 3, attendee_id: 30, status: 'REGISTERED' });
     tables.event_change_requests = [{
@@ -555,6 +574,7 @@ describe('SCRUM-46 Attendee notices', () => {
    * Expected: Only attendee 30 is told about the cancellation.
    * Type:     boundary
    */
+  // SCRUM-46-TC18
   it('US46-A10: an inactive Attendee is not notified', async () => {
     tables.users.push({ id: 35, is_active: false });
     tables.registrations.push(
@@ -575,10 +595,11 @@ describe('SCRUM-46 new and already viewed notices', () => {
    *           to mark that same notice.
    * Setup:    One notifications row for user 40, read_at null. The list and mark-read
    *           functions are the existing ones.
-   * Expected: It is unread at first. After user 40 marks it, it has a read time and the
-   *           unread count is 0. User 30 cannot mark it, and does not see it in their list.
+   * Expected: It is unread at first. User 30 cannot mark it, and does not see it in their
+   *           list. After user 40 marks it, it has a read time and the unread count is 0.
    * Type:     normal
    */
+  // SCRUM-46-TC19
   it('US46-R01: a notice starts unread, and only its owner can mark it viewed', async () => {
     tables.notifications.push({
       id: 5,
@@ -595,13 +616,13 @@ describe('SCRUM-46 new and already viewed notices', () => {
     expect(mine[0].read_at).toBeNull();
     expect(await notificationsService.unreadCount(40)).toBe(1);
 
+    // User 30 tries first, while the notice is still unread, so a wrong update would show.
+    expect(await notificationsService.markRead(30, 5)).toBeNull();
+    expect(tables.notifications[0].read_at).toBeNull();
+    expect(await notificationsService.listMine(30)).toEqual([]);
+
     const read = await notificationsService.markRead(40, 5);
     expect(read.read_at).toEqual(expect.any(String));
     expect(await notificationsService.unreadCount(40)).toBe(0);
-
-    await notificationsService.markRead(30, 5);
-    expect(tables.notifications[0].read_at).toEqual(expect.any(String));
-    const others = await notificationsService.listMine(30);
-    expect(others).toEqual([]);
   });
 });

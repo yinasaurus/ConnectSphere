@@ -1,6 +1,7 @@
 /**
  * SCRUM-34: Event Organiser requests a change after submission.
  * SCRUM-35: Assigned Event Coordinator reviews and decides that request.
+ * SCRUM-36: Organiser is notified when that request is approved or rejected.
  *
  *   SCRUM-34 AC1  Organiser can request a change; unassigned Submitted is refused.
  *   SCRUM-34 AC2  Only date/time, expected attendance, venue requirements and equipment
@@ -13,7 +14,9 @@
  *   SCRUM-69 AC3  Reject still leaves the event unchanged.
  *   SCRUM-69 AC4  Approve audit records who, when, and previous/new per field.
  *   SCRUM-69 AC5  Approve flags affected venue/equipment rows for review (SCRUM-41/42).
- *   SCRUM-69 AC6  Organiser is notified on approve and on reject.
+ *   SCRUM-36 AC1  Organiser is notified on approve and on reject. Those tests keep their
+ *                 SCRUM-36 ids. SCRUM-69 AC6 is the same notice, so it is not labeled again.
+ *   A Date-to-ISO audit format check guards AC4. It sits at the bottom.
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
@@ -103,6 +106,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: A PENDING row is written with only those fields; audit is CHANGE_REQUEST_CREATED.
    * Type:     normal
    */
+  // SCRUM-34-TC01
   it('AC1+AC2: organiser can request permitted date, attendance, venue and equipment changes', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -145,6 +149,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 400; nothing is inserted.
    * Type:     negative
    */
+  // SCRUM-34-TC02
   it('AC2: unknown fields are refused', async () => {
     await expect(service.createChangeRequest(organiser, 3, {
       expectedAttendance: 80,
@@ -162,6 +167,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 400; nothing is inserted.
    * Type:     boundary
    */
+  // SCRUM-34-TC03
   it('AC2: at least one permitted field is required', async () => {
     await expect(service.createChangeRequest(organiser, 3, {})).rejects.toMatchObject({
       status: 400,
@@ -176,6 +182,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 409 CHANGE_NOT_ALLOWED; nothing is inserted.
    * Type:     negative
    */
+  // SCRUM-34-TC04, 5, 6, 7
   it.each(['DRAFT', 'CANCELLED', 'REJECTED', 'COMPLETED'])(
     'AC1: %s events cannot receive a change request',
     async (status) => {
@@ -193,6 +200,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 409 NO_COORDINATOR; nothing is inserted.
    * Type:     negative
    */
+  // SCRUM-34-TC08
   it('AC1: unassigned Submitted events cannot receive a change request', async () => {
     event = planningEvent({ status: 'SUBMITTED', coordinator_id: null });
     db.fetchOne.mockImplementation(async () => event);
@@ -207,6 +215,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 409 PENDING_CHANGE_EXISTS.
    * Type:     negative
    */
+  // SCRUM-34-TC09
   it('AC1: a second pending request is refused', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -222,6 +231,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 403; event and table unchanged.
    * Type:     security
    */
+  // SCRUM-34-TC10
   it('AC1: only the owning organiser can create a change request', async () => {
     await expect(service.createChangeRequest(coordinator, 3, { expectedAttendance: 80 }))
       .rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
@@ -235,6 +245,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 400 before insert, so a junk window cannot be stored.
    * Type:     negative
    */
+  // SCRUM-34-TC11
   it('AC2: an invalid date is refused', async () => {
     await expect(service.createChangeRequest(organiser, 3, { startAt: 'not-a-date' }))
       .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
@@ -247,6 +258,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 400; nothing is inserted.
    * Type:     boundary
    */
+  // SCRUM-34-TC12
   it('AC2: attendance below 1 is refused', async () => {
     await expect(service.createChangeRequest(organiser, 3, { expectedAttendance: 0 }))
       .rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
@@ -260,6 +272,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 400 so the pending row cannot hold an impossible window.
    * Type:     negative
    */
+  // SCRUM-34-TC13
   it('AC1: a proposed start after the event end is refused', async () => {
     await expect(service.createChangeRequest(organiser, 3, {
       startAt: '2026-11-10T18:00:00.000Z',
@@ -273,6 +286,7 @@ describe('SCRUM-34 createChangeRequest', () => {
    * Expected: 404, same as getEvent, so the row is not revealed.
    * Type:     security
    */
+  // SCRUM-34-TC14
   it('AC1: a hidden event is 404', async () => {
     const stranger = { id: 99, organisationId: 99, roles: [ROLES.EVENT_ORGANISER] };
     await expect(service.createChangeRequest(stranger, 3, { expectedAttendance: 80 }))
@@ -287,9 +301,10 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Scenario: Assigned coordinator approves a pending request on a Planning event.
    * Setup:    Request proposes new times, attendance, venue and equipment notes.
    * Expected: Those columns are written onto the event; status stays PLANNING; request APPROVED.
-   *           The organiser is notified (SCRUM-69 AC6).
+   *           The organiser is notified (SCRUM-36 AC1).
    * Type:     normal
    */
+  // SCRUM-35-TC01
   it('AC1+AC2: assigned coordinator approve copies proposed fields and leaves status', async () => {
     const pending = pendingRequest();
     db.fetchOne
@@ -328,7 +343,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
       50,
       expect.objectContaining({ eventId: 3 })
     );
-    // SCRUM-69 AC6: decide notifies the organiser (create still does not).
+    // SCRUM-36 AC1: decide notifies the organiser (create still does not).
     expect(audit.notifyUser).toHaveBeenCalledWith(
       1,
       'CHANGE_REQUEST_DECIDED',
@@ -345,6 +360,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Expected: events row is updated via updateById (the change-request path), status stays CONFIRMED.
    * Type:     normal
    */
+  // SCRUM-35-TC02
   it('AC2: approving a Confirmed change request updates fields without using updateEvent', async () => {
     event = planningEvent({ status: 'CONFIRMED' });
     const pending = pendingRequest({
@@ -374,9 +390,10 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * AC:       SCRUM-35 AC2
    * Scenario: Assigned coordinator rejects, optionally with a reason.
    * Expected: Request REJECTED with the reason; events table is not written.
-   *           The organiser is notified (SCRUM-69 AC6).
+   *           The organiser is notified (SCRUM-36 AC1).
    * Type:     normal
    */
+  // SCRUM-35-TC03
   it('AC2: reject leaves the event unchanged and stores an optional reason', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -424,6 +441,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Type:     security
    */
   it.each([
+    // SCRUM-35-TC04, 5, 6
     ['another coordinator', otherCoordinator],
     ['venue staff', venueStaff],
     ['organiser', organiser],
@@ -439,6 +457,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Expected: 409 ALREADY_DECIDED; event not written again.
    * Type:     negative
    */
+  // SCRUM-35-TC07
   it('AC1: an already decided request cannot be decided again', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -455,6 +474,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Expected: 404; the event is not patched.
    * Type:     negative
    */
+  // SCRUM-35-TC08
   it('AC1: a missing change request is 404', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -470,6 +490,7 @@ describe('SCRUM-35 decideChangeRequest', () => {
    * Expected: 404, so a coordinator cannot decide another event's request via this URL.
    * Type:     security
    */
+  // SCRUM-35-TC09
   it('AC1: a change request for another event is 404', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -494,6 +515,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    *           the patch so they are not blanked.
    * Type:     normal
    */
+  // SCRUM-69-TC01
   it('AC1: only the fields included in the request are written onto the event', async () => {
     const pending = pendingRequest({
       start_at: null,
@@ -522,6 +544,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: 400; event and request stay unwritten so the request remains PENDING.
    * Type:     boundary
    */
+  // SCRUM-69-TC02
   it('AC2: attendance of 0 cannot be approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -539,6 +562,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: 400; nothing is written.
    * Type:     error
    */
+  // SCRUM-69-TC03
   it('AC2: negative attendance cannot be approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -555,6 +579,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: 400; nothing is written.
    * Type:     error
    */
+  // SCRUM-69-TC04
   it('AC2: a fractional attendance cannot be approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -571,6 +596,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: 400; junk dates cannot be copied onto the event.
    * Type:     error
    */
+  // SCRUM-69-TC05
   it('AC2: an invalid start date cannot be approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -589,6 +615,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    *           (validateDateRange used to skip NaN and let the patch through).
    * Type:     error
    */
+  // SCRUM-69-TC06
   it('AC2: an invalid end date cannot be approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -606,6 +633,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: 400; request stays PENDING.
    * Type:     error
    */
+  // SCRUM-69-TC07
   it('AC2: a start date/time in the past cannot be approved', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-10-15T12:00:00.000Z'));
@@ -629,6 +657,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: Approve proceeds; start is written.
    * Type:     boundary
    */
+  // SCRUM-69-TC08
   it('AC2: a start equal to now can be approved', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-10-15T12:00:00.000Z'));
@@ -657,6 +686,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: Approve is allowed — AC2 checks requested values, not the current event.
    * Type:     boundary
    */
+  // SCRUM-69-TC09
   it('AC2: an existing past start does not block approve when start was not requested', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-11-20T12:00:00.000Z'));
@@ -687,6 +717,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: 400 from the merged-window check; event not written.
    * Type:     error
    */
+  // SCRUM-69-TC10
   it('AC2: an end before the start cannot be approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -707,6 +738,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: Request REJECTED; events table is not written (invalid values do not apply).
    * Type:     conflict
    */
+  // SCRUM-69-TC11
   it('AC3: reject leaves the event unchanged even when requested values would be invalid', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -733,6 +765,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    *           for each included field.
    * Type:     normal
    */
+  // SCRUM-69-TC12
   it('AC4: approve audit records who, when, and previous and new values per field', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -766,33 +799,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    * Expected: Audit fields array has only expectedAttendance (omitted columns are not listed).
    * Type:     boundary
    */
-  /*
-   * AC:       SCRUM-69 AC4
-   * Scenario: Supabase returns Date objects for timestamps instead of ISO strings.
-   * Setup:    Event and request start/end are Date instances.
-   * Expected: Audit previous/next are ISO strings so the log is JSON-safe.
-   * Type:     boundary
-   */
-  it('AC4: Date values in the request are stored as ISO strings in the audit', async () => {
-    const start = new Date('2026-11-20T09:00:00.000Z');
-    const end = new Date('2026-11-20T17:00:00.000Z');
-    const existingStart = new Date('2026-11-10T09:00:00.000Z');
-    event = planningEvent({ start_at: existingStart, end_at: new Date('2026-11-10T17:00:00.000Z') });
-    db.fetchOne
-      .mockResolvedValueOnce(event)
-      .mockResolvedValueOnce(pendingRequest({ start_at: start, end_at: end }));
-
-    await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
-
-    const approved = audit.writeAudit.mock.calls.find((call) => call[1] === 'CHANGE_REQUEST_APPROVED');
-    const metadata = approved[4];
-    expect(metadata.fields.find((row) => row.field === 'startAt')).toEqual({
-      field: 'startAt',
-      previous: existingStart.toISOString(),
-      next: start.toISOString(),
-    });
-  });
-
+  // SCRUM-69-TC13
   it('AC4: audit lists only the fields included in the request', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -822,6 +829,7 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
    *           true; their status is not in the patch (W4).
    * Type:     normal
    */
+  // SCRUM-69-TC14
   it('AC5: approve flags over-capacity venue booking and equipment for review', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -858,13 +866,17 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
     expect(equipmentPatch.status).toBeUndefined();
   });
 
+});
+
+describe('SCRUM-36 organiser notified on a change decision', () => {
   /*
-   * AC:       SCRUM-69 AC6
+   * AC:       SCRUM-36 AC1. SCRUM-69 AC6 is this same notice.
    * Scenario: Approve a valid request.
    * Expected: One CHANGE_REQUEST_DECIDED notice to the event organiser, after the writes.
    * Type:     normal
    */
-  it('AC6: the organiser is notified when the request is approved', async () => {
+  // SCRUM-36-TC01
+  it('AC1: the organiser is notified when the request is approved', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
       .mockResolvedValueOnce(pendingRequest());
@@ -882,12 +894,13 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-69 AC6
+   * AC:       SCRUM-36 AC1. SCRUM-69 AC6 is this same notice.
    * Scenario: Reject with no reason.
    * Expected: Organiser is still notified; body has no reason line.
    * Type:     normal
    */
-  it('AC6: the organiser is notified when the request is rejected', async () => {
+  // SCRUM-36-TC02
+  it('AC1: the organiser is notified when the request is rejected', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
       .mockResolvedValueOnce(pendingRequest());
@@ -904,12 +917,13 @@ describe('SCRUM-69 decideChangeRequest apply', () => {
   });
 
   /*
-   * AC:       SCRUM-69 AC6
+   * AC:       SCRUM-36 AC1
    * Scenario: Event has no organiser_id.
    * Expected: Decision still saves; notifyUser is called with a falsy user id and no-ops.
    * Type:     boundary
    */
-  it('AC6: a missing organiser still records the decision', async () => {
+  // SCRUM-36-TC03
+  it('AC1: a missing organiser still records the decision', async () => {
     event = planningEvent({ organiser_id: null });
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -936,6 +950,7 @@ describe('SCRUM-34/35 listChangeRequests', () => {
    * Expected: That row is returned (organiser can see what they submitted).
    * Type:     normal
    */
+  // SCRUM-34-TC15
   it('owner can list requests', async () => {
     db.fetchMany.mockResolvedValue([pendingRequest()]);
     const rows = await service.listChangeRequests(organiser, 3);
@@ -950,6 +965,7 @@ describe('SCRUM-34/35 listChangeRequests', () => {
    * Expected: The row is returned so they can decide.
    * Type:     normal
    */
+  // SCRUM-35-TC10
   it('assigned coordinator can list requests', async () => {
     db.fetchMany.mockResolvedValue([pendingRequest()]);
     const rows = await service.listChangeRequests(coordinator, 3);
@@ -964,6 +980,7 @@ describe('SCRUM-34/35 listChangeRequests', () => {
    * Expected: 403; they do not receive the request body.
    * Type:     security
    */
+  // SCRUM-35-TC11
   it('another coordinator cannot list change requests', async () => {
     await expect(service.listChangeRequests(otherCoordinator, 3))
       .rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
@@ -992,6 +1009,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 201 PENDING; a row is inserted.
    * Type:     normal
    */
+  // SCRUM-34-TC16
   it('organiser can POST a change request (201)', async () => {
     asUser(1, ROLES.EVENT_ORGANISER);
     db.fetchOne
@@ -1014,6 +1032,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 403 before insert.
    * Type:     security
    */
+  // SCRUM-34-TC17
   it('coordinator cannot POST a change request (403)', async () => {
     asUser(2, ROLES.EVENT_COORDINATOR);
 
@@ -1032,6 +1051,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 200 APPROVED.
    * Type:     normal
    */
+  // SCRUM-35-TC12
   it('assigned coordinator can approve through the API (200)', async () => {
     asUser(2, ROLES.EVENT_COORDINATOR);
     db.fetchOne
@@ -1054,6 +1074,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 400; events table is not written.
    * Type:     error
    */
+  // SCRUM-69-TC15
   it('assigned coordinator cannot approve a past start through the API (400)', async () => {
     asUser(2, ROLES.EVENT_COORDINATOR);
     db.fetchOne
@@ -1079,6 +1100,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 403; no writes.
    * Type:     security
    */
+  // SCRUM-35-TC13
   it('organiser cannot call the decision endpoint (403)', async () => {
     asUser(1, ROLES.EVENT_ORGANISER);
 
@@ -1097,6 +1119,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 401; nothing is inserted.
    * Type:     security
    */
+  // SCRUM-34-TC18
   it('a request without a session is rejected with 401', async () => {
     const res = await request(app)
       .post('/api/events/3/change-requests')
@@ -1112,6 +1135,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 200 with that row (controller GET path).
    * Type:     normal
    */
+  // SCRUM-35-TC14
   it('assigned coordinator can GET change requests (200)', async () => {
     asUser(2, ROLES.EVENT_COORDINATOR);
     db.fetchOne.mockResolvedValueOnce(event);
@@ -1132,6 +1156,7 @@ describe('SCRUM-34/35 HTTP routes', () => {
    * Expected: 403.
    * Type:     security
    */
+  // SCRUM-35-TC15
   it('another coordinator cannot GET change requests (403)', async () => {
     const otherToken = jwt.sign({ sub: 9 }, env.jwtSecret);
     asUser(9, ROLES.EVENT_COORDINATOR);
@@ -1142,5 +1167,36 @@ describe('SCRUM-34/35 HTTP routes', () => {
       .set('Cookie', `${env.sessionCookieName}=${otherToken}`);
 
     expect(res.status).toBe(403);
+  });
+});
+
+describe('SCRUM-69 audit guard: Date values', () => {
+  /*
+   * AC: SCRUM-69 AC4 (cannot fail this way: a time that arrives as a Date object is not
+   *     saved as a readable previous or new value).
+   * Scenario: The database returns Date objects for the timestamps.
+   * Setup: Event and request start/end are Date instances. The database is mocked.
+   * Expected: The audit stores those values as ISO strings.
+   * Type: boundary
+   */
+  // SCRUM-69-TC17
+  it('Date values in the request are stored as ISO strings in the audit', async () => {
+    const start = new Date('2026-11-20T09:00:00.000Z');
+    const end = new Date('2026-11-20T17:00:00.000Z');
+    const existingStart = new Date('2026-11-10T09:00:00.000Z');
+    event = planningEvent({ start_at: existingStart, end_at: new Date('2026-11-10T17:00:00.000Z') });
+    db.fetchOne
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(pendingRequest({ start_at: start, end_at: end }));
+
+    await service.decideChangeRequest(coordinator, 3, 50, { approve: true });
+
+    const approved = audit.writeAudit.mock.calls.find((call) => call[1] === 'CHANGE_REQUEST_APPROVED');
+    const metadata = approved[4];
+    expect(metadata.fields.find((row) => row.field === 'startAt')).toEqual({
+      field: 'startAt',
+      previous: existingStart.toISOString(),
+      next: start.toISOString(),
+    });
   });
 });

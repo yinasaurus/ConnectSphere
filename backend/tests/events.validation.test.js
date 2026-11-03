@@ -191,7 +191,7 @@ describe('event start/end date range validation', () => {
     * Type:     boundary
     */
     // SCRUM-15-TC02
-    it('allows creating a draft with no dates yet (SCUM-15: only name is required)', async () => {
+    it('allows creating a draft with no dates yet (SCRUM-15: only name is required)', async () => {
       await service.createEvent(organiser, { name: 'Untitled draft' });
       expect(db.insertOne).toHaveBeenCalled();
     });
@@ -302,11 +302,11 @@ describe('event start/end date range validation', () => {
   });
 });
 
-// Regression guard for the actual bug SCUM-14/15 fixed (PR #1): start_at/end_at were
+// Regression guard for the actual bug SCRUM-14/15 fixed (PR #1): start_at/end_at were
 // once passed to insertOne as raw strings, which caused MySQL/Supabase datetime insert
 // errors. toSqlDateTime() converts them to real Date objects first - this was never
 // directly asserted anywhere until now.
-describe('SCUM-14/15 regression: dates are converted to real Date objects before insert', () => {
+describe('SCRUM-14/15 regression: dates are converted to real Date objects before insert', () => {
   const organiser = { id: 1, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] };
 
   beforeEach(() => {
@@ -350,7 +350,7 @@ describe('SCUM-14/15 regression: dates are converted to real Date objects before
   * Type:     boundary
   */
   // SCRUM-14-TC13
-  it('passes null through for start_at/end_at when no date is given (SCUM-15 draft), not an invalid value', async () => {
+  it('passes null through for start_at/end_at when no date is given (SCRUM-15 draft), not an invalid value', async () => {
     await service.createEvent(organiser, { name: 'No dates yet' });
 
     const [, patch] = db.insertOne.mock.calls[0];

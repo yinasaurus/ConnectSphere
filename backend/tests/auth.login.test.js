@@ -84,7 +84,7 @@ describe('POST /api/auth/login (Supabase users table)', () => {
   function login(body) {
     return request(app).post('/api/auth/login').send(body);
   }
-
+  // SCRUM-12-TC01
   it('returns 200 and an httpOnly session cookie for valid credentials', async () => {
     const res = await login({ email: VALID_EMAIL, password: VALID_PASSWORD });
 
@@ -100,7 +100,7 @@ describe('POST /api/auth/login (Supabase users table)', () => {
     expect(cookie).toMatch(/cs_session=/);
     expect(cookie).toMatch(/HttpOnly/i);
   });
-
+  // SCRUM-12-TC02
   it('returns 401 with a generic message for a wrong password', async () => {
     const res = await login({ email: VALID_EMAIL, password: 'not-the-password' });
     expect(res.status).toBe(401);
@@ -108,7 +108,7 @@ describe('POST /api/auth/login (Supabase users table)', () => {
     expect(res.body.message).toBe(GENERIC_AUTH_ERROR);
     expect(res.headers['set-cookie']).toBeUndefined();
   });
-
+  // SCRUM-12-TC03
   it('returns 401 with the same generic message for a non-existent email', async () => {
     const unknown = await login({
       email: 'nobody@example.com',
@@ -125,26 +125,26 @@ describe('POST /api/auth/login (Supabase users table)', () => {
     expect(unknown.body.message).toBe(wrongPassword.body.message);
     expect(unknown.body.error).toBe(wrongPassword.body.error);
   });
-
+  // SCRUM-12-TC04
   it('returns 400 when email is missing', async () => {
     const res = await login({ password: VALID_PASSWORD });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('VALIDATION_ERROR');
   });
-
+  // SCRUM-12-TC05
   it('returns 400 when password is missing', async () => {
     const res = await login({ email: VALID_EMAIL });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('VALIDATION_ERROR');
   });
-
+  // SCRUM-12-TC06
   it('returns 400 for a malformed email format', async () => {
     const res = await login({ email: 'not-an-email', password: VALID_PASSWORD });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('VALIDATION_ERROR');
     expect(res.body.message).toMatch(/valid email/i);
   });
-
+  // SCRUM-12-TC07
   it('never returns or stores the password in plaintext', async () => {
     const res = await login({ email: VALID_EMAIL, password: VALID_PASSWORD });
     const payload = JSON.stringify(res.body);
