@@ -21,33 +21,39 @@ function mount(roles, { loading = false, loggedIn = true, allowedRoles = ['EVENT
   );
 }
 
+// SCRUM-13-TC30
 it.each([['EVENT_ORGANISER'], ['ATTENDEE'], ['TECHNICAL_SUPPORT'], ['UNKNOWN']])('denies role %s', async (role) => {
   mount([role]);
   expect(await screen.findByText('Home destination')).toBeInTheDocument();
   expect(screen.queryByText('Protected content')).not.toBeInTheDocument();
 });
 
+// SCRUM-13-TC31
 it.each([['EVENT_COORDINATOR'], ['VENUE_STAFF']])('allows role %s', (role) => {
   mount([role]);
   expect(screen.getByText('Protected content')).toBeInTheDocument();
 });
 
+// SCRUM-13-TC32
 it('accepts any matching role, including a second role on a hybrid account', () => {
   mount(['EVENT_COORDINATOR', 'VENUE_STAFF'], { allowedRoles: ['VENUE_STAFF'] });
   expect(screen.getByText('Protected content')).toBeInTheDocument();
 });
 
+// SCRUM-13-TC33
 it('redirects logged-out users to login', async () => {
   mount([], { loggedIn: false });
   expect(await screen.findByText('Login destination')).toBeInTheDocument();
 });
 
+// SCRUM-13-TC34
 it('waits for session restoration without rendering protected content', () => {
   mount([], { loading: true, loggedIn: false });
   expect(screen.getByText('Restoring your session…')).toBeInTheDocument();
   expect(screen.queryByText('Protected content')).not.toBeInTheDocument();
 });
 
+// SCRUM-13-TC35
 it('preserves login-only routes without a role restriction', () => {
   mount(['ATTENDEE'], { allowedRoles: [] });
   expect(screen.getByText('Protected content')).toBeInTheDocument();
@@ -61,6 +67,7 @@ describe('SCRUM-54 role-limited screens', () => {
    * Expected: The protected content is shown.
    * Type: normal
    */
+  // SCRUM-54-TC31
   it('lets a Lead open a Lead-only route', () => {
     mount(['EVENT_COORDINATOR_LEAD'], { allowedRoles: ['EVENT_COORDINATOR_LEAD'] });
     expect(screen.getByText('Protected content')).toBeInTheDocument();
@@ -73,6 +80,7 @@ describe('SCRUM-54 role-limited screens', () => {
    * Expected: Redirect to home; the Lead-only page is not rendered.
    * Type: error
    */
+  // SCRUM-54-TC32
   it('blocks a Coordinator who is not a Lead from a Lead-only route', async () => {
     mount(['EVENT_COORDINATOR'], { allowedRoles: ['EVENT_COORDINATOR_LEAD'] });
     expect(await screen.findByText('Home destination')).toBeInTheDocument();
@@ -86,6 +94,7 @@ describe('SCRUM-54 role-limited screens', () => {
    * Expected: The page is shown.
    * Type: normal
    */
+  // SCRUM-54-TC33
   it('lets a Safety Officer open a safety-check route', () => {
     mount(['SAFETY_OFFICER'], { allowedRoles: ['SAFETY_OFFICER'] });
     expect(screen.getByText('Protected content')).toBeInTheDocument();
@@ -98,6 +107,7 @@ describe('SCRUM-54 role-limited screens', () => {
    * Expected: Redirect to home; the safety check is not rendered.
    * Type: error
    */
+  // SCRUM-54-TC34
   it('blocks a Coordinator from a Safety Officer-only route', async () => {
     mount(['EVENT_COORDINATOR'], { allowedRoles: ['SAFETY_OFFICER'] });
     expect(await screen.findByText('Home destination')).toBeInTheDocument();
@@ -111,6 +121,7 @@ describe('SCRUM-54 role-limited screens', () => {
    * Expected: They can use the Lead function because they hold Lead.
    * Type: normal
    */
+  // SCRUM-54-TC35
   it('lets a Coordinator + Lead hybrid open a Lead-only route', () => {
     mount(['EVENT_COORDINATOR', 'EVENT_COORDINATOR_LEAD'], { allowedRoles: ['EVENT_COORDINATOR_LEAD'] });
     expect(screen.getByText('Protected content')).toBeInTheDocument();

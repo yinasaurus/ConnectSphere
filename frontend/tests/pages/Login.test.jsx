@@ -47,6 +47,7 @@ describe('Login page', () => {
     });
   });
 
+  // SCRUM-12-TC08
   it('renders the login form', async () => {
     renderLogin();
     await readyForm();
@@ -55,6 +56,7 @@ describe('Login page', () => {
     expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled();
   });
 
+  // SCRUM-12-TC09
   // SCRUM-92-TC01
   it('shows a validation error when fields are empty', async () => {
     const user = userEvent.setup();
@@ -74,6 +76,7 @@ describe('Login page', () => {
     expect(api).not.toHaveBeenCalledWith('/api/auth/login', expect.anything());
   });
 
+  // SCRUM-12-TC10
   // SCRUM-92-TC02
   it('shows an error message on invalid credentials', async () => {
     const user = userEvent.setup();
@@ -101,6 +104,7 @@ describe('Login page', () => {
     expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument();
   });
 
+  // SCRUM-12-TC11
   it('redirects to the organiser dashboard after a successful login', async () => {
     const user = userEvent.setup();
     api.mockImplementation((path) => {
@@ -128,6 +132,7 @@ describe('Login page', () => {
     expect(await screen.findByText('Organiser dashboard')).toBeInTheDocument();
   });
 
+  // SCRUM-12-TC12
   // SCRUM-92-TC03
   it('shows a loading state while the request is pending', async () => {
     const user = userEvent.setup();

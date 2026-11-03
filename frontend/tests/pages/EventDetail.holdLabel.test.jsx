@@ -51,6 +51,7 @@ beforeEach(() => {
 });
 
 describe('SCRUM-75 a hold is labelled Held', () => {
+  // SCRUM-75-TC49
   it('US75-F17: the event page shows HELD for a hold, without "Tentative" beside it', async () => {
     mockApi('TENTATIVE');
     renderAt('/app/events/3');
@@ -59,12 +60,14 @@ describe('SCRUM-75 a hold is labelled Held', () => {
     expect(screen.queryByText(/tentative/i)).not.toBeInTheDocument();
   });
 
+  // SCRUM-75-TC50
   it('US75-F18: other bookings still show their status text on the event page', async () => {
     mockApi('APPROVED');
     renderAt('/app/events/3');
     expect(await screen.findByText('Approved')).toBeInTheDocument();
   });
 
+  // SCRUM-75-TC51
   it('US75-F19: the venue booking page shows Held for a hold, not Tentative', async () => {
     mockApi('TENTATIVE');
     renderAt('/app/events/3/venue-booking');
@@ -72,6 +75,7 @@ describe('SCRUM-75 a hold is labelled Held', () => {
     expect(screen.queryByText(/tentative/i)).not.toBeInTheDocument();
   });
 
+  // SCRUM-75-TC52
   it('US75-F20: a hold at a venue with no name reads "Venue #8: HELD" for screen readers', async () => {
     mockApi('TENTATIVE', null);
     renderAt('/app/events/3');

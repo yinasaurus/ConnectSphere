@@ -33,6 +33,7 @@ describe('SCRUM-30 Unassigned flag on the events list', () => {
    * Expected: The event name is on the page and it is flagged Unassigned.
    * Type: normal
    */
+  // SCRUM-30-TC06
   it('US30-F01: a submitted event with no Coordinator shows Unassigned', async () => {
     renderEvents([{
       id: 3,
@@ -55,6 +56,7 @@ describe('SCRUM-30 Unassigned flag on the events list', () => {
    * Expected: The event is still listed. The Unassigned flag is not shown.
    * Type: normal
    */
+  // SCRUM-30-TC07
   it('US30-F02: an assigned event stays listed and is not flagged Unassigned', async () => {
     renderEvents([{
       id: 3,
@@ -78,6 +80,7 @@ describe('SCRUM-30 Unassigned flag on the events list', () => {
    *           depend on the status leaving Submitted.
    * Type: boundary
    */
+  // SCRUM-30-TC08
   it('US30-F10: a Submitted event that already has a Coordinator is not flagged Unassigned', async () => {
     renderEvents([{
       id: 3,
@@ -100,6 +103,7 @@ describe('SCRUM-30 Unassigned flag on the events list', () => {
    * Expected: The draft is still listed. It is not flagged Unassigned.
    * Type: boundary
    */
+  // SCRUM-30-TC09
   it('US30-F03: a draft is listed but not flagged Unassigned', async () => {
     renderEvents([{
       id: 4,

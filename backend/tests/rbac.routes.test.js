@@ -19,20 +19,29 @@ const venues = require('../src/services/venues.service');
 const events = require('../src/services/events.service');
 const { createApp } = require('../src/app');
 
-describe('SCUM-13 routes with real JWT authentication and role middleware', () => {
+describe('SCRUM-13 routes with real JWT authentication and role middleware', () => {
   const app = createApp();
   const token = jwt.sign({ sub: 1, roles: [ROLES.VENUE_STAFF] }, env.jwtSecret);
   const cases = [
+    // SCRUM-13-TC01
     ['post', '/api/venues', venues.createVenue, [ROLES.VENUE_STAFF], 201, { name: 'RBAC Hall', capacity: 10 }],
+    // SCRUM-13-TC02
     ['patch', '/api/venues/2', venues.updateVenue, [ROLES.VENUE_STAFF], 200, { capacity: 10 }],
+    // SCRUM-13-TC03
     ['get', '/api/venues/bookings', venues.listBookings, [ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF], 200],
+    // SCRUM-13-TC04
     ['post', '/api/venues/bookings', venues.requestBooking, [ROLES.EVENT_COORDINATOR], 201],
+    // SCRUM-13-TC05
     ['post', '/api/venues/bookings/2/decision', venues.decideBooking, [ROLES.VENUE_STAFF], 200],
+    // SCRUM-13-TC06
     ['post', '/api/events', events.createEvent, [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR], 201],
+    // SCRUM-13-TC07
     ['patch', '/api/events/3', events.updateEvent, [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR], 200],
+    // SCRUM-13-TC08
     ['post', '/api/events/3/submit', events.submitEvent, [ROLES.EVENT_ORGANISER, ROLES.EVENT_COORDINATOR], 200],
     // SCRUM-64-TC09 (data row - drives the shared it.each role-matrix loop below, not a standalone test)
     ['post', '/api/events/3/review', events.openForReview, [ROLES.EVENT_COORDINATOR], 200],
+    // SCRUM-13-TC09
     ['post', '/api/events/3/status', events.changeStatus, [ROLES.EVENT_COORDINATOR], 200],
   ];
 
@@ -56,6 +65,7 @@ describe('SCUM-13 routes with real JWT authentication and role middleware', () =
       expect(handler).toHaveBeenCalledTimes(allowed.includes(role) ? 1 : 0);
     });
 
+    // SCRUM-13-TC10
     it(`${method} ${path} rejects a missing session before querying the database`, async () => {
       expect((await request(app)[method](path).send({})).status).toBe(401);
       expect(db.fetchOne).not.toHaveBeenCalled();
@@ -63,6 +73,7 @@ describe('SCUM-13 routes with real JWT authentication and role middleware', () =
     });
   }
 
+  // SCRUM-13-TC11
   it.each([
     'invalid',
     jwt.sign({ sub: 1 }, env.jwtSecret, { expiresIn: -1 }),
@@ -73,12 +84,14 @@ describe('SCUM-13 routes with real JWT authentication and role middleware', () =
     expect(db.fetchOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-13-TC12
   it('rejects disabled users even with a valid cookie', async () => {
     db.fetchOne.mockResolvedValue({ id: 1, is_active: false });
     const res = await request(app).get('/api/venues/bookings').set('Cookie', `${env.sessionCookieName}=${token}`);
     expect(res.status).toBe(401);
   });
 
+  // SCRUM-13-TC13
   it('allows a hybrid user when the permitted role is second', async () => {
     db.fetchMany.mockResolvedValue([{ role: ROLES.EVENT_COORDINATOR }, { role: ROLES.VENUE_STAFF }]);
     const res = await request(app).post('/api/venues').set('Cookie', `${env.sessionCookieName}=${token}`).send({ name: 'RBAC Hall', capacity: 10 });

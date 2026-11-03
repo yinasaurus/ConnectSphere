@@ -34,6 +34,7 @@ describe('SCRUM-63 RegistrationSettingsCard', () => {
    * Scenario: Registration is not enabled; the Coordinator fills in all three values.
    * Expected: POST to the enable route with ISO dates and the capacity typed.
    */
+  // SCRUM-63-TC45
   it('US63-F01: sends the window and capacity to the enable route', async () => {
     const onRun = jest.fn();
     render(<RegistrationSettingsCard event={confirmedEvent} onRun={onRun} />);
@@ -59,6 +60,7 @@ describe('SCRUM-63 RegistrationSettingsCard', () => {
    * Scenario: The Coordinator presses Enable with empty boxes.
    * Expected: empty values are sent so the API can reject them as missing.
    */
+  // SCRUM-63-TC46
   it('US63-F02: sends empty values when nothing is filled in', async () => {
     const onRun = jest.fn();
     render(<RegistrationSettingsCard event={confirmedEvent} onRun={onRun} />);
@@ -71,12 +73,14 @@ describe('SCRUM-63 RegistrationSettingsCard', () => {
    * AC: SCRUM-63 AC5, AC6
    * Scenario: Registration is enabled; the card shows the settings and only sends what changed.
    */
+  // SCRUM-63-TC47
   it('US63-F03: shows the current settings once registration is enabled', () => {
     render(<RegistrationSettingsCard event={enabledEvent} onRun={jest.fn()} />);
     expect(screen.getByText('50')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Enable registration' })).not.toBeInTheDocument();
   });
 
+  // SCRUM-63-TC48
   it('US63-F04: sends only the new capacity when the close date is left empty', async () => {
     const onRun = jest.fn();
     render(<RegistrationSettingsCard event={enabledEvent} onRun={onRun} />);
@@ -90,6 +94,7 @@ describe('SCRUM-63 RegistrationSettingsCard', () => {
     });
   });
 
+  // SCRUM-63-TC49
   it('US63-F05: sends only the new close date when capacity is left empty', async () => {
     const onRun = jest.fn();
     render(<RegistrationSettingsCard event={enabledEvent} onRun={onRun} />);
@@ -106,6 +111,7 @@ describe('SCRUM-63 RegistrationSettingsCard', () => {
    * Scenario: The Coordinator fills in the form; the event's date, time and expected attendance are shown.
    * Expected: both cards show the event start, end and expected attendance with the rule next to it.
    */
+  // SCRUM-63-TC53
   it.each([
     ['before registration is enabled', confirmedEvent],
     ['after registration is enabled', enabledEvent],
@@ -116,6 +122,7 @@ describe('SCRUM-63 RegistrationSettingsCard', () => {
     expect(screen.getByText('40 (maximum capacity cannot be higher)')).toBeInTheDocument();
   });
 
+  // SCRUM-63-TC54
   it.each([
     ['before registration is enabled', confirmedEvent],
     ['after registration is enabled', enabledEvent],

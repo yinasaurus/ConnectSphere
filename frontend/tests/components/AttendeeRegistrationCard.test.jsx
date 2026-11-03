@@ -35,6 +35,7 @@ describe('SCRUM-51 AttendeeRegistrationCard', () => {
    * Scenario: Registration is open and the Attendee has not registered.
    * Expected: open message, window, places left, "Not registered", and a Register button that works.
    */
+  // SCRUM-51-TC14
   it('US51-F01: shows an open event and lets a new Attendee register', async () => {
     const { onRegister } = renderCard(status());
 
@@ -54,6 +55,7 @@ describe('SCRUM-51 AttendeeRegistrationCard', () => {
    * Scenario: The Attendee is registered.
    * Expected: "Registered on <date>", a Withdraw button, and no Register button.
    */
+  // SCRUM-51-TC15
   it('US51-F02: shows a registered Attendee their status and a Withdraw button', async () => {
     const registeredAt = '2026-11-02T10:00:00.000Z';
     const { onWithdraw } = renderCard(status({ myRegistration: { status: 'REGISTERED', registeredAt, withdrawnAt: null } }));
@@ -69,6 +71,7 @@ describe('SCRUM-51 AttendeeRegistrationCard', () => {
    * Scenario: The Attendee withdrew and registration is still open.
    * Expected: "Withdrawn on <date>" and they can register again.
    */
+  // SCRUM-51-TC16
   it('US51-F03: shows a withdrawn Attendee when they withdrew and lets them register again', () => {
     const withdrawnAt = '2026-11-03T10:00:00.000Z';
     renderCard(status({ myRegistration: { status: 'WITHDRAWN', registeredAt: OPENS, withdrawnAt } }));
@@ -77,6 +80,7 @@ describe('SCRUM-51 AttendeeRegistrationCard', () => {
     expect(screen.getByRole('button', { name: 'Register' })).toBeInTheDocument();
   });
 
+  // SCRUM-51-TC17
   it.each([
     ['ATTENDED', 'Attended'],
     ['NO_SHOW', 'Did not attend'],
@@ -93,6 +97,7 @@ describe('SCRUM-51 AttendeeRegistrationCard', () => {
    * Scenario: Each state where the Attendee cannot register.
    * Expected: the reason is shown and there is no Register button.
    */
+  // SCRUM-51-TC18
   it.each([
     ['NOT_YET_OPEN', `Registration opens on ${formatDateTime(OPENS)}.`],
     ['CLOSED', `Registration closed on ${formatDateTime(CLOSES)}.`],
@@ -104,6 +109,7 @@ describe('SCRUM-51 AttendeeRegistrationCard', () => {
     expect(screen.queryByRole('button', { name: 'Register' })).not.toBeInTheDocument();
   });
 
+  // SCRUM-51-TC19
   it('US51-F06: before registration is enabled it shows no window or places', () => {
     renderCard(status({ state: 'NOT_OPEN', opensAt: null, closesAt: null, capacity: null, placesLeft: null }));
     expect(screen.getByText('Registration is not open for this event.')).toBeInTheDocument();

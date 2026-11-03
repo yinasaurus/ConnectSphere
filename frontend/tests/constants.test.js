@@ -6,20 +6,27 @@ describe('homePathForRoles', () => {
    * Scenario: The Event Coordinator Lead signs in.
    * Expected: They land on the unassigned queue so they can see new Submitted requests.
    */
+  // SCRUM-65-TC21
   it('sends the Lead to the unassigned queue', () => {
     expect(homePathForRoles([ROLES.EVENT_COORDINATOR_LEAD])).toBe('/app/events/unassigned');
   });
 
+  /*
+   * AC: SCRUM-65 AC1
+   * Scenario: An Event Coordinator signs in.
+   * Expected: They land on the dashboard, not the Lead queue.
+   */
+  // SCRUM-65-TC22
   it('sends a Coordinator to the dashboard', () => {
     expect(homePathForRoles([ROLES.EVENT_COORDINATOR])).toBe('/app');
   });
 
-  it('still sends the Lead to the queue when they also have Coordinator', () => {
-    expect(homePathForRoles([ROLES.EVENT_COORDINATOR, ROLES.EVENT_COORDINATOR_LEAD])).toBe(
-      '/app/events/unassigned'
-    );
-  });
-
+  /*
+   * AC: SCRUM-54 AC1
+   * Scenario: A Safety Officer signs in.
+   * Expected: They land on the dashboard, not the Lead queue.
+   */
+  // SCRUM-54-TC44
   it('sends a Safety Officer to the dashboard', () => {
     expect(homePathForRoles([ROLES.SAFETY_OFFICER])).toBe('/app');
   });

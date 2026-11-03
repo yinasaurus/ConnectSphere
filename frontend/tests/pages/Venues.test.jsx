@@ -235,15 +235,39 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC4; SCRUM-59 AC4 (setup and turnaround rows)
-   * Scenario: Venue Staff clear the capacity, setup or teardown (turnaround) box on the
-   *           Update venue form and save.
+   * AC:       SCRUM-7 AC4
+   * Scenario: Venue Staff clear the capacity box on the Update venue form and save.
    * Setup:    Helix Hall selected. A cleared number box is sent as '', and the mocked API
    *           answers with the same messages the real validator gives for a non-number.
    * Expected: The form shows why the value was rejected, without the raw field name, and the
    *           saved venue is unchanged, because an empty value is not a number and is rejected.
    * Type:     error
    */
+  it('shows the rejection when the capacity box is cleared', async () => {
+    const user = userEvent.setup();
+    mockDatabaseApi({ validateUpdate: true });
+    renderVenues();
+    await user.click(await screen.findByRole('button', { name: /Helix Hall/i }));
+
+    const input = within(formCard('Update venue')).getByLabelText('Capacity');
+    await user.clear(input);
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText('Capacity must be a number')).toBeInTheDocument();
+    expect(database.venues[0].name).toBe('Helix Hall');
+  });
+
+  /*
+   * AC:       SCRUM-59 AC4
+   * Scenario: Venue Staff clear the setup or teardown (turnaround) box on the Update venue
+   *           form and save.
+   * Setup:    Helix Hall selected. A cleared number box is sent as '', and the mocked API
+   *           answers with the same message the real validator gives for a non-number.
+   * Expected: The form shows which field is wrong and why, and the saved venue name is unchanged,
+   *           because an empty value is not a number and is rejected rather than saved.
+   * Type:     error
+   */
+  // SCRUM-59-TC15
   it.each([
     ['capacity', 'Capacity', 'Capacity must be a number'],
     ['setup minutes', 'Setup (mins)', 'Setup minutes must be a number.'],
@@ -278,7 +302,7 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC1
+   * AC:       SCRUM-7 AC1
    * Scenario: Venue Staff fill in every detail of a new venue in the Add venue form.
    * Setup:    Logged in as Venue Staff. The form starts with THEATRE ticked; the user ticks
    *           CLASSROOM and BOARDROOM and unticks THEATRE.
@@ -322,7 +346,7 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC4
+   * AC:       SCRUM-7 AC4
    * Scenario: Venue Staff clear the capacity box and try to save a new venue.
    * Setup:    The API rejects the POST with the field error the real validator returns
    *           ("Capacity is required"), as it does for an empty capacity.
@@ -357,7 +381,7 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC2 (editing layouts)
+   * AC:       SCRUM-7 AC2 (editing layouts)
    * Scenario: Venue Staff rename one layout, remove another and add a new one.
    * Setup:    Helix Hall has THEATRE (id 10) and CLASSROOM (id 11).
    * Expected: The PATCH sends the rename and the delete with their ids and the new layout
@@ -392,7 +416,7 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC2
+   * AC:       SCRUM-7 AC2
    * Scenario: Venue Staff deactivate a venue from the Update venue form.
    * Setup:    Helix Hall is active.
    * Expected: Unticking "Venue is active" and saving sends isActive: false, which keeps the
@@ -417,7 +441,7 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC2
+   * AC:       SCRUM-7 AC2
    * Scenario: Venue Staff open a venue whose optional details were never filled in.
    * Setup:    A venue with only id, name and layouts as plain names (no ids, no capacity,
    *           times or text fields), as an older record might be.
@@ -440,7 +464,7 @@ describe('Venues page inputs', () => {
   });
 
   /*
-   * AC:       SCUM-7 AC2
+   * AC:       SCRUM-7 AC2
    * Scenario: Venue Staff open a venue for editing, then cancel.
    * Setup:    Helix Hall selected and its name changed in the form.
    * Expected: The form closes without sending anything, and the saved venue is unchanged.
@@ -470,6 +494,7 @@ describe('Venues page inputs', () => {
    *           the form shows 15 and 0. 0 must not come back as the 30-minute default.
    * Type:     boundary
    */
+  // SCRUM-59-TC12
   it('shows the saved setup and turnaround minutes when the venue is reopened', async () => {
     const user = userEvent.setup();
     renderVenues();
@@ -506,6 +531,7 @@ describe('Venues page inputs', () => {
    *           venue shows the saved 30, not the rejected -5.
    * Type:     error
    */
+  // SCRUM-59-TC13
   it('shows the rejection for a negative setup time and keeps the saved value', async () => {
     const user = userEvent.setup();
     const normal = api.getMockImplementation();
@@ -542,6 +568,7 @@ describe('Venues page inputs', () => {
    *           venues.setupTurnaround.test.js.)
    * Type:     error
    */
+  // SCRUM-59-TC14
   it('does not offer the setup and turnaround fields to a non-Venue-Staff user', async () => {
     const user = userEvent.setup();
     useAuth.mockReturnValue({ hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
@@ -591,19 +618,20 @@ function mockDeferredSearchApi() {
   return pending;
 }
 
-describe('SCUM-24 venue search results', () => {
+describe('SCRUM-24 venue search results', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     useAuth.mockReturnValue({ hasRole: () => false });
   });
 
   /*
-   * AC:       SCUM-24 AC1-AC4
+   * AC:       SCRUM-24 AC1-AC4
    * Scenario: Coordinator runs a search and reads a result card
    * Setup:    Search returns Helix Hall with facilities, accessibility and layouts
    * Expected: The card shows name, location, capacity, facilities, accessibility and layout pills
    * Type:     normal
    */
+  // SCRUM-24-TC01
   it('shows name, location, capacity, facilities, accessibility and layouts for each result', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -620,12 +648,13 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC5
+   * AC:       SCRUM-24 AC5
    * Scenario: Coordinator opens and closes extra details on a result
    * Setup:    Search returns Helix Hall; they click View details then Close
    * Expected: Operating hours and setup/turnaround appear, then disappear
    * Type:     normal
    */
+  // SCRUM-24-TC02
   it('lets the coordinator select a result to view more details, and close it again', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -641,12 +670,13 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 (empty results)
+   * AC:       SCRUM-24 (empty results)
    * Scenario: Search matches nothing
    * Setup:    Search API returns an empty list
    * Expected: "No venues match your selected filters."
    * Type:     boundary
    */
+  // SCRUM-23-TC24
   it('shows a clear message when no venue matches', async () => {
     mockSearchApi({ venues: [] });
     render(<Venues />);
@@ -657,12 +687,13 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC6
+   * AC:       SCRUM-24 AC6
    * Scenario: A second search returns updated catalogue data
    * Setup:    First search capacity 180, second search capacity 200
    * Expected: The page shows 200 and not 180
    * Type:     normal
    */
+  // SCRUM-24-TC03
   it('always renders whatever the latest search response says, not a stale previous one', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -678,12 +709,13 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC5
+   * AC:       SCRUM-24 AC5
    * Scenario: Coordinator had details open and runs a new search
    * Setup:    View details is open, then Search venues is clicked again
    * Expected: The detail panel closes
    * Type:     boundary
    */
+  // SCRUM-24-TC04
   it('clears the selected venue detail panel when a new search is run', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -697,13 +729,14 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC3, AC4
+   * AC:       SCRUM-24 AC3, AC4
    * Scenario: A result has no facilities, accessibility or layouts on file
    * Setup:    Search returns Bare Room with facilities '', accessibility null, layouts []
    *           and no operating hours; the coordinator also opens its details
    * Expected: Card and detail panel both say "None listed"; no layout pills or hours line
    * Type:     boundary
    */
+  // SCRUM-24-TC05
   it('shows "None listed" and no layout pills for a venue with no facilities, accessibility or layouts', async () => {
     const bareVenue = {
       id: 2,
@@ -731,12 +764,13 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC5
+   * AC:       SCRUM-24 AC5
    * Scenario: Coordinator has details open and clicks Clear
    * Setup:    Search returns Helix Hall; View details is open
    * Expected: The detail panel and the results are both gone
    * Type:     normal
    */
+  // SCRUM-24-TC06
   it('closes the detail panel and the results when Clear is clicked', async () => {
     mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
     render(<Venues />);
@@ -751,12 +785,13 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC5
+   * AC:       SCRUM-24 AC5
    * Scenario: Coordinator compares two results by opening each one's details
    * Setup:    Search returns Helix Hall and Orchid Room with different hours and times
    * Expected: The panel shows the venue that was clicked, and switches when another is clicked
    * Type:     normal
    */
+  // SCRUM-24-TC07
   it('shows the details of whichever result is selected, and switches between results', async () => {
     const otherVenue = {
       ...SEARCH_RESULT_VENUE,
@@ -783,12 +818,13 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC6
+   * AC:       SCRUM-24 AC6
    * Scenario: Coordinator clicks Clear while a search is still loading
    * Setup:    The search response is held back until after Clear
    * Expected: The late response is ignored, so no results reappear; Search is usable again
    * Type:     error
    */
+  // SCRUM-24-TC08
   it('ignores a search response that arrives after Clear was pressed', async () => {
     const pending = mockDeferredSearchApi();
     render(<Venues />);
@@ -803,12 +839,13 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC6
+   * AC:       SCRUM-24 AC6
    * Scenario: Two searches overlap and the older one finishes last
    * Setup:    The newer search returns capacity 200 first, then the older returns 180
    * Expected: The page keeps showing 200, not the stale 180
    * Type:     error
    */
+  // SCRUM-24-TC09
   it('keeps the newer results when an older search finishes last', async () => {
     const pending = mockDeferredSearchApi();
     const { container } = render(<Venues />);
@@ -827,12 +864,13 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC6
+   * AC:       SCRUM-24 AC6
    * Scenario: The latest search fails
    * Setup:    The search request is rejected with "Search failed"
    * Expected: The error is still shown and Search is usable again
    * Type:     error
    */
+  // SCRUM-24-TC10
   it('still shows the error when the latest search fails', async () => {
     const pending = mockDeferredSearchApi();
     render(<Venues />);
@@ -846,12 +884,13 @@ describe('SCUM-24 venue search results', () => {
   });
 
   /*
-   * AC:       SCUM-24 AC6
+   * AC:       SCRUM-24 AC6
    * Scenario: A search fails after the coordinator already clicked Clear
    * Setup:    The search request is rejected only after Clear
    * Expected: No error message appears for the abandoned search
    * Type:     error
    */
+  // SCRUM-24-TC11
   it('ignores a failed search that finishes after Clear was pressed', async () => {
     const pending = mockDeferredSearchApi();
     render(<Venues />);
@@ -862,6 +901,83 @@ describe('SCUM-24 venue search results', () => {
 
     await act(async () => pending[0].reject(new Error('Search failed')));
     expect(screen.queryByText('Search failed')).not.toBeInTheDocument();
+  });
+});
+
+describe('SCRUM-23 venue search form', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useAuth.mockReturnValue({ hasRole: () => false });
+  });
+
+  /*
+   * AC:       SCRUM-23 AC1-AC7
+   * Scenario: Coordinator fills in every search filter
+   * Expected: Each filter is sent to the search API, the dates as ISO times
+   * Type:     normal
+   */
+  // SCRUM-23-TC22
+  it('sends every filled-in filter to the search API', async () => {
+    mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
+    const { container } = render(<Venues />);
+    await screen.findByRole('button', { name: 'Search venues' });
+
+    const [start, end] = container.querySelectorAll('input[type="datetime-local"]');
+    fireEvent.change(start, { target: { value: '2026-11-20T10:00' } });
+    fireEvent.change(end, { target: { value: '2026-11-20T12:00' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. 50'), { target: { value: '50' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Level 2'), { target: { value: 'Level 2' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Wheelchair access'), { target: { value: 'Wheelchair access' } });
+    fireEvent.change(screen.getByDisplayValue('Any layout'), { target: { value: 'THEATRE' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Projector, Audio'), { target: { value: 'Projector' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Search venues' }));
+
+    expect(await screen.findByText('Helix Hall')).toBeInTheDocument();
+    const searchCall = api.mock.calls.find(([path]) => path.startsWith('/api/venues/search'));
+    const params = new URLSearchParams(searchCall[0].split('?')[1]);
+    expect(Object.fromEntries(params)).toEqual({
+      startAt: new Date('2026-11-20T10:00').toISOString(),
+      endAt: new Date('2026-11-20T12:00').toISOString(),
+      capacityMin: '50',
+      location: 'Level 2',
+      accessibility: 'Wheelchair access',
+      layout: 'THEATRE',
+      facilities: 'Projector',
+    });
+  });
+
+  /*
+   * AC:       SCRUM-23 AC1
+   * Scenario: Coordinator gives a start time but no end time
+   * Expected: A message asks for both, and no search is sent
+   * Type:     error
+   */
+  // SCRUM-23-TC23
+  it('asks for both a start and an end when only one is given', async () => {
+    mockSearchApi({ venues: [SEARCH_RESULT_VENUE] });
+    const { container } = render(<Venues />);
+    await screen.findByRole('button', { name: 'Search venues' });
+
+    const [start] = container.querySelectorAll('input[type="datetime-local"]');
+    fireEvent.change(start, { target: { value: '2026-11-20T10:00' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Search venues' }));
+
+    expect(screen.getByText('Pick both a start and an end date/time, or neither.')).toBeInTheDocument();
+    expect(api.mock.calls.some(([path]) => path.startsWith('/api/venues/search'))).toBe(false);
+  });
+
+  /*
+   * AC:       SCRUM-23 (no-results message)
+   * Scenario: The search reply has no venues list at all
+   * Expected: The page treats it as no matches
+   * Type:     boundary
+   */
+  // SCRUM-23-TC25
+  it('treats a search reply with no venues list as no matches', async () => {
+    mockSearchApi({});
+    render(<Venues />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Search venues' }));
+    expect(await screen.findByText('No venues match your selected filters.')).toBeInTheDocument();
   });
 });
 
@@ -1134,6 +1250,7 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
    *           Approving sends approve true for 201 only. The pending booking is unchanged.
    * Type:     normal
    */
+  // SCRUM-58-TC14
   it('US58-F03 (AC6): an approved booking that needs review can be approved from the Venues list', async () => {
     database.bookings.push({
       id: 201,
@@ -1195,6 +1312,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
     api.mockReset();
   });
 
+  // SCRUM-75-TC43
   it('US75-F07: Venue Staff see the Place a hold card', async () => {
     useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
     mockPage([]);
@@ -1203,6 +1321,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
     expect(await screen.findByRole('heading', { name: 'Place a hold' })).toBeInTheDocument();
   });
 
+  // SCRUM-75-TC44
   it('US75-F08: Coordinators do not see the Place a hold card', async () => {
     useAuth.mockReturnValue({ hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
     mockPage([]);
@@ -1216,6 +1335,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
     expect(screen.queryByRole('heading', { name: 'Place a hold' })).not.toBeInTheDocument();
   });
 
+  // SCRUM-75-TC45
   it('US75-F09: a hold is shown as HELD with its expiry, not as approved', async () => {
     useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
     mockPage([held]);
@@ -1231,6 +1351,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
 });
 
 describe('SCRUM-76 expired holds on the Venues page', () => {
+  // SCRUM-76-TC27
   it('US76-F01: an expired hold shows as EXPIRED with when it expired', async () => {
     useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
     api.mockReset();

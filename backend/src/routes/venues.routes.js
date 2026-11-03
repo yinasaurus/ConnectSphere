@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { ROLES } = require('../constants/roles');
+const { ROLES, INTERNAL_ROLES } = require('../constants/roles');
 const controller = require('../controllers/venues.controller');
 const { validateBody } = require('../middleware/validate');
 const { createVenueSchema, updateVenueSchema } = require('../validators/venues.validators');
@@ -42,10 +42,18 @@ router.post('/holds', requireRole(ROLES.VENUE_STAFF), controller.placeHold);
  */
 router.post('/bookings/:id/cancel', requireRole(ROLES.EVENT_COORDINATOR), controller.cancelBooking);
 
+/*
+ * Purpose: restrict booking rescheduling to authenticated Event Coordinators before controller execution.
+ * AC: SCRUM-62 AC7 — users without the Coordinator role are rejected before booking data is accessed.
+ * Inputs: authenticated request and booking id. Output: delegates eligible requests to the controller.
+ * Failure: requireAuth or requireRole returns 401/403 without invoking the controller.
+ */
+router.patch('/bookings/:id', requireRole(ROLES.EVENT_COORDINATOR), controller.changeBooking);
+
 // SCRUM-66 AC6: internal users only; Event Organisers and Attendees get 403.
 router.get(
   '/:id/availability',
-  requireRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT),
+  requireRole(...INTERNAL_ROLES),
   controller.availability
 );
 // SCRUM-67 AC5: coordinators, venue staff and the coordinator lead only.

@@ -26,6 +26,7 @@ function renderPanel(onDecide = jest.fn().mockResolvedValue()) {
 
 describe('SCRUM-17 EventDecisionPanel', () => {
   // AC1 · Happy path: both decision buttons are visible straight away.
+  // SCRUM-17-TC40
   it('US17-F01: shows explicit Approve and Reject buttons', () => {
     renderPanel();
     expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
@@ -33,6 +34,7 @@ describe('SCRUM-17 EventDecisionPanel', () => {
   });
 
   // AC3 · Happy path: Approve opens the optional comment, which is trimmed before it is sent.
+  // SCRUM-17-TC41
   it('US17-F02: approving sends APPROVE with the trimmed optional comment', async () => {
     const { onDecide, user } = renderPanel();
     await user.click(screen.getByRole('button', { name: 'Approve' }));
@@ -42,6 +44,7 @@ describe('SCRUM-17 EventDecisionPanel', () => {
   });
 
   // AC3 · Edge case: approval works with no comment (the comment is optional).
+  // SCRUM-17-TC42
   it('US17-F03: approving without a comment is allowed', async () => {
     const { onDecide, user } = renderPanel();
     await user.click(screen.getByRole('button', { name: 'Approve' }));
@@ -51,6 +54,7 @@ describe('SCRUM-17 EventDecisionPanel', () => {
 
   // AC2 · Flow: Reject does not reject immediately. It opens the reason box first,
   // so a coordinator can't reject by accident without giving a reason.
+  // SCRUM-17-TC43
   it('US17-F04: clicking Reject asks for a reason before anything is sent', async () => {
     const { onDecide, user } = renderPanel();
     await user.click(screen.getByRole('button', { name: 'Reject' }));
@@ -63,7 +67,9 @@ describe('SCRUM-17 EventDecisionPanel', () => {
   //   - spaces around it prove the count ignores leading/trailing whitespace
   // The inline error must show and nothing is sent.
   it.each([
+    // SCRUM-17-TC44
     ['"Too short" (9 characters, boundary - 1)', 'Too short'],
+    // SCRUM-17-TC45
     ['spaces around a short reason', '     Too short     '],
   ])('US17-F05: a rejection reason of %s is blocked with an inline error', async (_label, text) => {
     const { onDecide, user } = renderPanel();
@@ -75,6 +81,7 @@ describe('SCRUM-17 EventDecisionPanel', () => {
   });
 
   // AC2 · Negative: confirming with an empty box is blocked the same way.
+  // SCRUM-17-TC46
   it('US17-F06: an empty rejection reason is blocked', async () => {
     const { onDecide, user } = renderPanel();
     await user.click(screen.getByRole('button', { name: 'Reject' }));
@@ -84,6 +91,7 @@ describe('SCRUM-17 EventDecisionPanel', () => {
   });
 
   // AC2 · Boundary (= minimum): "Incomplete" is exactly 10 characters and is sent.
+  // SCRUM-17-TC47
   it('US17-F07: a rejection reason of exactly 10 characters is sent (boundary)', async () => {
     const { onDecide, user } = renderPanel();
     await user.click(screen.getByRole('button', { name: 'Reject' }));
@@ -94,6 +102,7 @@ describe('SCRUM-17 EventDecisionPanel', () => {
 
   // AC2 · Usability: a live counter tells the coordinator how close they are to the
   // minimum ("Missing" is 7 characters).
+  // SCRUM-17-TC48
   it('US17-F08: shows a live character counter for the reason', async () => {
     const { user } = renderPanel();
     await user.click(screen.getByRole('button', { name: 'Reject' }));
@@ -102,6 +111,7 @@ describe('SCRUM-17 EventDecisionPanel', () => {
   });
 
   // AC2 · Usability: once the coordinator starts fixing the reason, the error goes away.
+  // SCRUM-17-TC49
   it('US17-F09: typing after an error clears the inline error', async () => {
     const { user } = renderPanel();
     await user.click(screen.getByRole('button', { name: 'Reject' }));
@@ -113,6 +123,7 @@ describe('SCRUM-17 EventDecisionPanel', () => {
 
   // AC1 · Flow: Cancel backs out of rejecting, shows Approve / Reject again, and
   // doesn't keep a half-written reason for next time.
+  // SCRUM-17-TC50
   it('US17-F10: Cancel returns to the Approve / Reject choice and discards the reason', async () => {
     const { user } = renderPanel();
     await user.click(screen.getByRole('button', { name: 'Reject' }));
@@ -125,6 +136,7 @@ describe('SCRUM-17 EventDecisionPanel', () => {
 
   // Edge case: while the request is in flight the buttons are disabled, so a double
   // click can't send two decisions. onDecide is held open until `finish()` is called.
+  // SCRUM-17-TC51
   it('US17-F11: buttons are disabled while the decision is being saved', async () => {
     let finish;
     const onDecide = jest.fn(() => new Promise((resolve) => { finish = resolve; }));

@@ -88,6 +88,7 @@ describe('SCRUM-52 Register button (event page)', () => {
    * Scenario: An Attendee presses Register on a Confirmed event with registration open.
    * Expected: the page posts to the register route and shows how many places are left.
    */
+  // SCRUM-52-TC21
   it('US52-F01: registering shows the places left', async () => {
     const calls = [];
     stubApi(eventWith(), () => Promise.resolve({ registration: { id: 99 }, placesLeft: 39 }), calls);
@@ -102,6 +103,7 @@ describe('SCRUM-52 Register button (event page)', () => {
     }));
   });
 
+  // SCRUM-52-TC22
   it('US52-F02: the message says "place" when one is left', async () => {
     stubApi(eventWith(), () => Promise.resolve({ registration: { id: 99 }, placesLeft: 1 }));
     renderEvent();
@@ -110,6 +112,7 @@ describe('SCRUM-52 Register button (event page)', () => {
     expect(await screen.findByText('Registered. 1 place left.')).toBeInTheDocument();
   });
 
+  // SCRUM-52-TC25
   it('US52-F05: taking the last place says "0 places left"', async () => {
     stubApi(eventWith(), () => Promise.resolve({ registration: { id: 99 }, placesLeft: 0 }));
     renderEvent();
@@ -123,6 +126,7 @@ describe('SCRUM-52 Register button (event page)', () => {
    * Scenario: The API refuses because the event is full.
    * Expected: the server's message is shown.
    */
+  // SCRUM-52-TC23
   it('US52-F03: a refused registration shows the reason', async () => {
     const full = Object.assign(new Error('This event is full'), { status: 409, code: 'EVENT_FULL' });
     stubApi(eventWith(), () => Promise.reject(full));
@@ -137,6 +141,7 @@ describe('SCRUM-52 Register button (event page)', () => {
    * Scenario: The Attendee double-clicks Register while the first request is still running.
    * Expected: the button is disabled and only one registration request is sent.
    */
+  // SCRUM-52-TC26
   it('US52-F06: a double click sends only one registration', async () => {
     const calls = [];
     let finish;
@@ -158,6 +163,7 @@ describe('SCRUM-52 Register button (event page)', () => {
    * Scenario: The event is Confirmed but registration has not been enabled.
    * Expected: no Register button, and a note that registration is not open.
    */
+  // SCRUM-52-TC24
   it('US52-F04: there is no Register button until registration is enabled', async () => {
     stubApi(
       eventWith({ registrationOpen: false }),
@@ -176,6 +182,7 @@ describe('SCRUM-52 Register button (event page)', () => {
    * Scenario: An Attendee opens the event page.
    * Expected: the page asks for the registration status and shows the card with places left.
    */
+  // SCRUM-51-TC20
   it('US51-F08: the event page loads and shows the Attendee\'s registration status', async () => {
     const calls = [];
     stubApi(eventWith(), () => Promise.resolve({}), calls);
@@ -192,6 +199,7 @@ describe('SCRUM-52 Register button (event page)', () => {
    * Expected: after each action the page reloads the status, so the card shows the new status
    *   ("Registered on ..." then "Withdrawn on ...") without a manual refresh.
    */
+  // SCRUM-51-TC21
   it('US51-F11: the card shows the new status after registering and after withdrawing', async () => {
     const calls = [];
     const registeredAt = '2026-11-05T09:00:00.000Z';
@@ -231,6 +239,7 @@ describe('SCRUM-52 Register button (event page)', () => {
    * Scenario: An Organiser (not an Attendee) opens the same event.
    * Expected: no Registration card and no request for the Attendee's registration status.
    */
+  // SCRUM-51-TC22
   it('US51-F12: a user without the Attendee role does not get the registration card', async () => {
     const calls = [];
     mockAuth({ id: 1, fullName: 'Olivia', roles: ['EVENT_ORGANISER'] });

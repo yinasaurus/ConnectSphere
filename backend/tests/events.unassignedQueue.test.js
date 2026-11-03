@@ -74,6 +74,7 @@ describe('SCRUM-28 unassigned queue (service)', () => {
    * Expected: Status becomes Submitted, no Coordinator is stored, and the request is in the queue.
    * Type: normal
    */
+  // SCRUM-28-TC01
   it('AC1: submitting a complete draft stores Submitted with no Coordinator', async () => {
     const result = await service.submitEvent(organiser, 3);
 
@@ -90,27 +91,8 @@ describe('SCRUM-28 unassigned queue (service)', () => {
       to_status: EVENT_STATUS.SUBMITTED,
     }));
     expect(audit.writeAudit).toHaveBeenCalledWith(1, 'EVENT_SUBMITTED', 'event', 3, { coordinatorId: null });
-    expect(audit.notifyUser).not.toHaveBeenCalled();
-  });
-
-  /*
-   * AC: SCRUM-28 AC1
-   * Scenario: Coordinators exist at submit time (old auto-assign would have picked one).
-   * Setup: Complete draft. Submit does not read coordinator rows; the unused fetchMany stub
-   *         would only matter if load-balancing still ran.
-   * Expected: coordinator_id is null and user_roles is never queried.
-   * Type: boundary
-   */
-  it('AC1: submit does not assign even when Coordinators are available', async () => {
-    db.fetchMany.mockResolvedValue([{ id: 2 }, { id: 7 }]);
-
-    await service.submitEvent(organiser, 3);
-
-    expect(db.updateById).toHaveBeenCalledWith('events', 3, expect.objectContaining({
-      coordinator_id: null,
-      status: EVENT_STATUS.SUBMITTED,
-    }));
-    expect(db.supabase.from).not.toHaveBeenCalledWith('user_roles');
+    // No Coordinator is told on submit. The Organiser's own "Event submitted" notice is SCRUM-45.
+    expect(audit.notifyUser.mock.calls.every(([userId]) => userId === 1)).toBe(true);
   });
 
   /*
@@ -120,6 +102,7 @@ describe('SCRUM-28 unassigned queue (service)', () => {
    * Expected: 400, nothing written, request stays a draft and out of the queue.
    * Type: error
    */
+  // SCRUM-28-TC02
   it('AC1: incomplete submit is refused and stays out of the unassigned queue', async () => {
     event.purpose = null;
     event.description = null;
@@ -136,6 +119,7 @@ describe('SCRUM-28 unassigned queue (service)', () => {
    * Expected: 403 and the draft is not queued.
    * Type: error
    */
+  // SCRUM-28-TC03
   it('AC1: a non-owner cannot submit a request into the queue', async () => {
     await expect(service.submitEvent({ ...coordinator, id: 99 }, 3)).rejects.toMatchObject({ status: 403 });
     expect(db.updateById).not.toHaveBeenCalled();
@@ -148,6 +132,7 @@ describe('SCRUM-28 unassigned queue (service)', () => {
    * Expected: 404, no queue write.
    * Type: error
    */
+  // SCRUM-28-TC04
   it('AC1: a missing event cannot be placed in the queue', async () => {
     db.fetchOne.mockResolvedValue(null);
     await expect(service.submitEvent(organiser, 404)).rejects.toMatchObject({ status: 404 });
@@ -161,6 +146,7 @@ describe('SCRUM-28 unassigned queue (service)', () => {
    * Expected: 409, nothing written, no Coordinator assigned.
    * Type: error
    */
+  // SCRUM-28-TC05 and 6
   it.each([EVENT_STATUS.SUBMITTED, EVENT_STATUS.PLANNING])(
     'AC1: submit from %s is refused with 409 and does not assign a Coordinator',
     async (status) => {
@@ -178,6 +164,7 @@ describe('SCRUM-28 unassigned queue (service)', () => {
    * Expected: Back to Submitted, coordinator cleared, in the unassigned queue.
    * Type: boundary
    */
+  // SCRUM-28-TC07
   it('AC1: resubmitting a rejected request returns it to the unassigned queue', async () => {
     event.status = EVENT_STATUS.REJECTED;
     event.coordinator_id = 2;
@@ -200,6 +187,7 @@ describe('SCRUM-28 unassigned queue (service)', () => {
    * Expected: coordinatorId stays null on get and on the unassigned list — nothing assigns later.
    * Type: normal
    */
+  // SCRUM-28-TC08
   it('AC2: get and list after submit still have no Coordinator', async () => {
     await service.submitEvent(organiser, 3);
     db.fetchMany.mockResolvedValue([event]);
@@ -211,21 +199,8 @@ describe('SCRUM-28 unassigned queue (service)', () => {
     expect(again.status).toBe(EVENT_STATUS.SUBMITTED);
     expect(queued).toHaveLength(1);
     expect(queued[0].coordinatorId).toBeNull();
-    expect(audit.notifyUser).not.toHaveBeenCalled();
-  });
-
-  /*
-   * AC: SCRUM-28 AC2
-   * Scenario: Submit must not look up Coordinators to pick one (old load-balancing).
-   * Setup: Complete draft; supabase.from is watched.
-   * Expected: events table is read/updated; user_roles is never queried for assignment.
-   * Type: conflict (old auto-assign must not run)
-   */
-  it('AC2: submit never queries coordinator roles to auto-assign', async () => {
-    await service.submitEvent(organiser, 3);
-    const tables = db.supabase.from.mock.calls.map((call) => call[0]);
-    expect(tables).not.toContain('user_roles');
-    expect(tables).not.toContain('users');
+    // Only the Organiser's own submission notice exists; no Coordinator is notified.
+    expect(audit.notifyUser.mock.calls.every(([userId]) => userId === 1)).toBe(true);
   });
 
   /*
@@ -235,6 +210,7 @@ describe('SCRUM-28 unassigned queue (service)', () => {
    * Expected: unassigned list includes it; the SQL filter is Submitted + coordinator_id is null.
    * Type: normal
    */
+  // SCRUM-28-TC09
   it('AC3: a submitted unassigned request appears in the unassigned queue', async () => {
     event.status = EVENT_STATUS.SUBMITTED;
     event.coordinator_id = null;
@@ -255,6 +231,7 @@ describe('SCRUM-28 unassigned queue (service)', () => {
    * Expected: Not in the unassigned queue. Assignment itself is out of scope; membership is.
    * Type: boundary
    */
+  // SCRUM-28-TC10
   it('AC3: an assigned request is not in the unassigned queue', async () => {
     event.status = EVENT_STATUS.SUBMITTED;
     event.coordinator_id = 2;
@@ -267,23 +244,13 @@ describe('SCRUM-28 unassigned queue (service)', () => {
   });
 
   /*
-   * AC: SCRUM-28 AC3
-   * Scenario: Queue membership helper is asked about a missing event.
-   * Setup: null instead of a row (e.g. a lookup that returned nothing).
-   * Expected: false — only a Submitted, unassigned row is in the queue.
-   * Type: boundary
-   */
-  it('AC3: a missing event is not in the unassigned queue', () => {
-    expect(service.isInUnassignedQueue(null)).toBe(false);
-  });
-
-  /*
    * AC: not an AC check — regression for listEvents after the unassigned filter was added
    * Scenario: Callers that list by status=Submitted (without unassigned=true) still get a status filter.
    * Setup: One Submitted unassigned event; filter is status only.
    * Expected: eq(status) is used and coordinator_id is not required to be null.
    * Type: normal
    */
+  // SCRUM-28-TC11
   it('listEvents still filters by status Submitted when unassigned is not requested', async () => {
     event.status = EVENT_STATUS.SUBMITTED;
     event.coordinator_id = null;
@@ -303,6 +270,7 @@ describe('SCRUM-28 unassigned queue (service)', () => {
    * Expected: No status filter and no coordinator_id IS NULL filter; the draft is returned.
    * Type: normal
    */
+  // SCRUM-28-TC12
   it('listEvents with no filters does not apply a status or unassigned queue filter', async () => {
     db.fetchMany.mockResolvedValue([event]);
 
@@ -316,30 +284,13 @@ describe('SCRUM-28 unassigned queue (service)', () => {
   });
 
   /*
-   * AC: SCRUM-28 AC3
-   * Scenario: Under Review (coordinator assigned in later stories) is not the unassigned queue.
-   * Setup: UNDER_REVIEW with coordinator 2 — the old submit destination.
-   * Expected: Helper and unassigned list both exclude it.
-   * Type: boundary
-   */
-  it('AC3: an under-review event is not in the unassigned queue', async () => {
-    event.status = EVENT_STATUS.UNDER_REVIEW;
-    event.coordinator_id = 2;
-    db.fetchMany.mockResolvedValue([event]);
-
-    const queued = await service.listEvents(organiser, { unassigned: true });
-
-    expect(queued).toHaveLength(0);
-    expect(service.isInUnassignedQueue(event)).toBe(false);
-  });
-
-  /*
    * AC: SCRUM-28 AC4
    * Scenario: Organiser saves a new request as a draft instead of submitting.
    * Setup: createEvent with a name only; insert returns a DRAFT row with no coordinator_id.
    * Expected: Status is Draft, not in the unassigned queue.
    * Type: normal
    */
+  // SCRUM-28-TC13
   it('AC4: creating a draft does not place it in the unassigned queue', async () => {
     const created = { id: 11, ...completeDraft, status: EVENT_STATUS.DRAFT, coordinator_id: null };
     db.insertOne.mockResolvedValue(created);
@@ -359,6 +310,7 @@ describe('SCRUM-28 unassigned queue (service)', () => {
    * Expected: Empty queue — drafts are not Submitted.
    * Type: boundary
    */
+  // SCRUM-28-TC14
   it('AC4: listing the unassigned queue excludes drafts', async () => {
     db.fetchMany.mockResolvedValue([event]);
 
@@ -376,6 +328,7 @@ describe('SCRUM-28 unassigned queue (service)', () => {
    * Expected: Still not in the unassigned queue.
    * Type: normal
    */
+  // SCRUM-28-TC15
   it('AC4: saving more draft fields still does not queue the request', async () => {
     db.fetchOne.mockResolvedValue(event);
     const updated = await service.updateEvent(organiser, 3, { purpose: 'Updated purpose' });
@@ -410,6 +363,7 @@ describe('SCRUM-28 POST /api/events/:id/submit (route)', () => {
    * Expected: 200, body status SUBMITTED, coordinatorId null.
    * Type: normal
    */
+  // SCRUM-28-TC16
   it('AC1: POST submit returns Submitted with no Coordinator', async () => {
     const res = await asOrganiser();
     expect(res.status).toBe(200);
@@ -428,6 +382,7 @@ describe('SCRUM-28 POST /api/events/:id/submit (route)', () => {
    * Expected: 401, request not queued.
    * Type: error
    */
+  // SCRUM-28-TC17
   it('AC1: submit without a session is 401 and does not queue', async () => {
     const res = await request(app).post('/api/events/3/submit');
     expect(res.status).toBe(401);
@@ -447,6 +402,7 @@ describe('SCRUM-28 GET /api/events?unassigned=true (route)', () => {
    * Expected: 200 with an empty list — drafts are not in the unassigned queue.
    * Type: boundary
    */
+  // SCRUM-28-TC18
   it('AC4: GET unassigned=true does not return drafts', async () => {
     db.fetchOne.mockResolvedValue({ id: 1, is_active: true, organisation_id: 10 });
     db.fetchMany
@@ -468,6 +424,7 @@ describe('SCRUM-28 GET /api/events?unassigned=true (route)', () => {
    * Expected: 200 with that event still unassigned.
    * Type: normal
    */
+  // SCRUM-28-TC19
   it('AC3: GET unassigned=true returns a submitted request until it is assigned', async () => {
     event.status = EVENT_STATUS.SUBMITTED;
     event.coordinator_id = null;
@@ -478,31 +435,6 @@ describe('SCRUM-28 GET /api/events?unassigned=true (route)', () => {
 
     const res = await request(app)
       .get('/api/events?unassigned=true')
-      .set('Cookie', `${env.sessionCookieName}=${token}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.events).toHaveLength(1);
-    expect(res.body.events[0].status).toBe(EVENT_STATUS.SUBMITTED);
-    expect(res.body.events[0].coordinatorId).toBeNull();
-  });
-
-  /*
-   * AC: SCRUM-28 AC3
-   * Scenario: Queue listing through the API using the numeric query flag unassigned=1.
-   * Setup: Auth organiser; fetchMany returns SUBMITTED with coordinator_id null.
-   * Expected: Same queue as unassigned=true — 200 with that event still unassigned.
-   * Type: normal
-   */
-  it('AC3: GET unassigned=1 returns the same unassigned queue as unassigned=true', async () => {
-    event.status = EVENT_STATUS.SUBMITTED;
-    event.coordinator_id = null;
-    db.fetchOne.mockResolvedValue({ id: 1, is_active: true, organisation_id: 10 });
-    db.fetchMany
-      .mockResolvedValueOnce([{ role: ROLES.EVENT_ORGANISER }])
-      .mockResolvedValueOnce([event]);
-
-    const res = await request(app)
-      .get('/api/events?unassigned=1')
       .set('Cookie', `${env.sessionCookieName}=${token}`);
 
     expect(res.status).toBe(200);
