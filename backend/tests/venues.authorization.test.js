@@ -28,7 +28,7 @@ jest.mock('../src/services/venues.service', () => ({
 const venuesService = require('../src/services/venues.service');
 const { createApp } = require('../src/app');
 
-describe('SCUM-13 venue booking authorisation', () => {
+describe('SCRUM-13 venue booking authorisation', () => {
   const app = createApp();
 
   beforeEach(() => {

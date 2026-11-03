@@ -76,6 +76,7 @@ beforeEach(() => jest.clearAllMocks());
  * Expected: Form is not shown; locked message mentions change requests.
  * Type:     error / UI lock
  */
+// SCRUM-40-TC10
 it('US40-F03 (AC3/2A): Confirmed edit URL shows the locked message instead of the form', async () => {
   mockApi({ ...EVENT, status: 'CONFIRMED' });
   renderEdit(COORDINATOR);
@@ -94,6 +95,7 @@ it('US40-F03 (AC3/2A): Confirmed edit URL shows the locked message instead of th
  *           "Submit for review" (those belong to the organiser's draft flow).
  * Type:     normal
  */
+// SCRUM-40-TC11
 it('US40-F04 (AC1/1C): Coordinator sees Save changes, not the draft / submit buttons', async () => {
   mockApi(EVENT);
   renderEdit(COORDINATOR);
@@ -114,6 +116,7 @@ it('US40-F04 (AC1/1C): Coordinator sees Save changes, not the draft / submit but
  *           lands back on the event page, not the drafts list; /submit is never called.
  * Type:     normal / regression
  */
+// SCRUM-40-TC12
 it('US40-F05 (AC1+AC4): saving sends editable fields only and returns to the event page', async () => {
   mockApi(EVENT);
   renderEdit(COORDINATOR);
@@ -141,7 +144,8 @@ it('US40-F05 (AC1+AC4): saving sends editable fields only and returns to the eve
  * Expected: PATCH again omits the registration fields, so the amend is not refused.
  * Type:     regression
  */
-it('US40-F06 (3A): organiser clarification amend also omits the registration fields', async () => {
+// SCRUM-38-TC09
+it('organiser clarification amend also omits the registration fields', async () => {
   mockApi({ ...EVENT, status: 'UNDER_REVIEW', subState: 'ACTION_REQUIRED', reviewRemarks: 'Add detail' });
   renderEdit({ id: 1, roles: ['EVENT_ORGANISER'] });
   const user = userEvent.setup();
@@ -152,4 +156,21 @@ it('US40-F06 (3A): organiser clarification amend also omits the registration fie
   const patch = api.mock.calls.find(([path, options]) => path === '/api/events/3' && options?.method === 'PATCH');
   expect(patch[1].body).not.toHaveProperty('registrationOpen');
   expect(patch[1].body).not.toHaveProperty('registrationOpensAt');
+});
+
+/*
+ * AC:       SCRUM-38 (Organiser is prevented from directly editing after submission — UI level)
+ * Scenario: The owning Organiser opens the edit page for their own Submitted request
+ *           (not a clarification amend).
+ * Setup:    organiserId matches the caller; status SUBMITTED, subState not ACTION_REQUIRED.
+ * Expected: Access-denied message is shown instead of the edit form; no edit form renders.
+ * Type:     error / UI lock
+ */
+// SCRUM-38-TC10
+it('the owning Organiser cannot open the edit page for a Submitted request', async () => {
+  mockApi({ ...EVENT, status: 'SUBMITTED', organiserId: 1, subState: null });
+  renderEdit({ id: 1, roles: ['EVENT_ORGANISER'] });
+
+  expect(await screen.findByText(/you do not have access to edit this event/i)).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: /edit event details/i })).not.toBeInTheDocument();
 });

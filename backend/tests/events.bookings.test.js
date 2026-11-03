@@ -63,6 +63,7 @@ describe('event-specific venue booking access', () => {
    *           calculation or display, or multiple requests.
    * Type:     normal
    */
+  // SCRUM-13-TC20
   // SCRUM-26-TC01
   it('lets an organiser read their event booking summary, scoped in the database', async () => {
     const res = await request(app).get('/api/events/3/venue-bookings');
@@ -85,6 +86,7 @@ describe('event-specific venue booking access', () => {
     ]);
   });
 
+  // SCRUM-13-TC21
   // SCRUM-26-TC02
   it('denies another organisation before reading bookings', async () => {
     mockUser.organisationId = 20;
@@ -93,6 +95,7 @@ describe('event-specific venue booking access', () => {
     expect(fetchMany).not.toHaveBeenCalled();
   });
 
+  // SCRUM-13-TC22
   // SCRUM-26-TC03
   it('does not query bookings for a missing event', async () => {
     fetchOne.mockResolvedValue(null);
@@ -110,12 +113,14 @@ describe('event-specific venue booking access', () => {
    *           endpoint; this assertion checks access, not the response contents.
    * Type:     normal
    */
+  // SCRUM-13-TC23
   // SCRUM-26-TC04
   it.each([ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF])('allows existing internal event access for %s', async (role) => {
     mockUser.roles = [role];
     expect((await request(app).get('/api/events/3/venue-bookings')).status).toBe(200);
   });
 
+  // SCRUM-13-TC24
   // SCRUM-26-TC05
   it('denies attendees access to an unconfirmed event', async () => {
     mockUser.roles = [ROLES.ATTENDEE];

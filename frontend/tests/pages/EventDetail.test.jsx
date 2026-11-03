@@ -20,7 +20,7 @@ jest.mock('../../src/auth', () => {
   };
 });
 
-describe('SCUM-16 (Event Clarification & Review Panel)', () => {
+describe('SCRUM-16 (Event Clarification & Review Panel)', () => {
   const coordinatorUser = {
     id: 10,
     fullName: 'Chloe Lim',
@@ -455,6 +455,7 @@ function renderEvent() {
 
 // AC1 + AC2 · Happy path: the assigned coordinator (id 2) rejects with a valid reason, and
 // the page sends it to POST /api/events/3/decision with the right body.
+// SCRUM-17-TC52
 it('US17-F12: the assigned coordinator rejects through the decision endpoint', async () => {
   useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2 });
@@ -471,6 +472,7 @@ it('US17-F12: the assigned coordinator rejects through the decision endpoint', a
 
 // Security (UI): the organiser (id 1, the default user in beforeEach) can view their
 // own event under review but must not see the decision buttons.
+// SCRUM-17-TC53
 it('US17-F13: the organiser does not see approve or reject buttons', async () => {
   mockEvent({ coordinatorId: 2 });
   renderEvent();
@@ -481,6 +483,7 @@ it('US17-F13: the organiser does not see approve or reject buttons', async () =>
 
 // Security (UI): a coordinator who isn't assigned (id 9) can view the event for planning
 // but doesn't get the decision buttons. The backend blocks this too (US17-B09).
+// SCRUM-17-TC54
 it('US17-F14: a coordinator who is not assigned does not see approve or reject buttons', async () => {
   useAuth.mockReturnValue({ user: { id: 9 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2 });
@@ -491,6 +494,7 @@ it('US17-F14: a coordinator who is not assigned does not see approve or reject b
 
 // AC5 · Negative (UI): a Draft request cannot be decided, so even the assigned coordinator
 // gets no decision buttons; the general coordinator note box is shown instead.
+// SCRUM-17-TC55
 it('US17-F17: the assigned coordinator does not see approve or reject buttons on a draft', async () => {
   useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2, status: 'DRAFT' });
@@ -503,6 +507,7 @@ it('US17-F17: the assigned coordinator does not see approve or reject buttons on
 
 // Error handling: if the server refuses the decision (e.g. someone already decided, so the
 // event is no longer under review), the coordinator sees the server's message on the page.
+// SCRUM-17-TC56
 it('US17-F15: a decision refused by the server shows the error to the coordinator', async () => {
   useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2, decisionError: 'Only event requests under review can be approved or rejected' });
@@ -514,6 +519,7 @@ it('US17-F15: a decision refused by the server shows the error to the coordinato
 
 // C1 + C2 · The organiser can see why their request was rejected, so they know what to
 // fix before resubmitting (Customer Briefing, Step 5: keep a record of the decision).
+// SCRUM-17-TC57
 it('US17-F16: the organiser sees the rejection reason on a rejected event', async () => {
   mockEvent({ coordinatorId: 2, status: 'REJECTED', rejectionReason: 'Attendance numbers are missing' });
   renderEvent();
@@ -528,6 +534,7 @@ it('US17-F16: the organiser sees the rejection reason on a rejected event', asyn
  * Expected: People card shows Unassigned, not the old "will be auto-assigned" copy.
  * Type: normal
  */
+// SCRUM-28-TC21
 it('SCRUM-28 AC1: a submitted request with no Coordinator shows Unassigned', async () => {
   mockEvent({ coordinatorId: null, status: 'SUBMITTED' });
   renderEvent();
@@ -542,10 +549,15 @@ it('SCRUM-28 AC1: a submitted request with no Coordinator shows Unassigned', asy
  * and wires to the right endpoint.
  */
 
-// AC1 + AC6 · The assigned coordinator sees an "Open for review" button on a
-// Submitted request, and it calls the review endpoint.
+  /*
+  * AC:       SCRUM-64 (AC1 + AC6: button only available to the assigned Coordinator)
+  * Scenario: The assigned Coordinator sees and can click the 'Open for review' button.
+  * Setup:    Logged in as the event's assigned Coordinator (id 2); event status is SUBMITTED.
+  * Expected: Button is present and clicking it calls POST /api/events/3/review.
+  * Type:     normal
+  */
 // SCRUM-64-TC10
-it('US64-F01: the assigned coordinator opens a submitted request for review', async () => {
+it('the assigned coordinator opens a submitted request for review', async () => {
   useAuth.mockReturnValue({ user: { id: 2 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
   renderEvent();
@@ -554,10 +566,15 @@ it('US64-F01: the assigned coordinator opens a submitted request for review', as
   expect(api).toHaveBeenCalledWith('/api/events/3/review', { method: 'POST' });
 });
 
-// AC3 · A coordinator who isn't assigned to this request (id 9) never sees the button,
-// even though they can still view the event for planning purposes.
+/*
+ * AC:       SCRUM-64 (AC3: button hidden from a Coordinator this request isn't assigned to)
+ * Scenario: An unrelated Coordinator does not see the 'Open for review' button.
+ * Setup:    Logged in as a Coordinator not assigned to the event (id 9); event status is SUBMITTED.
+ * Expected: Event page renders (view-only), but no 'Open for review' button is shown.
+ * Type:     error
+ */
 // SCRUM-64-TC11
-it('US64-F02: an unrelated coordinator does not see the Open for review button', async () => {
+it('an unrelated coordinator does not see the Open for review button', async () => {
   useAuth.mockReturnValue({ user: { id: 9 }, hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
   mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
   renderEvent();
@@ -565,9 +582,15 @@ it('US64-F02: an unrelated coordinator does not see the Open for review button',
   expect(screen.queryByRole('button', { name: 'Open for review' })).not.toBeInTheDocument();
 });
 
-// AC6 · The organiser never sees the coordinator-only button on their own request.
+/*
+ * AC:       SCRUM-64 (AC6: button hidden from the Organiser — Coordinator-only action)
+ * Scenario: The Organiser does not see the 'Open for review' button on their own request.
+ * Setup:    Logged in as the event's Organiser; event status is SUBMITTED.
+ * Expected: Event page renders, but no 'Open for review' button is shown.
+ * Type:     error
+ */
 // SCRUM-64-TC12
-it('US64-F03: the organiser does not see the Open for review button', async () => {
+it('the organiser does not see the Open for review button', async () => {
   mockEvent({ coordinatorId: 2, status: 'SUBMITTED' });
   renderEvent();
   expect(await screen.findByText('Review me')).toBeInTheDocument();
@@ -575,10 +598,7 @@ it('US64-F03: the organiser does not see the Open for review button', async () =
 });
 
 /*
- * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility); SCRUM-39 AC1
- *           (agreed decision: Attendees keep the public view, so equipment requests are
- *           never requested either)
-
+ * AC:       Not applicable to SCRUM-25/26 (public attendee event visibility)
  * Scenario: An attendee requests an event that has venue booking information.
  * Setup:    The attendee can access only a confirmed public event and is not a
  *           Coordinator or Venue Staff member.
@@ -611,7 +631,7 @@ it('loads an attendee event without requesting restricted planning data', async 
   expect(screen.queryByText('Status history')).not.toBeInTheDocument();
   expect(api).not.toHaveBeenCalledWith('/api/comments/3');
   expect(api).not.toHaveBeenCalledWith('/api/events/3/history');
-  // SCRUM-39: attendees don't get planning details, so equipment is never requested.
+  // Attendees don't get planning details, so equipment is never requested.
   expect(api).not.toHaveBeenCalledWith('/api/events/3/equipment-requests');
 });
 

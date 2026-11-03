@@ -64,6 +64,7 @@ describe('SCRUM-30 unassigned flag stays visible', () => {
    *           (Submitted, no Coordinator). The Lead's unassigned queue includes the same event.
    * Type: normal
    */
+  // SCRUM-30-TC01
   it('US30-B01: a submitted event with no Coordinator is visible to the organiser and the Lead', async () => {
     const forOrganiser = await service.listEvents(organiser);
     const forLead = await service.listEvents(lead);
@@ -87,6 +88,7 @@ describe('SCRUM-30 unassigned flag stays visible', () => {
    * Expected: It is not in their list. Opening it is 404, the same as a missing event.
    * Type: boundary
    */
+  // SCRUM-30-TC02
   it('US30-B02: an organiser from another organisation cannot see the unassigned event', async () => {
     const listed = await service.listEvents(otherOrgOrganiser);
 
@@ -105,6 +107,7 @@ describe('SCRUM-30 unassigned flag stays visible', () => {
    *           Unassigned. Only a submitted request is.
    * Type: boundary
    */
+  // SCRUM-30-TC03
   it('US30-B03: a draft with no Coordinator stays visible but is not flagged Unassigned', async () => {
     event.status = EVENT_STATUS.DRAFT;
 
@@ -123,6 +126,7 @@ describe('SCRUM-30 unassigned flag stays visible', () => {
    *           still open the event. It is no longer in the unassigned queue.
    * Type: normal
    */
+  // SCRUM-30-TC04
   it('US30-B04: assigning a Coordinator removes the flag and leaves the event visible', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)
@@ -163,6 +167,7 @@ describe('SCRUM-30 unassigned flag stays visible', () => {
    *           to the submitting organiser and the Lead.
    * Type: error
    */
+  // SCRUM-30-TC05
   it('US30-B05: a refused assignment leaves the event visible and still Unassigned', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)

@@ -11,13 +11,24 @@
 const mockListen = jest.fn();
 const mockClose = jest.fn((done) => done());
 const mockStop = jest.fn();
+const mockNotificationTimer = {};
+const mockSetInterval = jest.fn(() => mockNotificationTimer);
+const mockClearInterval = jest.fn();
 
 jest.mock('../src/app', () => ({
   createApp: () => ({ listen: mockListen }),
 }));
-jest.mock('../src/config/env', () => ({ env: { port: 4999 } }));
+jest.mock('../src/config/env', () => ({
+  env: { port: 4999, holdNotificationPollMs: 30_000 },
+}));
 jest.mock('../src/jobs/holdExpiry.job', () => ({
   startHoldExpiryJob: jest.fn(() => mockStop),
+}));
+jest.mock('../src/services/venues.service', () => ({
+  processDueHoldNotifications: jest.fn().mockResolvedValue({
+    warningsSent: 0,
+    expiryNoticesSent: 0,
+  }),
 }));
 
 const { startHoldExpiryJob } = require('../src/jobs/holdExpiry.job');
@@ -39,6 +50,8 @@ describe('SCRUM-76 server starts and stops the expiry timer', () => {
     });
     exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
     logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(global, 'setInterval').mockImplementation(mockSetInterval);
+    jest.spyOn(global, 'clearInterval').mockImplementation(mockClearInterval);
     jest.isolateModules(() => {
       require('../src/server');
     });
@@ -54,6 +67,8 @@ describe('SCRUM-76 server starts and stops the expiry timer', () => {
     expect(logSpy).toHaveBeenCalledWith('ConnectSphere API listening on http://localhost:4999');
     expect(startHoldExpiryJob).toHaveBeenCalledTimes(1);
     expect(startHoldExpiryJob).toHaveBeenCalledWith();
+    expect(mockSetInterval).toHaveBeenCalledTimes(1);
+    expect(mockSetInterval).toHaveBeenCalledWith(expect.any(Function), 30_000);
   });
 
   // SCRUM-76-TC26
@@ -61,10 +76,12 @@ describe('SCRUM-76 server starts and stops the expiry timer', () => {
     mockStop.mockClear();
     mockClose.mockClear();
     exitSpy.mockClear();
+    mockClearInterval.mockClear();
 
     handlers[signal]();
 
     expect(mockStop).toHaveBeenCalledTimes(1);
+    expect(mockClearInterval).toHaveBeenCalledWith(mockNotificationTimer);
     expect(mockClose).toHaveBeenCalledTimes(1);
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
