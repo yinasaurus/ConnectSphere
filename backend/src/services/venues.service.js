@@ -1285,6 +1285,8 @@ async function processDueHoldNotifications(now = new Date(), warningLeadMinutes 
   return { warningsSent, expiryNoticesSent };
 }
 
+
+
 /*
  * Purpose: cancel one venue booking and move its Confirmed event back to Planning when needed.
  * AC: SCRUM-61 AC1–AC10 — assigned Coordinators may cancel eligible bookings except for Completed events.
@@ -1832,8 +1834,8 @@ module.exports = {
   requestReplacementBooking,
   decideBooking,
   placeHold,
-  expireHolds,
   processDueHoldNotifications,
+  expireHolds,
   cancelBooking,
   changeBooking,
   buildBookingDecisionNotice,

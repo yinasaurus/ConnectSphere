@@ -50,6 +50,13 @@ describe('SCRUM-14 NewEvent compulsory-field validation on submit', () => {
     });
   });
 
+  /*
+  * AC:       SCRUM-14 (AC1/AC2: compulsory fields, and request cannot be submitted if any are missing)
+  * Scenario: Submitting the New Event form with every field left blank.
+  * Setup:    Render the form, signed in as an Organiser; click "Submit for review" without entering anything.
+  * Expected: All 7 field-hint errors shown (name, purpose, description, start, end, venue requirements, accessibility); POST /api/events is never called.
+  * Type:     error
+  */
   // SCRUM-14-TC14
   it('blocks submission and shows every missing required field, without calling the API', async () => {
     const user = userEvent.setup();
@@ -69,6 +76,13 @@ describe('SCRUM-14 NewEvent compulsory-field validation on submit', () => {
     expect(api).not.toHaveBeenCalledWith('/api/events', expect.objectContaining({ method: 'POST' }));
   });
 
+  /*
+  * AC:       SCRUM-14 (AC2: request cannot be submitted if compulsory fields are missing — per-field UX)
+  * Scenario: One field is fixed after a failed submit attempt; only that field's error should clear.
+  * Setup:    Click "Submit for review" with everything blank (errors now showing); type into the Event name field.
+  * Expected: "Event name is required." disappears; "Purpose is required." is still shown.
+  * Type:     normal
+  */
   // SCRUM-14-TC15
   it("fixing one field clears only that field's error, leaving the others", async () => {
     const user = userEvent.setup();
@@ -82,6 +96,13 @@ describe('SCRUM-14 NewEvent compulsory-field validation on submit', () => {
     expect(screen.getByText('Purpose is required.')).toBeInTheDocument();
   });
 
+  /*
+  * AC:       SCRUM-14 (AC1/AC3: Organiser can enter every field, and on submission status is set to Submitted)
+  * Scenario: Every compulsory field is filled in and the form is submitted.
+  * Setup:    Fill in name, purpose, description, start, end, venue requirements and accessibility needs; click "Submit for review".
+  * Expected: POST /api/events then POST /api/events/:id/submit are both called; page navigates to the event detail page.
+  * Type:     normal
+  */
   // SCRUM-14-TC16
   it('submitting with every compulsory field filled in saves, submits, and navigates to the event', async () => {
     const user = userEvent.setup();
