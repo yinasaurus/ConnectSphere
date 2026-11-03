@@ -46,6 +46,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     api.mockReset();
   });
 
+  // SCRUM-75-TC38
   it('US75-F01: sends the event, venue and expiry (as ISO) to the holds route', async () => {
     mockApi();
     const onPlaced = jest.fn();
@@ -70,6 +71,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     expect(screen.queryByRole('option', { name: 'Cancelled Fair' })).not.toBeInTheDocument();
   });
 
+  // SCRUM-75-TC39
   it('US75-F03: shows the chosen event\'s date and time so staff can pick a valid expiry', async () => {
     mockApi();
     render(<PlaceHoldCard venues={venues} />);
@@ -80,6 +82,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     );
   });
 
+  // SCRUM-75-TC40
   it('US75-F04: sends no expiry when none is picked, and shows the server\'s message', async () => {
     mockApi({ holdError: { code: 'HOLD_EXPIRY_REQUIRED', message: 'A hold needs an expiry date and time' } });
     render(<PlaceHoldCard venues={venues} />);
@@ -95,6 +98,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     expect(await screen.findByText('A hold needs an expiry date and time')).toBeInTheDocument();
   });
 
+  // SCRUM-75-TC41
   it('US75-F05: shows a clash message and does not call onPlaced', async () => {
     mockApi({ holdError: { code: 'BOOKING_CONFLICT', message: 'This venue already has a confirmed booking or active hold in that window' } });
     const onPlaced = jest.fn();
@@ -106,6 +110,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     expect(onPlaced).not.toHaveBeenCalled();
   });
 
+  // SCRUM-75-TC42
   it('US75-F06: disables the button while the hold is being saved', async () => {
     let finish;
     api.mockImplementation(async (path) => {
@@ -134,6 +139,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     expect(screen.getByLabelText('Event').querySelectorAll('option')).toHaveLength(1);
   });
 
+  // SCRUM-75-TC46
   it('US75-F12: leaves out events with no start time', async () => {
     api.mockResolvedValueOnce({
       events: [...events, { id: 53, name: 'Undated Talk', status: 'PLANNING', startAt: null }],
@@ -163,6 +169,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     expect(screen.getByLabelText('Venue').querySelectorAll('option')).toHaveLength(1);
   });
 
+  // SCRUM-75-TC47
   it('US75-F15: shows only the start when the event has no end time', async () => {
     api.mockResolvedValueOnce({ events: [{ ...events[0], endAt: null }] });
     render(<PlaceHoldCard venues={venues} />);
@@ -173,6 +180,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     expect(heldFor).not.toHaveTextContent(' to ');
   });
 
+  // SCRUM-75-TC48
   it('US75-F16: places a hold even when the page passes no onPlaced callback', async () => {
     mockApi();
     render(<PlaceHoldCard venues={venues} />);

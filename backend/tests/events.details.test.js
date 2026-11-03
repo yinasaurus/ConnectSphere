@@ -4,10 +4,10 @@
  *   AC1  Authorised users can view event details during the Planning or Confirmed stage.
  *   AC2  The details include attendance, venue, date, time and equipment requirement.
  *
- * Decisions agreed before building: "authorised" keeps today's rules (Coordinators, Venue
- * Staff and Technical Support see every event; Organisers see their own organisation's;
- * Attendees only get the public view of confirmed events with registration); other stages
- * are not blocked; "venue" is the booked venue plus the venue needs text; "equipment" is the
+ * Decisions agreed before building: "authorised" is Venue Staff and Technical Support
+ * (every event), the assigned Coordinator (SCRUM-84), Organisers (their own organisation),
+ * and Attendees (the public view of confirmed events with registration). Other stages are
+ * not blocked. "venue" is the booked venue plus the venue needs text. "equipment" is the
  * equipment notes plus the event's equipment requests.
  *
  * Only the database is mocked. Requests carry a real signed session cookie, so the real
@@ -77,8 +77,9 @@ describe('SCRUM-39 GET /api/events/:id (event details)', () => {
   /*
    * AC:       SCRUM-39 AC1 + AC2
    * Scenario: Each internal role opens an event in the Planning and in the Confirmed stage.
-   * Setup:    Coordinator, Venue Staff or Technical Support; event 3 in that status with
-   *           attendance 120, 10:00-12:00 on 20 Oct, venue needs and equipment notes.
+   * Setup:    The Coordinator is user 21, who is assigned to event 3. Venue Staff and
+   *           Technical Support use user 5. Event 3 has attendance 120, 10:00-12:00 on
+   *           20 Oct, venue needs and equipment notes.
    * Expected: 200 with the status and every AC2 field: attendance, start and end (date and
    *           time), venue needs and equipment notes, so staff can plan from one place.
    * Type:     normal
@@ -91,7 +92,7 @@ describe('SCRUM-39 GET /api/events/:id (event details)', () => {
     [ROLES.TECHNICAL_SUPPORT, 'PLANNING'],
     [ROLES.TECHNICAL_SUPPORT, 'CONFIRMED'],
   ])('US39-D01 (AC1+AC2): %s sees the full details of a %s event', async (role, status) => {
-    const get = as([role]);
+    const get = as([role], { id: role === ROLES.EVENT_COORDINATOR ? 21 : 5 });
     fetchOne.mockResolvedValueOnce(eventRow({ status }));
     const res = await get('/api/events/3');
     expect(res.status).toBe(200);
@@ -188,7 +189,7 @@ describe('SCRUM-39 GET /api/events/:id (event details)', () => {
    * Type:     boundary
    */
   it('US39-D05 (AC2): empty AC2 fields come back as null', async () => {
-    const get = as([ROLES.EVENT_COORDINATOR]);
+    const get = as([ROLES.EVENT_COORDINATOR], { id: 21 });
     fetchOne.mockResolvedValueOnce(eventRow({
       expected_attendance: null, start_at: null, end_at: null, venue_requirements: null, equipment_notes: null,
     }));
@@ -207,7 +208,7 @@ describe('SCRUM-39 GET /api/events/:id (event details)', () => {
    * Type:     error
    */
   it('US39-D06 (AC1): a missing event is 404 and no session is 401', async () => {
-    const get = as([ROLES.EVENT_COORDINATOR]);
+    const get = as([ROLES.EVENT_COORDINATOR], { id: 21 });
     fetchOne.mockResolvedValueOnce(null);
     expect((await get('/api/events/999')).status).toBe(404);
 
@@ -248,8 +249,10 @@ describe('SCRUM-39 GET /api/events/:id/venue-bookings (venue, AC2)', () => {
    * Type:     normal
    */
   it('SCRUM-42 AC2: a flagged venue booking keeps its status and exposes needs_review', async () => {
-    const get = as([ROLES.EVENT_COORDINATOR]);
+    const get = as([ROLES.EVENT_COORDINATOR], { id: 21 });
     fetchOne.mockResolvedValueOnce(eventRow());
+    // Assigned coordinator: getEvent reads the safety outcome before the booking list.
+    fetchMany.mockResolvedValueOnce([]);
     fetchMany.mockResolvedValueOnce([{
       id: 7, event_id: 3, venue_id: 8, status: 'APPROVED', needs_review: true, venues: { name: 'Helix Hall' },
     }]);
@@ -271,8 +274,9 @@ describe('SCRUM-39 GET /api/events/:id/venue-bookings (venue, AC2)', () => {
    * Type:     boundary
    */
   it('US39-V02 (AC2): a booking without a venue record still comes back', async () => {
-    const get = as([ROLES.EVENT_COORDINATOR]);
+    const get = as([ROLES.EVENT_COORDINATOR], { id: 21 });
     fetchOne.mockResolvedValueOnce(eventRow());
+    fetchMany.mockResolvedValueOnce([]);
     fetchMany.mockResolvedValueOnce([{ id: 9, event_id: 3, venue_id: 8, status: 'PENDING', venues: null }]);
     const res = await get('/api/events/3/venue-bookings');
     expect(res.status).toBe(200);
@@ -293,8 +297,9 @@ describe('SCRUM-39 GET /api/events/:id/equipment-requests (equipment, AC2)', () 
    * Type:     normal
    */
   it('US39-E01 (AC2): lists the event equipment requests', async () => {
-    const get = as([ROLES.EVENT_COORDINATOR]);
+    const get = as([ROLES.EVENT_COORDINATOR], { id: 21 });
     fetchOne.mockResolvedValueOnce(eventRow());
+    fetchMany.mockResolvedValueOnce([]);
     fetchMany.mockResolvedValueOnce([
       { id: 12, event_id: 3, equipment_id: 4, quantity: 2, status: 'PENDING', decision_reason: 'internal', equipment: { name: 'Projector' } },
       { id: 11, event_id: 3, equipment_id: 6, quantity: 4, status: 'RESERVED', decision_reason: 'internal', equipment: { name: 'Wireless mic' } },
@@ -318,8 +323,9 @@ describe('SCRUM-39 GET /api/events/:id/equipment-requests (equipment, AC2)', () 
    * Type:     normal
    */
   it('SCRUM-42 AC2: a flagged equipment request keeps its status and exposes needs_review', async () => {
-    const get = as([ROLES.EVENT_COORDINATOR]);
+    const get = as([ROLES.EVENT_COORDINATOR], { id: 21 });
     fetchOne.mockResolvedValueOnce(eventRow());
+    fetchMany.mockResolvedValueOnce([]);
     fetchMany.mockResolvedValueOnce([
       { id: 12, event_id: 3, equipment_id: 4, quantity: 2, status: 'PENDING', needs_review: true, equipment: { name: 'Projector' } },
     ]);

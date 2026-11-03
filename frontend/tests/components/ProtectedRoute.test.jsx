@@ -21,33 +21,39 @@ function mount(roles, { loading = false, loggedIn = true, allowedRoles = ['EVENT
   );
 }
 
+// SCRUM-13-TC30
 it.each([['EVENT_ORGANISER'], ['ATTENDEE'], ['TECHNICAL_SUPPORT'], ['UNKNOWN']])('denies role %s', async (role) => {
   mount([role]);
   expect(await screen.findByText('Home destination')).toBeInTheDocument();
   expect(screen.queryByText('Protected content')).not.toBeInTheDocument();
 });
 
+// SCRUM-13-TC31
 it.each([['EVENT_COORDINATOR'], ['VENUE_STAFF']])('allows role %s', (role) => {
   mount([role]);
   expect(screen.getByText('Protected content')).toBeInTheDocument();
 });
 
+// SCRUM-13-TC32
 it('accepts any matching role, including a second role on a hybrid account', () => {
   mount(['EVENT_COORDINATOR', 'VENUE_STAFF'], { allowedRoles: ['VENUE_STAFF'] });
   expect(screen.getByText('Protected content')).toBeInTheDocument();
 });
 
+// SCRUM-13-TC33
 it('redirects logged-out users to login', async () => {
   mount([], { loggedIn: false });
   expect(await screen.findByText('Login destination')).toBeInTheDocument();
 });
 
+// SCRUM-13-TC34
 it('waits for session restoration without rendering protected content', () => {
   mount([], { loading: true, loggedIn: false });
   expect(screen.getByText('Restoring your session…')).toBeInTheDocument();
   expect(screen.queryByText('Protected content')).not.toBeInTheDocument();
 });
 
+// SCRUM-13-TC35
 it('preserves login-only routes without a role restriction', () => {
   mount(['ATTENDEE'], { allowedRoles: [] });
   expect(screen.getByText('Protected content')).toBeInTheDocument();

@@ -33,7 +33,7 @@ describe('event-specific venue booking access', () => {
     mockUser = { id: 1, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] };
     query = { select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), order: jest.fn().mockReturnThis() };
     supabase.from.mockReturnValue(query);
-    fetchOne.mockResolvedValue({ id: 3, organisation_id: 10, status: 'PLANNING' });
+    fetchOne.mockResolvedValue({ id: 3, organisation_id: 10, coordinator_id: 1, status: 'PLANNING' });
     fetchMany.mockResolvedValue([
       // Include saved timing and creation data so the API can power occupied-window summaries.
       {
@@ -72,6 +72,7 @@ describe('event-specific venue booking access', () => {
    *           calculation or display, or multiple requests.
    * Type:     normal
    */
+  // SCRUM-13-TC20
   it('lets an organiser read their event booking summary, scoped in the database', async () => {
     const res = await request(app).get('/api/events/3/venue-bookings');
     expect(res.status).toBe(200);
@@ -93,6 +94,7 @@ describe('event-specific venue booking access', () => {
     ]);
   });
 
+  // SCRUM-13-TC21
   it('denies another organisation before reading bookings', async () => {
     mockUser.organisationId = 20;
     const res = await request(app).get('/api/events/3/venue-bookings');
@@ -100,6 +102,7 @@ describe('event-specific venue booking access', () => {
     expect(fetchMany).not.toHaveBeenCalled();
   });
 
+  // SCRUM-13-TC22
   it('does not query bookings for a missing event', async () => {
     fetchOne.mockResolvedValue(null);
     const res = await request(app).get('/api/events/999/venue-bookings');
@@ -111,21 +114,25 @@ describe('event-specific venue booking access', () => {
    * AC:       SCRUM-26 AC7 (endpoint access)
    * Scenario: Venue Staff and Coordinators load the event's booking requests.
    * Setup:    The signed-in user has either the Event Coordinator or Venue Staff role.
-   * Expected: Both internal roles receive a successful response from the event-specific
-   *           booking endpoint; this assertion checks access, not the response contents.
+   *           The Coordinator is user 1, who is assigned to event 3.
+   * Expected: Both receive a successful response from the event-specific booking
+   *           endpoint; this assertion checks access, not the response contents.
    * Type:     normal
    */
+  // SCRUM-13-TC23
   it.each([ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF])('allows existing internal event access for %s', async (role) => {
     mockUser.roles = [role];
     expect((await request(app).get('/api/events/3/venue-bookings')).status).toBe(200);
   });
 
+  // SCRUM-13-TC24
   it('denies attendees access to an unconfirmed event', async () => {
     mockUser.roles = [ROLES.ATTENDEE];
     expect((await request(app).get('/api/events/3/venue-bookings')).status).toBe(404);
     expect(fetchMany).not.toHaveBeenCalled();
   });
 
+  // SCRUM-13-TC25
   it.each(['get', 'post'])('blocks cross-client comments through %s', async (method) => {
     mockUser.organisationId = 20;
     const res = await request(app)[method]('/api/comments/3').send({ body: 'Not permitted' });
@@ -134,11 +141,13 @@ describe('event-specific venue booking access', () => {
     expect(insertOne).not.toHaveBeenCalled();
   });
 
+  // SCRUM-13-TC26
   it('allows comments for an accessible event', async () => {
     expect((await request(app).get('/api/comments/3')).status).toBe(200);
     expect(query.eq).toHaveBeenCalledWith('event_id', '3');
   });
 
+  // SCRUM-13-TC27
   it.each(['/api/comments/3', '/api/events/3/history'])('blocks attendee planning data at %s', async (path) => {
     mockUser.roles = [ROLES.ATTENDEE];
     expect((await request(app).get(path)).status).toBe(403);
@@ -154,6 +163,7 @@ describe('event-specific venue booking access', () => {
    *           event details or pending/rejected request statuses.
    * Type:     boundary
    */
+  // SCRUM-13-TC28
   it('returns only public event fields and approved bookings for attendees', async () => {
     mockUser.roles = [ROLES.ATTENDEE];
     fetchOne.mockResolvedValue({ id: 3, name: 'Public event', status: 'CONFIRMED', registration_required: true, operational_notes: 'Private', equipment_notes: 'Private' });

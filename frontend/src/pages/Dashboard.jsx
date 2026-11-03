@@ -20,14 +20,22 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // Purpose: choose which events this dashboard lists.
-  // AC: SCRUM-5 — a Coordinator sees events assigned to them.
+  // Purpose: choose which events this dashboard lists and counts.
+  // AC: SCRUM-84 AC3 — a Coordinator's home page shows only events assigned to them.
+  //     SCRUM-5 — those assigned events are the ones they act on.
   //     SCRUM-30 AC2 — a Lead still sees unassigned requests on the dashboard.
-  // Business rule: W7 #5. A Lead who is also a Coordinator must not lose those
-  // requests to the Coordinator's "assigned to me" filter.
-  // Inputs: the signed-in roles and GET /api/events. Output: rows for Upcoming
-  // and Needs attention. Failure: none.
-  const mine = hasRole(ROLES.EVENT_COORDINATOR) && !hasRole(ROLES.EVENT_COORDINATOR_LEAD)
+  // Business rule: Week 9 Q&A. A Lead, Safety Officer, Venue Staff, or Technical
+  // Support who is also a Coordinator keeps the full list.
+  // Inputs: the signed-in roles and GET /api/events. Output: rows for the count,
+  // Upcoming, and Needs attention. Failure: none.
+  const seesOnlyAssigned = hasRole(ROLES.EVENT_COORDINATOR)
+    && !hasRole(
+      ROLES.EVENT_COORDINATOR_LEAD,
+      ROLES.SAFETY_OFFICER,
+      ROLES.VENUE_STAFF,
+      ROLES.TECHNICAL_SUPPORT,
+    );
+  const mine = seesOnlyAssigned
     ? events.filter((event) => event.coordinatorId === user.id)
     : events;
 
@@ -56,7 +64,7 @@ export default function Dashboard() {
       <div className="grid-3">
         <div className="card">
           <p className="muted">Visible events</p>
-          <h2>{events.length}</h2>
+          <h2>{mine.length}</h2>
         </div>
         <div className="card">
           <p className="muted">Needs attention</p>
