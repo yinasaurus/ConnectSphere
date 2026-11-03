@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { api } from '../../src/api';
 import PlaceHoldCard from '../../src/components/PlaceHoldCard';
+import { formatDateTime } from '../../src/formatDateTime';
 
 jest.mock('../../src/api', () => ({
   api: jest.fn(),
@@ -78,7 +79,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     await screen.findByRole('option', { name: 'Tech Talk' });
     await userEvent.selectOptions(screen.getByLabelText('Event'), '50');
     expect(screen.getByTestId('hold-event-window')).toHaveTextContent(
-      new Date(events[0].startAt).toLocaleString()
+      formatDateTime(events[0].startAt)
     );
   });
 
@@ -159,7 +160,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
       method: 'POST',
       body: { eventId: undefined, venueId: undefined, expiresAt: undefined },
     });
-    expect(await screen.findByText('eventId and venueId are required')).toBeInTheDocument();
+    expect(await screen.findByText('Choose an event and a venue.')).toBeInTheDocument();
   });
 
   it('US75-F14: works with no venues passed in', async () => {
@@ -176,7 +177,7 @@ describe('SCRUM-75 PlaceHoldCard', () => {
     await screen.findByRole('option', { name: 'Tech Talk' });
     await userEvent.selectOptions(screen.getByLabelText('Event'), '50');
     const heldFor = screen.getByTestId('hold-event-window');
-    expect(heldFor).toHaveTextContent(new Date(events[0].startAt).toLocaleString());
+    expect(heldFor).toHaveTextContent(formatDateTime(events[0].startAt));
     expect(heldFor).not.toHaveTextContent(' to ');
   });
 

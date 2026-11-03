@@ -6,6 +6,7 @@ import { useAuth } from '../../src/auth';
 import Layout from '../../src/components/Layout';
 import EventDetail from '../../src/pages/EventDetail';
 import UnassignedQueue from '../../src/pages/UnassignedQueue';
+import { formatDateTime } from '../../src/formatDateTime';
 
 jest.mock('../../src/api', () => ({
   api: jest.fn(),
@@ -120,10 +121,10 @@ describe('SCRUM-65 Unassigned queue (Lead)', () => {
     expect(screen.getByText('Boardroom')).toBeInTheDocument();
     expect(screen.getByText('HDMI cable')).toBeInTheDocument();
     expect(screen.getByText(
-      `${new Date(queuedEvent.startAt).toLocaleString()} – ${new Date(queuedEvent.endAt).toLocaleString()}`
+      `${formatDateTime(queuedEvent.startAt)} – ${formatDateTime(queuedEvent.endAt)}`
     )).toBeInTheDocument();
     expect(screen.getByText(
-      `${new Date('2026-11-02T02:00:00.000Z').toLocaleString()} – ${new Date('2026-11-02T04:00:00.000Z').toLocaleString()}`
+      `${formatDateTime('2026-11-02T02:00:00.000Z')} – ${formatDateTime('2026-11-02T04:00:00.000Z')}`
     )).toBeInTheDocument();
     expect(screen.getByText(/date\/time/i)).toBeInTheDocument();
     expect(api).toHaveBeenCalledWith('/api/events/unassigned-queue');
@@ -273,7 +274,93 @@ describe('SCRUM-65 Unassigned queue (Lead)', () => {
 
     await screen.findByText('Town Hall');
     expect(screen.queryByText('TBC')).not.toBeInTheDocument();
-    expect(screen.getByText(new Date(queuedEvent.startAt).toLocaleString())).toBeInTheDocument();
+    expect(screen.getByText(formatDateTime(queuedEvent.startAt))).toBeInTheDocument();
+  });
+});
+
+describe('SCRUM-54 blocked unassigned queue', () => {
+  beforeEach(() => {
+    api.mockReset();
+  });
+
+  /*
+   * AC: SCRUM-54 AC3, AC7
+   * Scenario: A blocked (non-Lead) request reaches the page anyway.
+   * Setup: API returns 403 with only a message, no events array.
+   * Expected: The message is shown and no event names are rendered as links.
+   * Type: error
+   */
+  // SCRUM-54-TC40
+  it('shows the refusal and no event details when the queue is blocked', async () => {
+    const err = new Error('You do not have access to this action');
+    err.status = 403;
+    api.mockRejectedValue(err);
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <UnassignedQueue />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('You do not have access to this action')).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+});
+
+describe('Queue page when the load fails', () => {
+  beforeEach(() => {
+    api.mockReset();
+    asLead();
+  });
+
+  /*
+   * AC: SCRUM-65 AC1 (cannot fail this way: a failed load looks like an empty queue).
+   * Scenario: The queue API fails while the Lead is viewing it.
+   * Setup: GET /api/events/unassigned-queue rejects.
+   * Expected: The error message is shown instead of pretending the queue is empty.
+   * Type: error
+   */
+  // SCRUM-65-TC18
+  it('shows an error when the queue cannot be loaded', async () => {
+    api.mockImplementation((path) => {
+      if (path === '/api/events/unassigned-queue') {
+        return Promise.reject(new Error('Queue unavailable'));
+      }
+      return Promise.reject(new Error(`Unhandled api call: ${path}`));
+    });
+
+    renderQueue();
+
+    expect(await screen.findByText('Queue unavailable')).toBeInTheDocument();
+    expect(screen.queryByText(/no submitted requests are waiting/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('Lead nav link to the unassigned queue', () => {
+  beforeEach(() => {
+    api.mockReset();
+    asLead();
+  });
+
+  /*
+   * AC: SCRUM-65 AC1 (cannot fail this way: the Lead's sidebar has no way to reach the queue).
+   *     Who may open it is SCRUM-54 AC3.
+   * Scenario: The Lead looks at the sidebar.
+   * Setup: Layout is rendered for EVENT_COORDINATOR_LEAD. The queue returns no events.
+   * Expected: An Unassigned queue link to /app/events/unassigned is present.
+   * Type: normal
+   */
+  // SCRUM-65-TC19
+  it('the Lead nav includes Unassigned queue', async () => {
+    api.mockImplementation((path) => {
+      if (path === '/api/events/unassigned-queue') {
+        return Promise.resolve({ events: [] });
+      }
+      return Promise.reject(new Error(`Unhandled api call: ${path}`));
+    });
+
+    renderQueue();
+
+    const navLink = await screen.findByRole('link', { name: /unassigned queue/i });
+    expect(navLink).toHaveAttribute('href', '/app/events/unassigned');
   });
 });
 

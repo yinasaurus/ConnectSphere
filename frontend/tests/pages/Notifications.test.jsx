@@ -552,7 +552,7 @@ describe('SCRUM-44 Notifications Page — Cross-Cutting (UI & Auth)', () => {
       expect(screen.getByRole('heading', { name: /notifications/i })).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/in-app first/i)).toBeInTheDocument();
+    expect(screen.getByText('Notices for the events you are involved in.')).toBeInTheDocument();
   });
 
   /*

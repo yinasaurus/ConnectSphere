@@ -11,6 +11,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import EventDetail from '../../src/pages/EventDetail';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/auth';
+import { formatDateTime } from '../../src/formatDateTime';
 
 jest.mock('../../src/api', () => ({ api: jest.fn() }));
 jest.mock('../../src/auth', () => ({ useAuth: jest.fn() }));
@@ -178,12 +179,7 @@ describe('SCRUM-62 EventDetail booking reschedule form', () => {
   it('shows previous booking times without including reschedule audits in Status history', async () => {
     const previousStartAt = '2026-10-20T00:00:00.000Z';
     const previousEndAt = '2026-10-20T03:00:00.000Z';
-    const formatExpectedTime = (value) => {
-      const date = new Date(value);
-      const datePart = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-      const timePart = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-      return `${datePart} ${timePart}`;
-    };
+    const formatExpectedTime = (value) => formatDateTime(value);
     const history = [
       {
         id: 1,

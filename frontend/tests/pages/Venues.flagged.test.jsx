@@ -75,7 +75,9 @@ describe('SCRUM-77 flagged bookings on the Venues page', () => {
   it('US77-P01: Venue Staff see the flagged bookings listed and marked', async () => {
     asRole('VENUE_STAFF');
     mockApi({ bookings: [bookingRow(1, 'Forum', true), bookingRow(2, 'Workshop', true), bookingRow(3, 'Gala', false)] });
+    const user = userEvent.setup();
     render(<Venues />);
+    await user.click(await screen.findByRole('tab', { name: 'Flagged' }));
 
     const heading = await screen.findByRole('heading', { name: 'Flagged for review' });
     const section = within(heading.closest('div'));
@@ -97,7 +99,9 @@ describe('SCRUM-77 flagged bookings on the Venues page', () => {
   it('US77-P02: a flagged booking keeps its status and the page says nothing changed', async () => {
     asRole('VENUE_STAFF');
     mockApi({ bookings: [bookingRow(1, 'Forum', true)] });
+    const user = userEvent.setup();
     render(<Venues />);
+    await user.click(await screen.findByRole('tab', { name: 'Flagged' }));
 
     const heading = await screen.findByRole('heading', { name: 'Flagged for review' });
     const section = within(heading.closest('div'));
@@ -117,9 +121,12 @@ describe('SCRUM-77 flagged bookings on the Venues page', () => {
   it('US77-P03: with nothing flagged the list is not shown', async () => {
     asRole('VENUE_STAFF');
     mockApi({ bookings: [bookingRow(1, 'Forum', false), bookingRow(2, 'Workshop', false)] });
+    const user = userEvent.setup();
     render(<Venues />);
+    await user.click(await screen.findByRole('tab', { name: 'Decided' }));
 
     await screen.findByText('Forum');
+    expect(screen.queryByRole('tab', { name: 'Flagged' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Flagged for review' })).not.toBeInTheDocument();
   });
 
@@ -134,9 +141,12 @@ describe('SCRUM-77 flagged bookings on the Venues page', () => {
   it('US77-P04: the flagged list is not offered to a non-Venue-Staff user', async () => {
     asRole('EVENT_COORDINATOR');
     mockApi({ bookings: [bookingRow(1, 'Forum', true)] });
+    const user = userEvent.setup();
     render(<Venues />);
+    await user.click(await screen.findByRole('tab', { name: 'Bookings' }));
 
     await screen.findByText('Forum');
+    expect(screen.queryByRole('tab', { name: 'Flagged' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Flagged for review' })).not.toBeInTheDocument();
   });
 });

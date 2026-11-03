@@ -72,6 +72,7 @@ function approveAndStartPlanning() {
   login(COORDINATOR);
   openEvent();
   cy.contains('button', /^Approve$/).click();
+  cy.contains('button', 'Confirm approval').click();
   cy.contains('.badge', 'Approved').should('be.visible');
   cy.contains('button', 'Start planning').click();
   cy.contains('.badge', 'Planning').should('be.visible');

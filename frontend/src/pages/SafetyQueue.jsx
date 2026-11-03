@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { displayError } from '../displayError';
+import AlertBanner from '../components/AlertBanner';
+import { formatDateTime } from '../formatDateTime';
 
 /**
  * Purpose: Safety Officer list of events awaiting a safety check.
@@ -17,7 +20,7 @@ export default function SafetyQueue() {
   useEffect(() => {
     api('/api/events/safety-queue')
       .then((data) => setEvents(data.events || []))
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(displayError(err)));
   }, []);
 
   return (
@@ -31,7 +34,7 @@ export default function SafetyQueue() {
           </p>
         </div>
       </div>
-      {error && <div className="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
       <div className="card">
         <table className="table">
           <thead>
@@ -48,7 +51,7 @@ export default function SafetyQueue() {
                 <td>
                   <Link to={`/app/events/${event.id}/safety-check`}>{event.name}</Link>
                 </td>
-                <td>{event.startAt ? new Date(event.startAt).toLocaleString() : 'TBC'}</td>
+                <td>{event.startAt ? formatDateTime(event.startAt) : 'TBC'}</td>
                 <td>{event.expectedAttendance ?? '—'}</td>
                 <td>{event.status}</td>
               </tr>

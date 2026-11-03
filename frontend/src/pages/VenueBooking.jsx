@@ -1,19 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
-
-// Keep date/time output consistent between the live window and saved requests.
-function formatTime(value) {
-  return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatDate(value) {
-  return new Date(value).toLocaleDateString('en-GB');
-}
-
-function formatSubmittedDate(value) {
-  return new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
+import { displayError } from '../displayError';
+import Button from '../components/Button';
+import AlertBanner from '../components/AlertBanner';
+import { formatDate, formatTime } from '../formatDateTime';
 
 // Keep database status constants readable while retaining their status-specific CSS class.
 function formatStatus(status) {
@@ -124,7 +115,7 @@ function BookingRequest({ booking, event, venues }) {
         {window
           ? `Occupied ${formatTime(window.start)} to ${formatTime(window.end)}`
           : 'Occupied window unavailable'}
-        {booking.created_at && ` · Submitted ${formatSubmittedDate(booking.created_at)}`}
+        {booking.created_at && ` · Submitted ${formatDate(booking.created_at)}`}
       </p>
       {/* Venue suitability is advisory (do not restrict) and isolated/independant to this individual venue request. */}
       <div
@@ -175,7 +166,7 @@ export default function VenueBooking() {
       setVenues(venueResult.venues || []);
       setBookings(bookingResult.bookings || []);
     }).catch((err) => {
-      if (active) setError(err.message);
+      if (active) setError(displayError(err));
     }).finally(() => {
       if (active) setLoading(false);
     });
@@ -257,13 +248,13 @@ export default function VenueBooking() {
           : { venueBookingSubmitted: true },
       });
     } catch (err) {
-      setError(err.message);
+      setError(displayError(err));
       setSubmitting(false);
     }
   }
 
   if (loading) return <p className="muted">Loading venue booking…</p>;
-  if (!event) return <div className="alert" role="alert">{error || 'Event could not be loaded.'}</div>;
+  if (!event) return <AlertBanner>{error || 'Event could not be loaded.'}</AlertBanner>;
 
   return (
     <div className="venue-booking-page">
@@ -274,12 +265,12 @@ export default function VenueBooking() {
       </header>
 
       <Link className="venue-back-link" to={`/app/events/${id}`}>‹ Back to event</Link>
-      {error && <div className="alert" role="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
       {replacementFor && (
-        <p className="alert info">
+        <AlertBanner tone="info">
           The replacement request uses this event’s saved details and schedule. The affected booking and event remain unchanged.
           A new request will be Pending until Venue Staff decide.
-        </p>
+        </AlertBanner>
       )}
 
       <div className="venue-booking-columns">
@@ -396,10 +387,10 @@ export default function VenueBooking() {
               After you submit, the request is sent to Venue Staff with the status Pending.
             </p>
             <div className="actions booking-actions">
-              <Link className="btn secondary" to={`/app/events/${id}`}>Cancel</Link>
-              <button className="btn" disabled={!canSubmit} onClick={submitRequest}>
+              <Button variant="secondary"  to={`/app/events/${id}`}>Cancel</Button>
+              <Button  disabled={!canSubmit} onClick={submitRequest}>
                 {submitting ? 'Submitting…' : replacementFor ? 'Submit replacement request' : 'Submit request'}
-              </button>
+              </Button>
             </div>
           </section>
 

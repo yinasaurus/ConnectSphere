@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import Button from './Button';
+import FieldError from './FieldError';
 import { MIN_REJECTION_REASON_LENGTH } from '../constants';
 
 const REASON_ERROR = `Rejection reason must be at least ${MIN_REJECTION_REASON_LENGTH} characters`;
 
-export default function EventDecisionPanel({ onDecide }) {
-  const [rejecting, setRejecting] = useState(false);
+export default function EventDecisionPanel({ onDecide, extra = null }) {
+  const [mode, setMode] = useState(null);
   const [comment, setComment] = useState('');
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState('');
@@ -12,12 +14,17 @@ export default function EventDecisionPanel({ onDecide }) {
 
   const reasonLength = reason.trim().length;
 
+  function openMode(next) {
+    setMode(next);
+  }
+
   async function decide(decision, text) {
     setSubmitting(true);
     try {
       await onDecide(decision, text);
     } finally {
       setSubmitting(false);
+      setMode(null);
     }
   }
 
@@ -30,59 +37,69 @@ export default function EventDecisionPanel({ onDecide }) {
     decide('REJECT', reason.trim());
   }
 
-  function cancelRejection() {
-    setRejecting(false);
+  function closeForm() {
+    setMode(null);
+    setComment('');
     setReason('');
     setReasonError('');
   }
 
-  if (rejecting) {
-    return (
-      <div className="stack">
-        <label htmlFor="rejection-reason">Rejection reason</label>
-        <textarea
-          id="rejection-reason"
-          value={reason}
-          aria-invalid={Boolean(reasonError)}
-          className={reasonError ? 'field-error' : ''}
-          onChange={(e) => {
-            setReason(e.target.value);
-            if (reasonError) setReasonError('');
-          }}
-          placeholder="Tell the organiser what needs to change before resubmitting"
-        />
-        <p className="muted">
-          {reasonLength} / {MIN_REJECTION_REASON_LENGTH} characters minimum
-        </p>
-        {reasonError && <p className="field-error" role="alert">{reasonError}</p>}
-        <div className="actions">
-          <button className="btn danger" disabled={submitting} onClick={confirmRejection}>
-            {submitting ? 'Rejecting…' : 'Confirm rejection'}
-          </button>
-          <button className="btn ghost" disabled={submitting} onClick={cancelRejection}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="stack">
-      <label htmlFor="approval-comment">Comment for the organiser (optional)</label>
-      <textarea
-        id="approval-comment"
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-      />
-      <div className="actions">
-        <button className="btn" disabled={submitting} onClick={() => decide('APPROVE', comment.trim())}>
-          {submitting ? 'Approving…' : 'Approve'}
-        </button>
-        <button className="btn danger" disabled={submitting} onClick={() => setRejecting(true)}>
-          Reject
-        </button>
-      </div>
+    <div className="review-actions">
+      <Button disabled={submitting} onClick={() => openMode('approve')}>
+        Approve
+      </Button>
+      <Button variant="danger" disabled={submitting} onClick={() => openMode('reject')}>
+        Reject
+      </Button>
+      {extra}
+      {mode === 'approve' && (
+        <div className="review-inline">
+          <label htmlFor="approval-comment">Comment for the organiser (optional)</label>
+          <textarea
+            id="approval-comment"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Add a note for the organiser"
+          />
+          <div className="actions">
+            <Button disabled={submitting} onClick={() => decide('APPROVE', comment.trim())}>
+              {submitting ? 'Approving…' : 'Confirm approval'}
+            </Button>
+            <Button variant="ghost" disabled={submitting} onClick={closeForm}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+      {mode === 'reject' && (
+        <div className="review-inline">
+          <label htmlFor="rejection-reason">Rejection reason</label>
+          <textarea
+            id="rejection-reason"
+            value={reason}
+            aria-invalid={Boolean(reasonError)}
+            className={reasonError ? 'field-error' : ''}
+            onChange={(e) => {
+              setReason(e.target.value);
+              if (reasonError) setReasonError('');
+            }}
+            placeholder="Tell the organiser what needs to change before resubmitting"
+          />
+          <p className="muted">
+            {reasonLength} / {MIN_REJECTION_REASON_LENGTH} characters minimum
+          </p>
+          <FieldError>{reasonError}</FieldError>
+          <div className="actions">
+            <Button variant="danger" disabled={submitting} onClick={confirmRejection}>
+              {submitting ? 'Rejecting…' : 'Confirm rejection'}
+            </Button>
+            <Button variant="ghost" disabled={submitting} onClick={closeForm}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../auth';
+import AlertBanner from '../components/AlertBanner';
+import Button from '../components/Button';
+import FieldError from '../components/FieldError';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD, homePathForRoles } from '../constants';
+import { displayError } from '../displayError';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -22,7 +26,7 @@ function messageForLoginError(err) {
     return 'Invalid email or password.';
   }
   if (err.status === 400) {
-    return err.message || 'Check your email and password and try again.';
+    return displayError(err) || 'Check your email and password and try again.';
   }
   return 'Something went wrong. Please try again.';
 }
@@ -76,7 +80,7 @@ export default function Login() {
       <section className="auth-card">
         <h2>Sign in</h2>
         <p className="muted">Demo accounts all use <code>{DEMO_PASSWORD}</code>.</p>
-        {formError && <div className="alert" role="alert">{formError}</div>}
+        <AlertBanner>{formError}</AlertBanner>
         <form onSubmit={onSubmit} noValidate>
           <label htmlFor="email">Email</label>
           <input
@@ -93,7 +97,7 @@ export default function Login() {
               setFieldErrors((current) => ({ ...current, email: undefined }));
             }}
           />
-          {fieldErrors.email && <p className="field-error">{fieldErrors.email}</p>}
+          <FieldError>{fieldErrors.email}</FieldError>
 
           <label htmlFor="password">Password</label>
           <input
@@ -110,12 +114,12 @@ export default function Login() {
               setFieldErrors((current) => ({ ...current, password: undefined }));
             }}
           />
-          {fieldErrors.password && <p className="field-error">{fieldErrors.password}</p>}
+          <FieldError>{fieldErrors.password}</FieldError>
 
           <div style={{ marginTop: 18 }}>
-            <button className="btn" disabled={busy} type="submit">
+            <Button type="submit" disabled={busy}>
               {busy ? 'Signing in…' : 'Continue'}
-            </button>
+            </Button>
           </div>
         </form>
         <div className="demo-grid">

@@ -21,6 +21,7 @@
 html, body, #root { min-height: 100%; }
 body {
   margin: 0;
+  line-height: 1.5;
   color: var(--ink);
   background:
     radial-gradient(1200px 500px at 10% -10%, #efe4d4 0%, transparent 55%),
@@ -96,6 +97,24 @@ input, select, textarea {
   border-radius: 12px;
   padding: 12px 14px;
 }
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  accent-color: var(--teal);
+  flex: 0 0 auto;
+}
+label:has(> input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  color: var(--ink);
+}
 
 
 textarea { min-height: 90px; resize: vertical; }
@@ -122,6 +141,7 @@ input.field-error, select.field-error, textarea.field-error {
   color: white;
   cursor: pointer;
   font-weight: 600;
+  text-decoration: none;
 }
 .btn.secondary { background: var(--sand); color: var(--ink); }
 .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
@@ -229,6 +249,27 @@ input.field-error, select.field-error, textarea.field-error {
 }
 
 .content { padding: 28px 32px 64px; }
+.content h1 {
+  font-size: 1.9rem;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.content h2 {
+  font-size: 1.35rem;
+  line-height: 1.25;
+  margin: 28px 0 12px;
+}
+.content h3 {
+  font-size: 1.15rem;
+  line-height: 1.3;
+  margin: 0 0 10px;
+}
+.content .grid-3 h2 {
+  font-size: 2.25rem;
+  line-height: 1;
+  margin: 4px 0 0;
+}
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -236,7 +277,8 @@ input.field-error, select.field-error, textarea.field-error {
   gap: 16px;
   margin-bottom: 24px;
 }
-.topbar p { color: var(--muted); margin: 6px 0 0; }
+.topbar p { color: var(--muted); margin: 8px 0 0; max-width: 62ch; }
+.topbar p.single-line { max-width: none; white-space: nowrap; }
 
 .grid-2 { display: grid; grid-template-columns: 1.4fr 0.8fr; gap: 18px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
@@ -249,7 +291,21 @@ input.field-error, select.field-error, textarea.field-error {
   padding: 18px;
   box-shadow: 0 8px 24px rgba(28, 25, 21, 0.04);
 }
-.card h3 { margin: 8px 0 6px; }
+.card h3 { margin: 0 0 10px; }
+.count-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #fbf0cf;
+  color: var(--warn);
+  font-family: Outfit, system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  vertical-align: 2px;
+}
 .venue-card {
   color: inherit;
   text-align: left;
@@ -262,8 +318,8 @@ input.field-error, select.field-error, textarea.field-error {
 .venue-update-card .pill { display: inline-flex; align-items: center; gap: 6px; }
 .venue-update-card .pill input { min-width: 110px; width: auto; padding: 5px 8px; }
 .layout-remove { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 2px; }
-.checkbox-field { display: flex; align-items: center; gap: 8px; color: var(--ink); }
-.checkbox-field input { width: auto; }
+.checkbox-field { display: flex; align-items: center; gap: 8px; color: var(--ink); width: fit-content; max-width: 100%; }
+.checkbox-field input { width: 16px; height: 16px; padding: 0; }
 .venue-update-actions { justify-content: flex-end; border-top: 1px solid var(--line); margin-top: 18px; padding-top: 18px; }
 .venue-save-toast {
   position: fixed;
@@ -297,8 +353,25 @@ input.field-error, select.field-error, textarea.field-error {
 }
 .muted { color: var(--muted); }
 .row-between { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
-.stack { display: flex; flex-direction: column; gap: 10px; }
-.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.stack > label { margin: 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.actions > input,
+.actions > select {
+  flex: 1 1 220px;
+  width: auto;
+  min-width: 0;
+}
+.actions > .checkbox-field {
+  flex: 0 0 auto;
+  margin: 0;
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  white-space: nowrap;
+}
 
 .badge {
   display: inline-flex;
@@ -321,11 +394,47 @@ input.field-error, select.field-error, textarea.field-error {
 .badge.CANCELLED, .badge.REJECTED { background: #f7dcdc; color: var(--bad); }
 .badge.AVAILABLE { background: #d8eee3; color: var(--ok); }
 .badge.UNAVAILABLE { background: #f7dcdc; color: var(--bad); }
+.badge.badge-booking { margin-left: 6px; }
+.badge.badge-booking.PENDING { background: #fbf0cf; color: var(--warn); }
+.badge.badge-booking.APPROVED { background: #d8eee3; color: var(--ok); }
+.badge.badge-booking.TENTATIVE { background: #dbe7fb; color: #1d4ed8; }
+.badge.badge-booking.EXPIRED { background: #eee8df; color: var(--muted); }
 
 .alert.warning { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
 .alert.info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
 .card.attention-card { border-left: 4px solid #f59e0b; background: #fffdf5; }
 .card.review-panel { border-left: 4px solid var(--teal); background: #fbfdfc; }
+.card.review-panel.stack { gap: 20px; }
+.review-panel .btn,
+.review-panel a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.review-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.review-actions .review-inline { flex: 1 0 100%; }
+.review-inline label,
+.review-inline .muted,
+.review-inline .field-error { margin: 0; }
 
 .table {
   width: 100%;
@@ -338,6 +447,16 @@ input.field-error, select.field-error, textarea.field-error {
   vertical-align: top;
 }
 .table th { color: var(--muted); font-weight: 500; font-size: 0.82rem; }
+.venue-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.list-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding-top: 8px;
+}
+.list-filter label { margin: 0; }
+.venue-pager { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
 
 .alert {
   padding: 10px 12px;
@@ -350,29 +469,75 @@ input.field-error, select.field-error, textarea.field-error {
 
 .calendar {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
 }
+.cal-head {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0 4px;
+}
 .cal-cell {
-  min-height: 92px;
+  min-width: 0;
+  min-height: 108px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 8px;
   background: var(--white);
+  overflow: hidden;
 }
-.cal-cell span { color: var(--muted); font-size: 0.8rem; }
+.cal-outside { background: transparent; }
+.cal-outside .cal-day { color: #b3a89c; }
+.cal-day {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 22px;
+}
+.cal-today .cal-day {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--teal);
+  color: white;
+  text-align: center;
+}
 .cal-event {
-  margin-top: 6px;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 0.75rem;
-  padding: 4px 6px;
+  line-height: 1.3;
+  padding: 3px 6px;
   border-radius: 8px;
   background: var(--sand);
+  text-decoration: none;
+}
+.cal-more {
+  border: 0;
+  background: transparent;
+  padding: 0 2px;
+  color: var(--teal);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .comment {
   border-top: 1px solid var(--line);
   padding: 12px 0;
 }
+.comment.notice { padding: 16px 4px 16px 16px; }
 
 /* Use the event page's light ConnectSphere palette for the event-scoped booking workflow. */
 .venue-booking-page h1 { margin: 6px 0; }
@@ -470,6 +635,7 @@ input.field-error, select.field-error, textarea.field-error {
   padding: 16px;
 }
 
+.confirm-modal,
 .conflict-modal-card {
   max-width: 480px;
   width: 100%;
@@ -477,6 +643,18 @@ input.field-error, select.field-error, textarea.field-error {
   border-radius: 20px;
   padding: 24px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+.confirm-modal h3 { margin: 0 0 16px; }
+.confirm-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.confirm-modal-body label,
+.confirm-modal-body .muted,
+.confirm-modal-body .field-error { margin: 0; }
+.confirm-modal .actions { margin-top: 20px; }
+.conflict-modal-card {
   border: 1px solid var(--line);
 }
 
