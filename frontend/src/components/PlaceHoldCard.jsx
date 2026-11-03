@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { displayError } from '../displayError';
+import Button from './Button';
+import AlertBanner from './AlertBanner';
+import { formatDateTime } from '../formatDateTime';
 
 // <input type="datetime-local"> gives local time without a zone; send it as ISO (UTC).
 function toIso(localValue) {
@@ -31,7 +35,7 @@ export default function PlaceHoldCard({ venues, onPlaced }) {
       .then((res) => setEvents((res?.events || []).filter((event) => (
         HOLDABLE_STATUSES.includes(event.status) && event.startAt
       ))))
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(displayError(err)));
   }, []);
 
   const selectedEvent = events.find((event) => String(event.id) === String(eventId));
@@ -54,7 +58,7 @@ export default function PlaceHoldCard({ venues, onPlaced }) {
       setExpiresAt('');
       await onPlaced?.();
     } catch (err) {
-      setError(err.message);
+      setError(displayError(err));
     } finally {
       setSaving(false);
     }
@@ -86,8 +90,8 @@ export default function PlaceHoldCard({ venues, onPlaced }) {
 
         {selectedEvent && (
           <p className="muted" data-testid="hold-event-window">
-            <strong>Held for:</strong> {new Date(selectedEvent.startAt).toLocaleString()}
-            {selectedEvent.endAt ? ` to ${new Date(selectedEvent.endAt).toLocaleString()}` : ''}
+            <strong>Held for:</strong> {formatDateTime(selectedEvent.startAt)}
+            {selectedEvent.endAt ? ` to ${formatDateTime(selectedEvent.endAt)}` : ''}
             {' '}(expiry must be no later than the event start)
           </p>
         )}
@@ -100,12 +104,12 @@ export default function PlaceHoldCard({ venues, onPlaced }) {
           onChange={(e) => setExpiresAt(e.target.value)}
         />
 
-        <button className="btn" type="submit" disabled={saving}>
+        <Button  type="submit" disabled={saving}>
           {saving ? 'Placing hold…' : 'Place hold'}
-        </button>
+        </Button>
       </form>
-      {error && <div className="alert">{error}</div>}
-      {success && <div className="alert success">{success}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
+      {success && <AlertBanner tone="success">{success}</AlertBanner>}
     </div>
   );
 }

@@ -514,6 +514,7 @@ it('US17-F15: a decision refused by the server shows the error to the coordinato
   renderEvent();
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: 'Approve' }));
+  await user.click(screen.getByRole('button', { name: 'Confirm approval' }));
   expect(await screen.findByText('Only event requests under review can be approved or rejected')).toBeInTheDocument();
 });
 

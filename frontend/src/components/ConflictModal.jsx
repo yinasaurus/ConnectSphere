@@ -1,3 +1,5 @@
+import Button from './Button';
+
 /**
  * Purpose: A popup modal displayed when a venue booking conflict is detected.
  * Informs the user of overlapping windows (including setup/turnaround times) and offers guidance.
@@ -40,9 +42,9 @@ export default function ConflictModal({ isOpen, onClose, message, title = 'Venue
         </p>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-          <button className="btn" type="button" onClick={onClose} style={{ minWidth: '100px' }}>
+          <Button  onClick={onClose} style={{ minWidth: '100px' }}>
             Got it
-          </button>
+          </Button>
         </div>
       </div>
     </div>

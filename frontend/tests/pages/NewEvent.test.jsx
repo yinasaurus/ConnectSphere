@@ -140,3 +140,30 @@ describe('SCRUM-14 NewEvent compulsory-field validation on submit', () => {
     expect(await screen.findByText('Event Detail Page')).toBeInTheDocument();
   });
 });
+
+describe('SCRUM-92 event form checkbox', () => {
+  beforeEach(() => {
+    api.mockReset();
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/api/auth/me') return setupAuth();
+      if (path === '/api/events' && !options.method) return Promise.resolve({ events: [] });
+      return Promise.reject(new Error(`Unhandled api call: ${path} ${options.method || 'GET'}`));
+    });
+  });
+
+  /*
+   * AC: SCRUM-92
+   * Scenario: An organiser opens New event request.
+   * Setup: The form is showing.
+   * Expected: Attendee registration required has the tick beside the words. The tick is not stretched across the row.
+   * Type: normal
+   */
+  // SCRUM-92-TC11
+  it('puts Attendee registration required beside its tick', async () => {
+    renderNewEvent();
+    const box = await screen.findByRole('checkbox', { name: 'Attendee registration required' });
+
+    expect(box.closest('label')).toHaveClass('checkbox-field');
+    expect(box.nextSibling.textContent).toMatch(/Attendee registration required/);
+  });
+});

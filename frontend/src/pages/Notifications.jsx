@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import Button from '../components/Button';
 
 /**
  * Purpose: the signed-in user's in-app notices, newest first, with "Mark read" and a link to
@@ -28,13 +29,13 @@ export default function Notifications() {
       <div className="topbar">
         <div>
           <h1>Notifications</h1>
-          <p>In-app first. Email can be added behind the same write path later.</p>
+          <p>Notices for the events you are involved in.</p>
         </div>
       </div>
       <div className="card">
         {items.map((item) => (
           <div 
-            className="comment" 
+            className="comment notice" 
             key={item.id}
             style={{
               borderLeft: !item.read_at ? '4px solid #007bff' : '4px solid transparent',
@@ -47,9 +48,9 @@ export default function Notifications() {
                 {item.title}
               </strong>
               {!item.read_at && (
-                <button className="btn ghost" onClick={() => api(`/api/notifications/${item.id}/read`, { method: 'POST' }).then(reload)}>
+                <Button variant="ghost"  onClick={() => api(`/api/notifications/${item.id}/read`, { method: 'POST' }).then(reload)}>
                   Mark read
-                </button>
+                </Button>
               )}
             </div>
             <p>{item.body}</p>

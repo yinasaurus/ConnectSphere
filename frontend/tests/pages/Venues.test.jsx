@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/auth';
 import Venues from '../../src/pages/Venues';
+import { formatDateTime } from '../../src/formatDateTime';
 
 jest.mock('../../src/api', () => ({
   api: jest.fn(),
@@ -36,6 +37,10 @@ const database = {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+async function openVenueTab(name) {
+  await userEvent.click(await screen.findByRole('tab', { name }));
 }
 
 // Same messages as the real number rules in backend/src/validators/venues.validators.js.
@@ -233,9 +238,9 @@ describe('Venues page inputs', () => {
    * AC:       SCRUM-7 AC4
    * Scenario: Venue Staff clear the capacity box on the Update venue form and save.
    * Setup:    Helix Hall selected. A cleared number box is sent as '', and the mocked API
-   *           answers with the same message the real validator gives for a non-number.
-   * Expected: The form shows which field is wrong and why, and the saved venue name is unchanged,
-   *           because an empty value is not a number and is rejected rather than saved.
+   *           answers with the same messages the real validator gives for a non-number.
+   * Expected: The form shows why the value was rejected, without the raw field name, and the
+   *           saved venue is unchanged, because an empty value is not a number and is rejected.
    * Type:     error
    */
   it('shows the rejection when the capacity box is cleared', async () => {
@@ -248,7 +253,7 @@ describe('Venues page inputs', () => {
     await user.clear(input);
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
-    expect(await screen.findByText('capacity: Capacity must be a number')).toBeInTheDocument();
+    expect(await screen.findByText('Capacity must be a number')).toBeInTheDocument();
     expect(database.venues[0].name).toBe('Helix Hall');
   });
 
@@ -264,8 +269,9 @@ describe('Venues page inputs', () => {
    */
   // SCRUM-59-TC15
   it.each([
-    ['setup minutes', 'Setup (mins)', 'setupMinutes: Setup minutes must be a number'],
-    ['teardown minutes', 'Teardown (mins)', 'teardownMinutes: Teardown minutes must be a number'],
+    ['capacity', 'Capacity', 'Capacity must be a number'],
+    ['setup minutes', 'Setup (mins)', 'Setup minutes must be a number.'],
+    ['teardown minutes', 'Teardown (mins)', 'Teardown minutes must be a number.'],
   ])('shows the rejection when the %s box is cleared', async (_field, label, expectedMessage) => {
     const user = userEvent.setup();
     mockDatabaseApi({ validateUpdate: true });
@@ -291,7 +297,7 @@ describe('Venues page inputs', () => {
     await user.type(hoursInput, 'AbCd');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
-    expect(await screen.findByText('operatingHours: Use HH:MM - HH:MM format')).toBeInTheDocument();
+    expect(await screen.findByText('Use HH:MM - HH:MM format')).toBeInTheDocument();
     expect(database.venues[0].operatingHours).toBe('08:00 - 22:00');
   });
 
@@ -366,7 +372,7 @@ describe('Venues page inputs', () => {
     await user.clear(add.getByLabelText('Capacity'));
     await user.click(add.getByRole('button', { name: 'Save venue' }));
 
-    expect(await screen.findByText('capacity: Capacity is required')).toBeInTheDocument();
+    expect(await screen.findByText('Capacity is required')).toBeInTheDocument();
     // The empty box is sent as '' so the server, not the browser, decides it's invalid.
     expect(api).toHaveBeenCalledWith('/api/venues', expect.objectContaining({
       body: expect.objectContaining({ capacity: '' }),
@@ -521,7 +527,7 @@ describe('Venues page inputs', () => {
    * Scenario: Venue Staff type a negative setup time and save.
    * Setup:    Helix Hall saved at 30/30. The API answers the PATCH the way the real
    *           validator does for -5 (400 with the setupMinutes field and message).
-   * Expected: The form shows which field is wrong, nothing is saved, and reopening the
+   * Expected: The form shows why the value was rejected, nothing is saved, and reopening the
    *           venue shows the saved 30, not the rejected -5.
    * Type:     error
    */
@@ -545,7 +551,7 @@ describe('Venues page inputs', () => {
     await user.type(update.getByLabelText('Setup (mins)'), '-5');
     await user.click(update.getByRole('button', { name: 'Save changes' }));
 
-    expect(await update.findByText('setupMinutes: Setup minutes must be at least 0')).toBeInTheDocument();
+    expect(await update.findByText('Setup minutes must be at least 0')).toBeInTheDocument();
     expect(database.venues[0].setupMinutes).toBe(30);
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -1022,6 +1028,7 @@ describe('SCRUM-19 AC7: Conflict indicators and conflict modal in Venues page', 
     });
 
     render(<Venues />);
+    await openVenueTab('Pending');
 
     expect(await screen.findByText('⚠️ Conflict with Confirmed Gala')).toBeInTheDocument();
     expect(screen.getByText('✓ No conflict')).toBeInTheDocument();
@@ -1064,6 +1071,7 @@ describe('SCRUM-19 AC7: Conflict indicators and conflict modal in Venues page', 
     });
 
     render(<Venues />);
+    await openVenueTab('Pending');
 
     const approveButton = await screen.findByRole('button', { name: 'Approve' });
     await user.click(approveButton);
@@ -1134,6 +1142,7 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
    */
   it('US18-UI01 (AC1+AC2): pending queue shows event, venue, date and time for each booking', async () => {
     renderVenues();
+    await openVenueTab('Pending');
 
     expect(await screen.findByTestId('pending-booking-101')).toBeInTheDocument();
     expect(screen.getByText(/Pending approval/)).toBeInTheDocument();
@@ -1163,6 +1172,7 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
   it('US18-UI02 (AC3+AC5+AC9): approving booking 101 hits decision endpoint for 101 only and keeps 102 pending', async () => {
     const user = userEvent.setup();
     renderVenues();
+    await openVenueTab('Pending');
 
     expect(await screen.findByTestId('pending-booking-101')).toBeInTheDocument();
     expect(screen.getByTestId('pending-booking-102')).toBeInTheDocument();
@@ -1200,6 +1210,7 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
   it('US18-UI03 (AC3+AC4+AC9): rejecting booking 102 sends reason and alternative for 102 only', async () => {
     const user = userEvent.setup();
     renderVenues();
+    await openVenueTab('Pending');
 
     expect(await screen.findByTestId('pending-booking-102')).toBeInTheDocument();
     const card102 = screen.getByTestId('pending-booking-102');
@@ -1254,6 +1265,7 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
     });
     const user = userEvent.setup();
     renderVenues();
+    await openVenueTab('Decided');
 
     const row = await screen.findByTestId('booking-row-201');
     expect(within(row).getByText('Requires review')).toBeInTheDocument();
@@ -1268,8 +1280,9 @@ describe('SCRUM-18 Venue Staff booking queue & independent decisions', () => {
       expect(decisionCalls[0][0]).toBe('/api/venues/bookings/201/decision');
       expect(decisionCalls[0][1].body.approve).toBe(true);
     });
-    expect(screen.getByTestId('pending-booking-101')).toBeInTheDocument();
     expect(within(screen.getByTestId('booking-row-201')).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    await openVenueTab('Pending');
+    expect(screen.getByTestId('pending-booking-101')).toBeInTheDocument();
   });
 });
 
@@ -1304,6 +1317,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
     useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
     mockPage([]);
     render(<Venues />);
+    await openVenueTab('Holds');
     expect(await screen.findByRole('heading', { name: 'Place a hold' })).toBeInTheDocument();
   });
 
@@ -1312,7 +1326,12 @@ describe('SCRUM-75 holds on the Venues page', () => {
     useAuth.mockReturnValue({ hasRole: (...roles) => roles.includes('EVENT_COORDINATOR') });
     mockPage([]);
     render(<Venues />);
-    await screen.findByRole('heading', { name: 'Booking requests' });
+    expect(screen.queryByRole('tab', { name: 'Holds' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Unavailable' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Pending' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Decided' })).not.toBeInTheDocument();
+    await openVenueTab('Bookings');
+    expect(await screen.findByRole('heading', { name: 'Booking requests' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Place a hold' })).not.toBeInTheDocument();
   });
 
@@ -1321,11 +1340,12 @@ describe('SCRUM-75 holds on the Venues page', () => {
     useAuth.mockReturnValue({ hasRole: (role) => role === 'VENUE_STAFF' });
     mockPage([held]);
     render(<Venues />);
+    await openVenueTab('Decided');
     const row = await screen.findByTestId('booking-row-900');
     expect(within(row).getByText('HELD')).toBeInTheDocument();
     expect(within(row).queryByText('APPROVED')).not.toBeInTheDocument();
     expect(within(row).getByTestId('hold-expiry-900')).toHaveTextContent(
-      new Date(held.hold_expires_at).toLocaleString()
+      formatDateTime(held.hold_expires_at)
     );
   });
 });
@@ -1356,10 +1376,11 @@ describe('SCRUM-76 expired holds on the Venues page', () => {
       return {};
     });
     render(<Venues />);
+    await openVenueTab('Decided');
     const row = await screen.findByTestId('booking-row-903');
     expect(within(row).getByText('EXPIRED')).toBeInTheDocument();
     expect(within(row).getByTestId('hold-expiry-903')).toHaveTextContent(
-      `Hold expired ${new Date('2026-11-18T09:00:00.000Z').toLocaleString()}`
+      `Hold expired ${formatDateTime('2026-11-18T09:00:00.000Z')}`
     );
   });
 });

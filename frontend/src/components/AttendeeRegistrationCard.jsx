@@ -1,3 +1,6 @@
+import Button from './Button';
+import { formatDateTime } from '../formatDateTime';
+
 const STATE_TEXT = {
   OPEN: 'Registration is open.',
   FULL: 'This event is full.',
@@ -14,7 +17,7 @@ const MY_STATUS_TEXT = {
 };
 
 function when(value) {
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }
 
 function stateText(status) {
@@ -69,11 +72,11 @@ export default function AttendeeRegistrationCard({ status, registering = false, 
       {(canRegister || hasActiveRegistration) && (
         <div className="actions">
           {canRegister && (
-            <button className="btn" onClick={onRegister} disabled={registering}>
+            <Button  onClick={onRegister} disabled={registering}>
               {registering ? 'Registering...' : 'Register'}
-            </button>
+            </Button>
           )}
-          {hasActiveRegistration && <button className="btn ghost" onClick={onWithdraw}>Withdraw</button>}
+          {hasActiveRegistration && <Button variant="ghost"  onClick={onWithdraw}>Withdraw</Button>}
         </div>
       )}
     </div>

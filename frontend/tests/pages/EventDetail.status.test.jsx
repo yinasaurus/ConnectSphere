@@ -88,6 +88,7 @@ it('US5-F02b: UNDER_REVIEW offers "Approve", which sends APPROVED via the decisi
   mockEvent('UNDER_REVIEW');
   const user = await renderAsCoordinator();
   await user.click(screen.getByRole('button', { name: 'Approve' }));
+  await user.click(screen.getByRole('button', { name: 'Confirm approval' }));
   expect(api).toHaveBeenCalledWith('/api/events/3/decision', {
     method: 'POST', body: { decision: 'APPROVE', reason: '' },
   });

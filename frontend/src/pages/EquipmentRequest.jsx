@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
+import { displayError } from '../displayError';
+import Button from '../components/Button';
+import AlertBanner from '../components/AlertBanner';
+import { formatDateTime as formatSingaporeDateTime } from '../formatDateTime';
 
 const STANDARD_EQUIPMENT_TYPES = [
   'AUDIO',
@@ -13,16 +17,7 @@ const STANDARD_EQUIPMENT_TYPES = [
 ];
 
 function formatDateTime(value) {
-  if (!value) return 'TBC';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return 'TBC';
-  return d.toLocaleString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatSingaporeDateTime(value) || 'TBC';
 }
 
 function toDateTimeLocal(isoString) {
@@ -75,7 +70,7 @@ export default function EquipmentRequest() {
         if (ev?.endAt) setEndAt(toDateTimeLocal(ev.endAt));
       })
       .catch((err) => {
-        if (active) setError(err.message);
+        if (active) setError(displayError(err));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -186,7 +181,7 @@ export default function EquipmentRequest() {
 
       navigate(`/app/events/${id}`, { state: { equipmentRequestSubmitted: true } });
     } catch (err) {
-      setError(err.message);
+      setError(displayError(err));
       setSubmitting(false);
     }
   }
@@ -199,7 +194,7 @@ export default function EquipmentRequest() {
     return (
       <div className="card alert">
         <p>{error || 'Event not found.'}</p>
-        <Link className="btn" to="/app/events">Back to events</Link>
+        <Button  to="/app/events">Back to events</Button>
       </div>
     );
   }
@@ -218,7 +213,7 @@ export default function EquipmentRequest() {
         </div>
       </div>
 
-      {error && <div className="alert" role="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
 
       <div className="grid-2">
         <div className="stack">
@@ -326,17 +321,17 @@ export default function EquipmentRequest() {
             </div>
 
             <div className="actions" style={{ marginTop: 14 }}>
-              <button
+              <Button
                 id="submit-equipment-request"
-                className="btn"
+                
                 type="submit"
                 disabled={submitting}
               >
                 {submitting ? 'Submitting…' : 'Submit Equipment Request'}
-              </button>
-              <Link className="btn ghost" to={`/app/events/${id}`}>
+              </Button>
+              <Button variant="ghost"  to={`/app/events/${id}`}>
                 Cancel
-              </Link>
+              </Button>
             </div>
           </form>
         </div>

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import Button from './Button';
+import { formatDateTime } from '../formatDateTime';
 
 // <input type="datetime-local"> gives local time without a zone; send it as ISO (UTC).
 function toIso(localValue) {
@@ -21,8 +23,8 @@ function EventFacts({ event }) {
     <div className="muted">
       <p>
         <strong>Event:</strong>{' '}
-        {event.startAt ? new Date(event.startAt).toLocaleString() : 'Date not set'}
-        {event.endAt ? ` to ${new Date(event.endAt).toLocaleString()}` : ''}
+        {event.startAt ? formatDateTime(event.startAt) : 'Date not set'}
+        {event.endAt ? ` to ${formatDateTime(event.endAt)}` : ''}
         {' '}(registration must close by the event start)
       </p>
       <p>
@@ -51,8 +53,8 @@ export default function RegistrationSettingsCard({ event, onRun }) {
         <label htmlFor="registration-capacity">Maximum capacity</label>
         <input id="registration-capacity" type="number" min="1" max={event.expectedAttendance || undefined} step="1" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
         <div className="actions">
-          <button
-            className="btn"
+          <Button
+            
             onClick={() => onRun({
               path: `/api/events/${event.id}/registration/enable`,
               method: 'POST',
@@ -60,7 +62,7 @@ export default function RegistrationSettingsCard({ event, onRun }) {
             })}
           >
             Enable registration
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -70,16 +72,16 @@ export default function RegistrationSettingsCard({ event, onRun }) {
     <div className="card stack">
       <h3>Registration</h3>
       <EventFacts event={event} />
-      <p><strong>Opens:</strong> {new Date(event.registrationOpensAt).toLocaleString()}</p>
-      <p><strong>Closes:</strong> {new Date(event.registrationClosesAt).toLocaleString()}</p>
+      <p><strong>Opens:</strong> {formatDateTime(event.registrationOpensAt)}</p>
+      <p><strong>Closes:</strong> {formatDateTime(event.registrationClosesAt)}</p>
       <p><strong>Maximum capacity:</strong> {event.registrationCapacity}</p>
       <label htmlFor="registration-new-closes-at">New close date and time (after registration opens)</label>
       <input id="registration-new-closes-at" type="datetime-local" value={closesAt} onChange={(e) => setClosesAt(e.target.value)} />
       <label htmlFor="registration-new-capacity">New maximum capacity</label>
       <input id="registration-new-capacity" type="number" min="1" max={event.expectedAttendance || undefined} step="1" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
       <div className="actions">
-        <button
-          className="btn secondary"
+        <Button variant="secondary"
+          
           onClick={() => onRun({
             path: `/api/events/${event.id}/registration`,
             method: 'PATCH',
@@ -91,7 +93,7 @@ export default function RegistrationSettingsCard({ event, onRun }) {
           })}
         >
           Save registration changes
-        </button>
+        </Button>
       </div>
     </div>
   );

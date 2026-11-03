@@ -3,6 +3,8 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { INTERNAL_ROLES, LIVE_REFRESH_MS, ROLE_LABELS, ROLES } from '../constants';
 import { api } from '../api';
+import { displayError } from '../displayError';
+import Button from './Button';
 
 /**
  * Purpose: signed-in chrome: nav links limited to roles the session holds, and
@@ -47,7 +49,7 @@ export default function Layout() {
         }
       } catch (error) {
         if (active) {
-          setNotificationError(error.message || 'Unread notification count could not be loaded.');
+          setNotificationError(displayError(error) || 'Unread notification count could not be loaded.');
         }
       }
     }
@@ -112,15 +114,15 @@ export default function Layout() {
               <span className="pill" key={role}>{ROLE_LABELS[role] || role}</span>
             ))}
           </div>
-          <button
-            className="btn ghost"
+          <Button variant="ghost"
+            
             onClick={async () => {
               await logout();
               navigate('/');
             }}
           >
             Sign out
-          </button>
+          </Button>
         </div>
       </aside>
       <main className="content">

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { displayError } from '../displayError';
 import StatusBadge from '../components/StatusBadge';
+import AlertBanner from '../components/AlertBanner';
 
 /**
  * Purpose: Lead-only overview of the Coordinators this Lead assigned and their events.
@@ -17,7 +19,7 @@ export default function AssignmentOverview() {
   useEffect(() => {
     api('/api/assignments/overview')
       .then((data) => setAssignments(data.assignments || []))
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(displayError(err)));
   }, []);
 
   return (
@@ -28,7 +30,7 @@ export default function AssignmentOverview() {
           <p>Coordinators you assigned, and the events you assigned them to. Only an Event Coordinator Lead can open this.</p>
         </div>
       </div>
-      {error && <div className="alert">{error}</div>}
+      {error && <AlertBanner>{error}</AlertBanner>}
       {!error && (
         <div className="card">
           <table className="table">
