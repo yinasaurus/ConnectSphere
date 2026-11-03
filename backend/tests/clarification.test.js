@@ -127,6 +127,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: The transition is accepted without throwing.
      * Type: normal
      */
+    // SCRUM-16-TC02
     it('US16-M01: allows IN_REVIEW -> ACTION_REQUIRED', () => {
       expect(() => assertSubStateTransition(EVENT_SUB_STATE.IN_REVIEW, EVENT_SUB_STATE.ACTION_REQUIRED)).not.toThrow();
     });
@@ -138,6 +139,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: The transition is accepted without throwing.
      * Type: normal
      */
+    // SCRUM-16-TC03
     it('US16-M02: allows ACTION_REQUIRED -> CLARIFICATION_PROVIDED', () => {
       expect(() => assertSubStateTransition(EVENT_SUB_STATE.ACTION_REQUIRED, EVENT_SUB_STATE.CLARIFICATION_PROVIDED)).not.toThrow();
     });
@@ -149,6 +151,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: The transition is accepted without throwing.
      * Type: normal
      */
+    // SCRUM-16-TC04
     it('US16-M03: allows CLARIFICATION_PROVIDED -> ACTION_REQUIRED', () => {
       expect(() => assertSubStateTransition(EVENT_SUB_STATE.CLARIFICATION_PROVIDED, EVENT_SUB_STATE.ACTION_REQUIRED)).not.toThrow();
     });
@@ -160,6 +163,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: The transition is accepted using the default IN_REVIEW sub-state.
      * Type: boundary
      */
+    // SCRUM-16-TC05
     it('US16-M04: defaults from null to IN_REVIEW and allows ACTION_REQUIRED', () => {
       expect(() => assertSubStateTransition(null, EVENT_SUB_STATE.ACTION_REQUIRED)).not.toThrow();
     });
@@ -171,6 +175,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: The invalid transition throws an error.
      * Type: negative
      */
+    // SCRUM-16-TC06
     it('US16-M05: rejects invalid transitions like ACTION_REQUIRED -> ACTION_REQUIRED', () => {
       expect(() => assertSubStateTransition(EVENT_SUB_STATE.ACTION_REQUIRED, EVENT_SUB_STATE.ACTION_REQUIRED)).toThrow();
     });
@@ -185,6 +190,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: Returns 200, sets ACTION_REQUIRED, and notifies the organiser.
      * Type: normal
      */
+    // SCRUM-16-TC07
     it('US16-R01 (AC1+AC2): assigned coordinator requests clarification successfully', async () => {
       seedEvent(1, {
         name: 'Tech Conference',
@@ -219,6 +225,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: Returns 400 VALIDATION_ERROR
      * Type:     boundary / negative
      */
+    // SCRUM-16-TC08
     it('US16-R02 (AC1): returns 400 if remarks are blank or whitespace', async () => {
       seedEvent(1, {
         name: 'Tech Conference',
@@ -244,6 +251,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: Returns 403 FORBIDDEN
      * Type:     negative
      */
+    // SCRUM-16-TC09
     it('US16-R03 (AC1): returns 403 for unassigned coordinator', async () => {
       seedEvent(1, {
         name: 'Tech Conference',
@@ -268,6 +276,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: Returns 409 INVALID_STATUS
      * Type:     negative
      */
+    // SCRUM-16-TC10
     it('US16-R04 (AC1): returns 409 if event is not in UNDER_REVIEW status', async () => {
       seedEvent(1, {
         name: 'Tech Conference',
@@ -294,6 +303,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: Returns 200, sets CLARIFICATION_PROVIDED, and notifies the coordinator.
      * Type: normal
      */
+    // SCRUM-16-TC11
     it('US16-R05 (AC4+AC5): organiser responds with text response successfully', async () => {
       seedEvent(1, {
         name: 'Tech Conference',
@@ -329,6 +339,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: Returns 200, applies allowed event request amendments
      * Type:     normal
      */
+    // SCRUM-16-TC12
     it('US16-R06 (AC4): organiser responds with amendments successfully', async () => {
       seedEvent(1, {
         name: 'Tech Conference',
@@ -359,6 +370,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: Returns 403 FORBIDDEN
      * Type:     negative
      */
+    // SCRUM-16-TC13
     it('US16-R07 (AC5): returns 403 if non-organiser tries to respond', async () => {
       seedEvent(1, {
         name: 'Tech Conference',
@@ -383,6 +395,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: Returns 400 VALIDATION_ERROR
      * Type:     boundary / negative
      */
+    // SCRUM-16-TC14
     it('US16-R08 (AC5): returns 400 for empty response with no amendments', async () => {
       seedEvent(1, {
         name: 'Tech Conference',
@@ -411,6 +424,7 @@ describe('SCRUM-16 Sub-state transitions and clarification', () => {
      * Expected: History contains every request and response note in sequence.
      * Type: normal
      */
+    // SCRUM-16-TC15
     it('US16-H01 (AC5): records and lists every clarification request and response note in order', async () => {
       seedEvent(1, {
         name: 'Tech Conference',

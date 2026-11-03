@@ -100,6 +100,7 @@ describe('SCRUM-47 EquipmentRequest page', () => {
    * Expected: Context card shows event name, date/time window, attendance, organiser equipment notes.
    *           Existing equipment requests for this event are listed.
    */
+  // SCRUM-47-TC16
   it('AC1+AC4: renders event context, timing, and existing requests', async () => {
     mockApi();
     renderComponent();
@@ -121,6 +122,7 @@ describe('SCRUM-47 EquipmentRequest page', () => {
    *           technical specifications, and timing.
    * Expected: Submits POST /api/equipment/requests with all fields and navigates back to event.
    */
+  // SCRUM-47-TC17
   it('AC1–AC4: submits equipment request with catalogue item, quantity, specs, and timing', async () => {
     mockApi();
     const user = userEvent.setup();
@@ -168,6 +170,7 @@ describe('SCRUM-47 EquipmentRequest page', () => {
    * Scenario: Coordinator specifies equipment type without catalogue item.
    * Expected: Submits with equipmentType, quantity, technical specifications.
    */
+  // SCRUM-47-TC18
   it('AC2+AC3: allows creating equipment request with direct equipment type without catalogue item', async () => {
     mockApi();
     const user = userEvent.setup();
@@ -208,6 +211,7 @@ describe('SCRUM-47 EquipmentRequest page', () => {
    * AC: AC2
    * Scenario: Coordinator specifies a custom equipment type under "Other".
    */
+  // SCRUM-47-TC19
   it('AC2: allows specifying custom equipment type name when Other is selected', async () => {
     mockApi();
     const user = userEvent.setup();
@@ -244,6 +248,7 @@ describe('SCRUM-47 EquipmentRequest page', () => {
    * AC: AC2 (Validation)
    * Scenario: Invalid quantity or timing displays error alert.
    */
+  // SCRUM-47-TC20
   it('AC2: validates quantity is at least 1', async () => {
     mockApi();
     const user = userEvent.setup();
@@ -266,6 +271,7 @@ describe('SCRUM-47 EquipmentRequest page', () => {
    * AC: AC4 (Timing Validation)
    * Scenario: Start time is after end time.
    */
+  // SCRUM-47-TC21
   it('AC4: validates start time is before end time', async () => {
     mockApi();
     const user = userEvent.setup();
@@ -291,6 +297,7 @@ describe('SCRUM-47 EquipmentRequest page', () => {
    * Scenario: Coordinator sets Required from before the event starts.
    * Expected: Validation error, no API call.
    */
+  // SCRUM-47-TC22
   it('AC4: rejects Required from before the event start', async () => {
     mockApi();
     const user = userEvent.setup();
@@ -318,6 +325,7 @@ describe('SCRUM-47 EquipmentRequest page', () => {
    * Scenario: Coordinator sets Required until after the event ends.
    * Expected: Validation error, no API call.
    */
+  // SCRUM-47-TC23
   it('AC4: rejects Required until after the event end', async () => {
     mockApi();
     const user = userEvent.setup();
@@ -353,6 +361,7 @@ describe('SCRUM-47 EquipmentRequest page', () => {
    * Scenario: Coordinator picks a catalogue item (Stock: 2) and requests 3.
    * Expected: Validation error naming the item and its stock, no API call.
    */
+  // SCRUM-47-TC24
   it('AC2: rejects quantity above the catalogue stock of the selected item', async () => {
     const LIMITED_CATALOGUE = [
       { id: 5, name: 'Lectern', type: 'STAGING', quantity: 2, status: 'AVAILABLE' },
@@ -388,6 +397,7 @@ describe('SCRUM-47 EquipmentRequest page', () => {
   /*
    * Scenario: API error displays user-facing error message.
    */
+  // SCRUM-47-TC25
   it('displays API error when request creation fails', async () => {
     mockApi();
     api.mockImplementation(async (path, options) => {
@@ -416,6 +426,7 @@ describe('SCRUM-47 EquipmentRequest page', () => {
    * Expected: Shows the "specify a type or choose a catalogue item" validation message (JSX:125-127).
    * This covers the previously-untested branch.
    */
+  // SCRUM-47-TC26
   it('shows error when neither equipment type nor catalogue item is provided', async () => {
     // Override catalogue to empty so no item is pre-selected and default type is cleared
     mockApi({ catalogue: [] });
@@ -448,6 +459,7 @@ describe('SCRUM-47 EquipmentRequest page', () => {
    *           (JSX:98-100).
    * This covers the previously-untested branch.
    */
+  // SCRUM-47-TC27
   it('switches type to Other and populates custom field when catalogue item has non-standard type', async () => {
     const NON_STANDARD_CATALOGUE = [
       { id: 10, name: 'Teleprompter Pro', type: 'TELEPROMPTER', quantity: 2, status: 'AVAILABLE' },

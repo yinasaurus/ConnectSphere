@@ -1176,15 +1176,6 @@ async function expireHolds(now = new Date()) {
   return expired;
 }
 
-/*
- * Purpose: deliver a hold warning within the configured lead window and an expiry notice
- *   after expiry, each at most once for a hold.
- * AC: SCRUM-80 AC1-AC6. Only TENTATIVE holds receive warnings; expiry notices also cover
- *   holds already changed to EXPIRED by the SCRUM-76 expiry job. Confirmed bookings are ignored.
- * Inputs: now (injectable clock) and warningLeadMinutes (defaults to environment config).
- * Output: counts of warnings and expiry notices successfully delivered.
- * Failure: query, claim, or notification database errors propagate to the scheduler.
- */
 /**
  * Purpose: format a UTC date/time string as Singapore Time (SGT, UTC+8) for use in
  * human-readable notification bodies (SCRUM-80).
@@ -1203,6 +1194,15 @@ function toSGT(value) {
   }) + ' SGT';
 }
 
+/*
+ * Purpose: deliver a hold warning within the configured lead window and an expiry notice
+ *   after expiry, each at most once for a hold.
+ * AC: SCRUM-80 AC1-AC6. Only TENTATIVE holds receive warnings; expiry notices also cover
+ *   holds already changed to EXPIRED by the SCRUM-76 expiry job. Confirmed bookings are ignored.
+ * Inputs: now (injectable clock) and warningLeadMinutes (defaults to environment config).
+ * Output: counts of warnings and expiry notices successfully delivered.
+ * Failure: query, claim, or notification database errors propagate to the scheduler.
+ */
 async function processDueHoldNotifications(now = new Date(), warningLeadMinutes = env.holdWarningLeadMinutes) {
   const nowIso = new Date(now).toISOString();
   const warningBoundary = new Date(new Date(now).getTime() + warningLeadMinutes * 60_000).toISOString();
@@ -1284,6 +1284,8 @@ async function processDueHoldNotifications(now = new Date(), warningLeadMinutes 
 
   return { warningsSent, expiryNoticesSent };
 }
+
+
 
 /*
  * Purpose: cancel one venue booking and move its Confirmed event back to Planning when needed.

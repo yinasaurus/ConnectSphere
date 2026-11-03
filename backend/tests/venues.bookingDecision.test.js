@@ -100,6 +100,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: Response 200 contains pending bookings with event_name, venue_name, start_at, end_at, event_start_at, event_end_at
      * Type:     normal
      */
+    // SCRUM-18-TC01
     it('returns pending bookings with event name, venue name, and booking times', async () => {
       mockUser = STAFF;
       fetchMany.mockResolvedValueOnce([
@@ -137,6 +138,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: Request is rejected with 403 Forbidden
      * Type:     error
      */
+    // SCRUM-18-TC02
     it('allows Event Coordinators to view bookings but denies unauthorised roles', async () => {
       mockUser = { id: 99, roles: [ROLES.ATTENDEE] };
       const res = await request(app).get('/api/venues/bookings');
@@ -159,6 +161,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: Booking status is updated to APPROVED, decided_by and decided_at are saved
      * Type:     normal
      */
+    // SCRUM-18-TC03
     it('AC3 & AC5: approves a pending booking and sets status to APPROVED and records decided_at', async () => {
       mockUser = STAFF;
       setupLookups();
@@ -189,6 +192,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: Booking status is updated to REJECTED, reason, alternative, and decided_at are saved
      * Type:     normal
      */
+    // SCRUM-18-TC04
     it('AC4 & AC5: rejects a booking and records reason, alternative suggestion, and decided_at', async () => {
       mockUser = STAFF;
       setupLookups();
@@ -225,6 +229,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: decided_at is recorded as an ISO date string in database update
      * Type:     normal
      */
+    // SCRUM-18-TC05
     it('AC5: sets decided_at timestamp when decision is made', async () => {
       mockUser = STAFF;
       setupLookups();
@@ -249,6 +254,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: Request is rejected with 403 Forbidden
      * Type:     error
      */
+    // SCRUM-18-TC06
     it('denies non-venue-staff users from deciding bookings', async () => {
       mockUser = COORDINATOR;
       const res = await request(app)
@@ -266,6 +272,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: Request returns 404 Not Found
      * Type:     error
      */
+    // SCRUM-18-TC07
     it('returns 404 if booking does not exist', async () => {
       mockUser = STAFF;
       fetchOne.mockResolvedValueOnce(null);
@@ -287,6 +294,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: Response 200 includes booking status, venue name, decision_reason, and alternative_suggestion
      * Type:     normal
      */
+    // SCRUM-18-TC08
     it('returns status, rejection reason and alternative suggestion for event bookings', async () => {
       mockUser = COORDINATOR;
       // getEvent check
@@ -330,6 +338,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: HTTP route returns 409 Conflict with ALREADY_DECIDED error code
      * Type:     error
      */
+    // SCRUM-18-TC09
     it('HTTP route: rejects decision on an already APPROVED booking with 409 conflict', async () => {
       mockUser = STAFF;
       const alreadyApproved = { ...PENDING_BOOKING, status: BOOKING_STATUS.APPROVED };
@@ -351,6 +360,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: HTTP route returns 409 Conflict with ALREADY_DECIDED error code
      * Type:     error
      */
+    // SCRUM-18-TC10
     it('HTTP route: rejects decision on an already REJECTED booking with 409 conflict', async () => {
       mockUser = STAFF;
       const alreadyRejected = { ...PENDING_BOOKING, status: BOOKING_STATUS.REJECTED };
@@ -414,6 +424,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: Deciding booking 101 updates only booking 101 in the database. Loading both bookings and the event after the decision confirms only booking 101 changed.
      * Type:     normal
      */
+    // SCRUM-18-TC11
     it('deciding one booking modifies only that booking; other bookings and the event remain unchanged', async () => {
       const dbBookings = [
         { id: 101, event_id: 50, venue_id: 1, requested_by: 21, status: BOOKING_STATUS.PENDING },
@@ -486,6 +497,7 @@ describe('SCRUM-18 Venue Booking Approval & Review (Service & Controller)', () =
      * Expected: Deciding booking 102 updates only booking 102 to APPROVED without altering booking 101 or the event.
      * Type:     normal
      */
+    // SCRUM-18-TC12
     it('allows subsequent approval of another booking for the same event independently', async () => {
       const dbBookings = [
         { id: 101, event_id: 50, venue_id: 1, requested_by: 21, status: BOOKING_STATUS.REJECTED, decision_reason: 'Booked for graduation' },

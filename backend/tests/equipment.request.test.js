@@ -84,6 +84,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
    * Scenario: Event Coordinator creates an equipment request for an event.
    * Expected: 201 Created with PENDING status, associated with event and user.
    */
+  // SCRUM-47-TC01
   it('AC1: allows Event Coordinator to create an equipment request', async () => {
     fetchOne
       .mockResolvedValueOnce(SAMPLE_EVENT) // find event
@@ -127,6 +128,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
    * Scenario: Non-coordinators attempt to create an equipment request.
    * Expected: 403 Forbidden.
    */
+  // SCRUM-47-TC02
   it.each([
     ['Event Organiser', [ROLES.EVENT_ORGANISER]],
     ['Venue Staff', [ROLES.VENUE_STAFF]],
@@ -152,6 +154,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
    * Scenario: Coordinator requests equipment for missing event or cancelled event.
    * Expected: 404 for missing event, 400 for cancelled/rejected event.
    */
+  // SCRUM-47-TC03
   it('AC1: refuses request when eventId is missing or event does not exist (400/404)', async () => {
     const resMissing = await request(app)
       .post('/api/equipment/requests')
@@ -165,6 +168,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
     expect(resNotFound.status).toBe(404);
   });
 
+  // SCRUM-47-TC04
   it('AC1: refuses request for cancelled or rejected event (400)', async () => {
     fetchOne.mockResolvedValueOnce({ ...SAMPLE_EVENT, status: EVENT_STATUS.CANCELLED });
     const res = await request(app)
@@ -181,6 +185,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
    * Scenario: Request records equipment type and quantity required.
    * Expected: Equipment type and quantity are properly validated and recorded.
    */
+  // SCRUM-47-TC05
   it('AC2: records equipment type directly when no catalogue item is specified', async () => {
     fetchOne.mockResolvedValueOnce(SAMPLE_EVENT);
 
@@ -199,6 +204,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
     expect(res.body.request.quantity).toBe(3);
   });
 
+  // SCRUM-47-TC06
   it('AC2: derives equipment type from catalogue item if not explicitly passed', async () => {
     fetchOne
       .mockResolvedValueOnce(SAMPLE_EVENT)
@@ -217,6 +223,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
     expect(res.body.request.quantity).toBe(4);
   });
 
+  // SCRUM-47-TC07
   it('AC2: rejects invalid quantity (< 1 or non-integer)', async () => {
     fetchOne.mockResolvedValue(SAMPLE_EVENT);
 
@@ -236,6 +243,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
     expect(resString.status).toBe(400);
   });
 
+  // SCRUM-47-TC08
   it('AC2: rejects when neither equipmentType nor equipmentId is provided', async () => {
     fetchOne.mockResolvedValueOnce(SAMPLE_EVENT);
 
@@ -265,6 +273,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
    * Scenario: SAMPLE_MIC has quantity 8; coordinator requests 10.
    * Expected: 400 with a message referencing the item name and stock.
    */
+  // SCRUM-47-TC09
   it('AC2: rejects quantity that exceeds the catalogue stock of the selected item', async () => {
     fetchOne
       .mockResolvedValueOnce(SAMPLE_EVENT)
@@ -283,6 +292,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
    * Scenario: Coordinator specifies technical requirements and specifications.
    * Expected: Recorded accurately in technical_requirements and notes.
    */
+  // SCRUM-47-TC10
   it('AC3: records technical requirements / specifications', async () => {
     fetchOne.mockResolvedValueOnce(SAMPLE_EVENT);
 
@@ -307,6 +317,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
     );
   });
 
+  // SCRUM-47-TC11
   it('AC3: accepts specifications or notes alias for technical requirements', async () => {
     fetchOne.mockResolvedValueOnce(SAMPLE_EVENT);
 
@@ -330,6 +341,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
    * Expected: Defaults to event start_at and end_at if not custom-specified,
    *           or accepts explicit window and validates start before end.
    */
+  // SCRUM-47-TC12
   it('AC4: associates request with the event start_at and end_at by default', async () => {
     fetchOne.mockResolvedValueOnce(SAMPLE_EVENT);
 
@@ -352,6 +364,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
    * Scenario: Coordinator supplies a window fully inside the event (09:00–17:00 UTC).
    * Expected: 201 with the requested times stored.
    */
+  // SCRUM-47-TC13
   it('AC4: supports custom equipment start and end timing within the event window', async () => {
     fetchOne.mockResolvedValueOnce(SAMPLE_EVENT);
 
@@ -379,6 +392,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
    * Scenario: startAt is 08:00 UTC, before event start (09:00 UTC).
    * Expected: 400 VALIDATION_ERROR.
    */
+  // SCRUM-47-TC14
   it('AC4: rejects startAt before the event start', async () => {
     fetchOne.mockResolvedValueOnce(SAMPLE_EVENT);
 
@@ -401,6 +415,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
    * Scenario: endAt is 18:00 UTC, after event end (17:00 UTC).
    * Expected: 400 VALIDATION_ERROR.
    */
+  // SCRUM-47-TC15
   it('AC4: rejects endAt after the event end', async () => {
     fetchOne.mockResolvedValueOnce(SAMPLE_EVENT);
 

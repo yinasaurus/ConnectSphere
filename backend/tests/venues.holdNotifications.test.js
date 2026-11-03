@@ -348,4 +348,67 @@ describe('SCRUM-80 hold expiry notifications', () => {
       50
     );
   });
+
+  /*
+   * AC: SCRUM-80 AC5.
+   * Scenario: A hold has been CANCELLED or REJECTED before expiry.
+   * Setup: Status is CANCELLED for warning query and REJECTED for expiry query.
+   * Expected: No warning or expiry notice is dispatched for cancelled/rejected holds.
+   * Type: boundary.
+   */
+  // SCRUM-80-TC10
+  it('does not send warning or expiry notices for CANCELLED or REJECTED holds', async () => {
+    warningRows = [hold({ status: BOOKING_STATUS.CANCELLED })];
+    expiredRows = [hold({ status: BOOKING_STATUS.REJECTED, hold_expires_at: '2026-11-01T23:59:00.000Z' })];
+
+    const result = await venuesService.processDueHoldNotifications(NOW, 15);
+
+    expect(result).toEqual({ warningsSent: 0, expiryNoticesSent: 0 });
+    expect(notifyUser).not.toHaveBeenCalled();
+  });
+
+  /*
+   * AC: SCRUM-80 AC3 & AC4.
+   * Scenario: Two different tentative holds reach their warning windows simultaneously.
+   * Setup: Hold 701 assigned to Coordinator 21 for Innovation Hall; Hold 702 assigned to Coordinator 22 for Helix Hall.
+   * Expected: Coordinator 21 receives notice for Innovation Hall; Coordinator 22 receives notice for Helix Hall.
+   * Type: normal.
+   */
+  // SCRUM-80-TC11
+  it('delivers distinct warnings to each coordinator when multiple holds expire simultaneously', async () => {
+    warningRows = [
+      hold({ id: 701, event_id: 50, events: { name: 'Tech Symposium', coordinator_id: 21 }, venues: { name: 'Innovation Hall' } }),
+      hold({ id: 702, event_id: 51, events: { name: 'Design Workshop', coordinator_id: 22 }, venues: { name: 'Helix Hall' } }),
+    ];
+
+    const result = await venuesService.processDueHoldNotifications(NOW, 15);
+
+    expect(result).toEqual({ warningsSent: 2, expiryNoticesSent: 0 });
+    expect(notifyUser).toHaveBeenCalledTimes(2);
+    expect(notifyUser).toHaveBeenCalledWith(21, 'HOLD_EXPIRING', expect.any(String), expect.stringContaining('Tech Symposium at Innovation Hall'), 50);
+    expect(notifyUser).toHaveBeenCalledWith(22, 'HOLD_EXPIRING', expect.any(String), expect.stringContaining('Design Workshop at Helix Hall'), 51);
+  });
+
+  /*
+   * AC: SCRUM-80 AC3.
+   * Scenario: An expiring hold has no venue name in the joined relation.
+   * Setup: venues is null on the booking row; venue_id is 8.
+   * Expected: Notice cleanly falls back to 'venue #8' without error.
+   * Type: boundary.
+   */
+  // SCRUM-80-TC12
+  it('falls back to venue ID when venue relation has no name', async () => {
+    warningRows = [hold({ venues: null, venue_id: 8 })];
+
+    const result = await venuesService.processDueHoldNotifications(NOW, 15);
+
+    expect(result.warningsSent).toBe(1);
+    expect(notifyUser).toHaveBeenCalledWith(
+      21,
+      'HOLD_EXPIRING',
+      'Venue hold expiring soon',
+      expect.stringContaining('Tech Symposium at venue #8'),
+      50
+    );
+  });
 });

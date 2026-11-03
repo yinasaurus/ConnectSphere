@@ -24,7 +24,7 @@ function setupAuth() {
   return Promise.resolve({ user: mockUser });
 }
 
-describe('TC-DRAFT-04 (Draft Saving & Resuming)', () => {
+describe('SCRUM-15 Draft Saving & Resuming', () => {
   beforeEach(() => {
     api.mockReset();
     api.mockImplementation((path, options = {}) => {
