@@ -274,6 +274,7 @@ describe('SCRUM-76 expire holds (service rules)', () => {
     expect(gate.ok).toBe(false);
   });
 
+  // SCRUM-76-TC28
   it('US76-B17: a database error is passed on', async () => {
     fetchMany.mockRejectedValueOnce(Object.assign(new Error('db down'), { status: 500 }));
     await expect(venuesService.expireHolds(AFTER)).rejects.toThrow('db down');

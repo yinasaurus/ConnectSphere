@@ -37,6 +37,7 @@ describe('SCRUM-13 venue booking authorisation', () => {
     venuesService.listBookings.mockResolvedValue([]);
   });
 
+  // SCRUM-13-TC41
   it('forbids an Event Organiser from viewing the global booking queue', async () => {
     mockRoles = [ROLES.EVENT_ORGANISER];
 
@@ -47,6 +48,7 @@ describe('SCRUM-13 venue booking authorisation', () => {
     expect(venuesService.listBookings).not.toHaveBeenCalled();
   });
 
+  // SCRUM-13-TC42
   it('allows an Event Coordinator to view the global booking queue', async () => {
     mockRoles = [ROLES.EVENT_COORDINATOR];
 
@@ -56,6 +58,7 @@ describe('SCRUM-13 venue booking authorisation', () => {
     expect(venuesService.listBookings).toHaveBeenCalledTimes(1);
   });
 
+  // SCRUM-13-TC43
   it('allows Venue Staff to view the global booking queue', async () => {
     mockRoles = [ROLES.VENUE_STAFF];
 
@@ -75,6 +78,7 @@ describe('SCRUM-13 venue booking authorisation', () => {
     expect(venuesService.listBookings).toHaveBeenCalledTimes(1);
   });
 
+  // SCRUM-13-TC44
   it('forbids an Attendee from viewing the global booking queue', async () => {
     mockRoles = [ROLES.ATTENDEE];
 

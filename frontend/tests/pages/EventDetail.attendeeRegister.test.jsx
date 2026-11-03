@@ -251,6 +251,7 @@ describe('SCRUM-52 Register button (event page)', () => {
     expect(calls).not.toContainEqual(expect.objectContaining({ path: '/api/events/3/registration-status' }));
   });
 
+  // SCRUM-51-TC26
   it('US51-F09: the page still opens if the registration status cannot be loaded', async () => {
     api.mockImplementation((path) => {
       if (path === '/api/events/3') return Promise.resolve({ event: eventWith() });

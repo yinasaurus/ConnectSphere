@@ -1,7 +1,10 @@
 /**
  * Purpose: the words a screen shows for an error. The check that raised it is unchanged.
- * A sentence that is not in this list is shown exactly as it arrived.
+ * A sentence that is not in this list is shown exactly as it arrived, unless it is a raw
+ * database or API error. Those are replaced so the screen never shows them.
  */
+
+const RAW_DATABASE_OR_API = /postgres|duplicate key|violates |PGRST|JWT |syntax error at|null value in column "|relation "|stack trace|ECONNREFUSED|supabase/i;
 
 const ERROR_TEXT = {
   'Request failed': 'Something went wrong. Please try again.',
@@ -31,7 +34,9 @@ const ERROR_TEXT = {
 export function displayError(input) {
   const text = typeof input === 'string' ? input : (input && input.message) || '';
   if (!text) return '';
-  return ERROR_TEXT[text] || text;
+  if (ERROR_TEXT[text]) return ERROR_TEXT[text];
+  if (RAW_DATABASE_OR_API.test(text)) return 'Something went wrong. Please try again.';
+  return text;
 }
 
 /** Venue forms list one message per field. The field key stays off the screen. */

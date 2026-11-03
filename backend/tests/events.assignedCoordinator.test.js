@@ -208,6 +208,7 @@ describe('SCRUM-29 AC1 over HTTP and AC5 guard', () => {
    * Expected: 403 FORBIDDEN; no reassignment row is written and nobody is notified.
    * Type:     error
    */
+  // SCRUM-29-TC19
   it('US29-E01: a non-owner cannot request a reassignment and nobody is notified', async () => {
     await expect(events.requestCoordinatorChange(otherCoordinator, 3, 5)).rejects.toMatchObject({
       status: 403,
@@ -259,6 +260,7 @@ describe('SCRUM-29 AC4: notified each time, not only the first time', () => {
    * Expected: Two COORDINATOR_ASSIGNED notices, first to Dan and then to Eve.
    * Type:     boundary
    */
+  // SCRUM-29-TC08
   it('US29-N02: reassigning again notifies the incoming Coordinator again', async () => {
     const reassignTo = async (nextId, nextName) => {
       db.fetchOne
@@ -286,6 +288,7 @@ describe('SCRUM-29 AC4: notified each time, not only the first time', () => {
    *           says she is no longer assigned.
    * Type:     normal
    */
+  // SCRUM-29-TC20
   it('US29-N03: one Lead reassignment tells Dan once, the Organiser once and Chloe once', async () => {
     db.fetchOne
       .mockResolvedValueOnce(event)

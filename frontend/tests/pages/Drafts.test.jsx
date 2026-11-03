@@ -36,6 +36,7 @@ describe('SCRUM-15 Draft Saving & Resuming', () => {
     });
   });
 
+  // SCRUM-15-TC09
   it('enters partial details and selects "Save as Draft": persists without validation errors', async () => {
     const user = userEvent.setup();
     let savedPayload = null;
@@ -97,6 +98,11 @@ describe('SCRUM-15 Draft Saving & Resuming', () => {
     expect(await screen.findByText('My Drafts Page')).toBeInTheDocument();
   });
 
+  /*
+   * AC: SCRUM-15 AC2. The saved name and purpose were already checked. Layout, equipment
+   * notes, and the registration choice are the fields this test adds.
+   */
+  // SCRUM-15-TC08
   it('resumes editing a saved draft without triggering validation errors', async () => {
     const draftEvent = {
       id: 123,
@@ -111,7 +117,7 @@ describe('SCRUM-15 Draft Saving & Resuming', () => {
       accessibilityNeeds: null,
       layoutPreference: 'THEATRE',
       venueRequirements: null,
-      equipmentNotes: null,
+      equipmentNotes: '2 projectors',
       specialRequests: null,
       registrationRequired: true,
       clonedFromEventId: null,
@@ -138,6 +144,9 @@ describe('SCRUM-15 Draft Saving & Resuming', () => {
     // Check that the form loads with previous partial data
     expect(await screen.findByDisplayValue('AI Innovation Hackathon')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Quarterly engineering showcase')).toBeInTheDocument();
+    expect(screen.getByLabelText('Layout preference')).toHaveValue('THEATRE');
+    expect(screen.getByLabelText('Equipment notes')).toHaveValue('2 projectors');
+    expect(screen.getByRole('checkbox', { name: 'Attendee registration required' })).toBeChecked();
 
     // Check that NO validation errors are triggered upon loading.
     // The access sentence can still be on screen from the load that runs before the organiser is known. It is not a field error.

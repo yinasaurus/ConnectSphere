@@ -297,6 +297,7 @@ describe('SCRUM-52 register for an event (service rules)', () => {
     expect(db.insertOne).toHaveBeenCalledTimes(1);
   });
 
+  // SCRUM-52-TC27
   it('US52-B14: registering for an event that does not exist returns 404', async () => {
     event = null;
     await expectRefused(service.register(attendee, 3), 404, 'NOT_FOUND');
@@ -332,6 +333,7 @@ describe('SCRUM-52 register route', () => {
     expect(res.body.placesLeft).toBe(39);
   });
 
+  // SCRUM-52-TC28
   it('US52-R02: the register route needs a signed-in user', async () => {
     const res = await request(app).post('/api/events/3/registrations');
     expect(res.status).toBe(401);

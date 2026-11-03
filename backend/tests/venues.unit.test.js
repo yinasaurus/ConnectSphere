@@ -403,6 +403,7 @@ describe('SCRUM-7 venue create and update (service)', () => {
    * Expected: 409 "Duplicate venue layout", and no new layout row is inserted.
    * Type:     error
    */
+  // SCRUM-7-TC49
   it('returns 409 when adding a layout the venue already has', async () => {
     db.fetchOne.mockResolvedValueOnce({ id: 7, name: 'Studio', location: 'A', capacity: 20 });
     db.fetchMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 10, venue_id: 7, layout: 'THEATRE' }]);

@@ -213,6 +213,64 @@ describe('SCRUM-61 cancel one venue booking', () => {
   });
 
   /*
+   * - AC: SCRUM-62 AC9.
+   * - Scenario: The event is in Preparation and this is its only booking that is not already cancelled.
+   * - Setup: One approved booking. The other rows for the event are already cancelled.
+   * - Expected: The booking is cancelled and the event returns to Planning.
+   * - Type: normal.
+   */
+  // SCRUM-62-TC36
+  it('returns the event to Planning when its last remaining booking is cancelled', async () => {
+    const preparationEvent = { ...EVENT_ROW, status: 'PREPARATION' };
+    setupCancellation(APPROVED_BOOKING, preparationEvent);
+    fetchMany.mockResolvedValueOnce([
+      APPROVED_BOOKING,
+      { ...CANCELLED_BOOKING, event_id: preparationEvent.id },
+    ]);
+
+    await venuesService.cancelBooking(COORDINATOR, APPROVED_BOOKING.id);
+
+    expect(updateById).toHaveBeenNthCalledWith(
+      2,
+      'events',
+      preparationEvent.id,
+      expect.objectContaining({ status: 'PLANNING' })
+    );
+    expect(insertOne).toHaveBeenCalledWith(
+      'event_status_history',
+      expect.objectContaining({
+        event_id: preparationEvent.id,
+        from_status: 'PREPARATION',
+        to_status: 'PLANNING',
+      })
+    );
+  });
+
+  /*
+   * - AC: SCRUM-62 AC9.
+   * - Scenario: The event is in Preparation and another booking is still active.
+   * - Setup: The cancelled booking has a pending sibling on the same event.
+   * - Expected: The selected booking is cancelled. The event stays in Preparation.
+   *   A Confirmed event is the separate case, covered by SCRUM-61-TC05.
+   * - Type: boundary.
+   */
+  // SCRUM-62-TC37
+  it('leaves the event status when another booking remains', async () => {
+    const preparationEvent = { ...EVENT_ROW, status: 'PREPARATION' };
+    setupCancellation(APPROVED_BOOKING, preparationEvent);
+    fetchMany.mockResolvedValueOnce([
+      APPROVED_BOOKING,
+      { ...PENDING_BOOKING, id: 15, venue_id: 9 },
+    ]);
+
+    await venuesService.cancelBooking(COORDINATOR, APPROVED_BOOKING.id);
+
+    expect(updateById).toHaveBeenCalledTimes(1);
+    expect(updateById).not.toHaveBeenCalledWith('events', preparationEvent.id, expect.anything());
+    expect(preparationEvent.status).toBe('PREPARATION');
+  });
+
+  /*
    * - AC: SCRUM-61 AC8 edge case.
    * - Scenario: Cancelling a booking on a Planning event leaves the event in Planning.
    * - Setup: The assigned Coordinator cancels an approved booking for a PLANNING event.

@@ -19,7 +19,7 @@ const completeDraft = {
   accessibility_needs: 'None',
 };
 
-describe('SCUM-14 submission validation', () => {
+describe('SCRUM-14 submission validation', () => {
   /*
   * AC:       SCRUM-14 (AC1/AC2: compulsory fields are defined, and validation passes when all are filled)
   * Scenario: A fully-populated draft is checked for missing compulsory fields.

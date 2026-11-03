@@ -343,6 +343,7 @@ describe('SCRUM-63 enable registration (service rules)', () => {
     await expectRejected(service.enableRegistration(assigned, 3), 400, 'MISSING_SETTINGS');
   });
 
+  // SCRUM-63-TC55
   it('US63-B15: enabling on a missing event returns 404 and writes nothing', async () => {
     db.fetchOne.mockResolvedValueOnce(null);
     await expectRejected(service.enableRegistration(assigned, 99, valid()), 404, 'NOT_FOUND');
@@ -520,6 +521,7 @@ describe('SCRUM-63 change registration after it is enabled (service rules)', () 
     );
   });
 
+  // SCRUM-63-TC56
   it('US63-B24: a change with nothing to change is rejected', async () => {
     await expectRejected(service.changeRegistrationSettings(assigned, 3, {}), 400, 'NOTHING_TO_CHANGE');
     await expectRejected(service.changeRegistrationSettings(assigned, 3), 400, 'NOTHING_TO_CHANGE');
@@ -779,6 +781,7 @@ describe('SCRUM-63 registration routes', () => {
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
+  // SCRUM-63-TC57
   it('US63-R03: the enable route needs a signed-in user', async () => {
     const res = await request(app).post('/api/events/3/registration/enable').send(valid());
     expect(res.status).toBe(401);

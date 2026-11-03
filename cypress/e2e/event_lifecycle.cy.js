@@ -116,6 +116,7 @@ describe('event lifecycle', { defaultCommandTimeout: 20000 }, () => {
     cy.viewport(1280, 800);
   });
 
+  // SCRUM-14-TC19
   it('an Organiser submits a request and sees it as Submitted', () => {
     const name = `E2E submit ${Date.now()}`;
     const when = slot(0);
@@ -125,6 +126,7 @@ describe('event lifecycle', { defaultCommandTimeout: 20000 }, () => {
     cy.contains('Unassigned').should('be.visible');
   });
 
+  // SCRUM-71-TC25
   it('a Lead assigns a Coordinator, and that Coordinator can open the event', () => {
     const name = `E2E assign ${Date.now()}`;
     const when = slot(3);
@@ -139,6 +141,7 @@ describe('event lifecycle', { defaultCommandTimeout: 20000 }, () => {
     cy.contains('Coordinator:').parent().should('contain', 'Chloe Lim');
   });
 
+  // SCRUM-18-TC21
   it('Venue Staff approve a booking, and the Coordinator sees the notice', () => {
     const name = `E2E venue ${Date.now()}`;
     const when = slot(6);
@@ -157,6 +160,7 @@ describe('event lifecycle', { defaultCommandTimeout: 20000 }, () => {
     cy.contains('Confirmed venue booking').should('be.visible');
   });
 
+  // SCRUM-56-TC24
   it('a Safety Officer approves the check, and the event reaches Preparation', () => {
     const name = `E2E safety ${Date.now()}`;
     const when = slot(9);

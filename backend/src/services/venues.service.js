@@ -1348,12 +1348,31 @@ async function cancelBooking(user, bookingId) {
   });
 
   /*
-   * Purpose: return a Confirmed event to Planning after losing a venue booking.
-   * AC: SCRUM-61 AC8/AC9 — Confirmed events permit booking cancellation and require re-planning afterward.
+   * Purpose: return the event to Planning after a venue booking is cancelled.
+   * AC: SCRUM-61 AC8 and SCRUM-62 AC8 — a Confirmed event returns to Planning when any booking is cancelled.
+   *     SCRUM-62 AC9 — cancelling the last remaining booking returns any later status to Planning.
+   *     A Planning event is already there, so cancelling its last booking does not write the event again.
    * Inputs: the previously loaded event and cancelled booking. Output: event status is set to PLANNING and the transition is audited.
    * Failure: logs the event-update error and returns an explicit partial-success error; the booking remains cancelled.
    */
-  if (event.status === EVENT_STATUS.CONFIRMED) {
+  const lastBookingReturnsToPlanning = [
+    EVENT_STATUS.APPROVED,
+    EVENT_STATUS.AWAITING_SAFETY_CHECK,
+    EVENT_STATUS.PREPARATION,
+  ].includes(event.status);
+  let lastBooking = false;
+  if (lastBookingReturnsToPlanning) {
+    const others = await fetchMany(
+      supabase.from('venue_bookings').select('id, status').eq('event_id', event.id)
+    );
+    lastBooking = (others || []).every(
+      (row) => String(row.id) === String(bookingId) || row.status === BOOKING_STATUS.CANCELLED
+    );
+  }
+
+  // A Confirmed event returns to Planning when any booking is cancelled (AC8).
+  // Any other status above returns to Planning only when this was the last booking (AC9).
+  if (event.status === EVENT_STATUS.CONFIRMED || lastBooking) {
     try {
       const eventUpdate = await updateById('events', event.id, {
         status: EVENT_STATUS.PLANNING,
@@ -1367,7 +1386,7 @@ async function cancelBooking(user, bookingId) {
       await insertOne('event_status_history', {
         event_id: event.id,
         actor_id: user.id,
-        from_status: EVENT_STATUS.CONFIRMED,
+        from_status: event.status,
         to_status: EVENT_STATUS.PLANNING,
         note: 'Venue booking cancelled',
       });
@@ -1381,7 +1400,7 @@ async function cancelBooking(user, bookingId) {
     }
 
     await writeAudit(user.id, 'EVENT_STATUS_AUTO_CHANGED', 'event', event.id, {
-      from_status: EVENT_STATUS.CONFIRMED,
+      from_status: event.status,
       to_status: EVENT_STATUS.PLANNING,
       reason: 'venue_booking_cancelled',
       cancelled_booking_id: bookingId,

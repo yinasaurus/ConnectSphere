@@ -255,6 +255,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
     expect(res.body.message).toMatch(/equipment type or catalogue item/i);
   });
 
+  // SCRUM-47-TC32
   it('AC2: rejects when equipmentId does not exist in catalogue (404)', async () => {
     fetchOne
       .mockResolvedValueOnce(SAMPLE_EVENT)
@@ -433,6 +434,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
     expect(res.body.message).toMatch(/Required until cannot be after the event ends/i);
   });
 
+  // SCRUM-47-TC33
   it('AC4: rejects invalid custom window where start is not before end', async () => {
     fetchOne.mockResolvedValueOnce(SAMPLE_EVENT);
 
@@ -453,6 +455,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
   /*
    * Scope: Event-scoped endpoint POST /api/events/:id/equipment-requests
    */
+  // SCRUM-47-TC34
   it('allows creating equipment request via POST /api/events/:id/equipment-requests', async () => {
     fetchOne
       .mockResolvedValueOnce(SAMPLE_EVENT)
@@ -474,6 +477,7 @@ describe('SCRUM-47 Create Equipment Request', () => {
   /*
    * Scope: GET /api/equipment/requests returns metadata for Technical Support Staff
    */
+  // SCRUM-47-TC35
   it('GET /api/equipment/requests returns equipment type, technical specs, and event window', async () => {
     fetchMany.mockResolvedValueOnce([
       {

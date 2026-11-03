@@ -122,11 +122,13 @@ describe('SCRUM-51 AttendeeRegistrationCard', () => {
    * Scenario: A Register request is already running.
    * Expected: the button reads "Registering..." and is disabled, so it cannot be pressed twice.
    */
+  // SCRUM-51-TC24
   it('US51-F10: the Register button is disabled while registering', () => {
     render(<AttendeeRegistrationCard status={status()} registering onRegister={jest.fn()} onWithdraw={jest.fn()} />);
     expect(screen.getByRole('button', { name: 'Registering...' })).toBeDisabled();
   });
 
+  // SCRUM-51-TC25
   it('US51-F07: says so when the registration details cannot be loaded', () => {
     renderCard(null);
     expect(screen.getByText('Registration details are not available right now.')).toBeInTheDocument();

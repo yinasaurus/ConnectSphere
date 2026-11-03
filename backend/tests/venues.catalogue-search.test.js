@@ -83,6 +83,7 @@ describe('SCRUM-7 AC3 catalogue changes reflect instantly in search', () => {
    *           refresh or cache step in between.
    * Type:     happy
    */
+  // SCRUM-7-TC46
   it('returns a newly added venue in the next search', async () => {
     await createVenue(staff, {
       name: 'Studio 9',
@@ -106,6 +107,7 @@ describe('SCRUM-7 AC3 catalogue changes reflect instantly in search', () => {
    *           where both found nothing before the update.
    * Type:     happy
    */
+  // SCRUM-7-TC47
   it('reflects an updated capacity and new layout in the next search', async () => {
     expect(await searchVenues({ capacityMin: 250 })).toEqual([]);
     expect(await searchVenues({ layout: 'CLASSROOM' })).toEqual([]);
@@ -124,6 +126,7 @@ describe('SCRUM-7 AC3 catalogue changes reflect instantly in search', () => {
    *           venue that is no longer offered.
    * Type:     edge
    */
+  // SCRUM-7-TC48
   it('drops a deactivated venue from the next search', async () => {
     expect((await searchVenues({ location: 'Level 2' })).map((venue) => venue.id)).toEqual([1]);
 
