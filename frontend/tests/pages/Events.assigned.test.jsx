@@ -39,6 +39,7 @@ function renderEvents(user, entry) {
 const chloe = { id: 2, fullName: 'Chloe Lim', roles: ['EVENT_COORDINATOR'] };
 const jordan = { id: 2, fullName: 'Jordan Ng', roles: ['EVENT_COORDINATOR', 'EVENT_COORDINATOR_LEAD'] };
 const organiser = { id: 1, fullName: 'Aisha Rahman', roles: ['EVENT_ORGANISER'] };
+const gina = { id: 2, fullName: 'Gina Koh', roles: ['EVENT_COORDINATOR', 'VENUE_STAFF'] };
 
 describe('SCRUM-84 coordinator event list', () => {
   /*
@@ -125,6 +126,24 @@ describe('SCRUM-84 coordinator event list', () => {
 
     expect(await screen.findByRole('heading', { name: 'Theirs' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Mine' })).toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-84 AC3
+   * Scenario: A Coordinator who is also Venue staff opens Events.
+   * Setup: One event assigned to them, one with no Coordinator.
+   * Expected: Both events are listed. Assigned to me is shown, off, with the tick beside the words.
+   * Type: boundary
+   */
+  // SCRUM-84-TC17
+  it('AC3: a Coordinator who is also Venue staff sees the full list and Assigned to me', async () => {
+    renderEvents(gina, '/app/events');
+
+    expect(await screen.findByRole('heading', { name: 'Mine' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Theirs' })).toBeInTheDocument();
+    const box = screen.getByRole('checkbox', { name: 'Assigned to me' });
+    expect(box).not.toBeChecked();
+    expect(box.closest('label')).toHaveClass('checkbox-field');
   });
 
   /*
