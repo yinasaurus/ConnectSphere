@@ -11,7 +11,7 @@ The customer briefing says not to sprint the full system before Week 4 names the
 - **Database:** Supabase Postgres via `@supabase/supabase-js` (service role)
 - **CI:** GitHub Actions (lint + backend tests + frontend build)
 
-Login (SCUM-12) reads the `public.users` table, verifies bcrypt hashes, and sets an httpOnly JWT cookie. We are **not** using Supabase Auth for this release, so roles stay in `user_roles`.
+Login (SCRUM-12) reads the `public.users` table, verifies bcrypt hashes, and sets an httpOnly JWT cookie. We are **not** using Supabase Auth for this release, so roles stay in `user_roles`.
 
 Run everything from the repo root with npm workspaces (`frontend/` and `backend/`).
 

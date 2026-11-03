@@ -63,7 +63,8 @@ describe('SCRUM-42 Requires review on EventDetail', () => {
    * Expected: "Requires review" is shown; "Approved" / "PENDING" stay visible.
    * Type:     normal
    */
-  it('AC3: flagged rows show Requires review next to the unchanged status', async () => {
+  // SCRUM-42-TC11
+  it('SCRUM-42 AC2: flagged rows show Requires review next to the unchanged status', async () => {
     mockApi({
       bookings: [{
         id: 7, venue_id: 8, venue_name: 'Helix Hall', status: 'APPROVED', needs_review: true,
@@ -88,7 +89,8 @@ describe('SCRUM-42 Requires review on EventDetail', () => {
    * Expected: Status is shown; "Requires review" is not.
    * Type:     boundary
    */
-  it('AC3: unflagged rows do not show Requires review', async () => {
+  // SCRUM-42-TC12
+  it('SCRUM-42 AC3: unflagged rows do not show Requires review', async () => {
     mockApi({
       bookings: [{ id: 7, venue_id: 8, venue_name: 'Helix Hall', status: 'APPROVED', needs_review: false }],
       requests: [{ id: 12, equipment_id: 4, equipment_name: 'Projector', quantity: 2, status: 'PENDING' }],

@@ -4,6 +4,10 @@
  * (tests in backend/tests/venues.periodBookings.test.js); these tests check the page
  * asks for the right venue and period, shows what comes back, and only asks for the
  * roles AC5 allows.
+ *
+ * A bookings error beside a successful availability result (AC1) and a late reply from an
+ * earlier venue search (AC4) check ways those criteria cannot fail. Those tests sit in
+ * their own describe at the bottom.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -96,6 +100,7 @@ describe('SCRUM-67 Existing bookings list', () => {
    *           and the hold as "Tentative hold" with its expiry.
    * Type:     normal
    */
+  // SCRUM-67-TC16
   it('US67-F01 (AC1+AC2): lists confirmed bookings with occupied windows and holds marked as holds', async () => {
     signInAs('EVENT_COORDINATOR');
     mockApi();
@@ -128,12 +133,14 @@ describe('SCRUM-67 Existing bookings list', () => {
 
   /*
    * AC:       SCRUM-67 AC5 (UI side)
-   * Scenario: Venue Staff and the Event Coordinator Lead check availability.
+   * Scenario: An Event Coordinator, Venue Staff, and the Event Coordinator Lead check availability.
    * Setup:    Signed in with only that role.
-   * Expected: The bookings list is requested and shown.
+   * Expected: The bookings list is requested and shown. The Coordinator is also checked in
+   *           US67-F01, which reads the rows. This test only checks that the list is shown.
    * Type:     normal
    */
-  it.each(['VENUE_STAFF', 'EVENT_COORDINATOR_LEAD'])('US67-F02 (AC5): %s sees the existing bookings', async (role) => {
+  // SCRUM-67-TC17
+  it.each(['EVENT_COORDINATOR', 'VENUE_STAFF', 'EVENT_COORDINATOR_LEAD'])('US67-F02 (AC5): %s sees the existing bookings', async (role) => {
     signInAs(role);
     mockApi();
     await search();
@@ -142,15 +149,16 @@ describe('SCRUM-67 Existing bookings list', () => {
 
   /*
    * AC:       SCRUM-67 AC5 (UI side)
-   * Scenario: Technical Support uses the page. SCRUM-66 lets them see availability, but
-   *           AC5 doesn't name them for bookings.
-   * Setup:    Signed in as Technical Support only.
+   * Scenario: Technical Support or the Safety Officer uses the page. SCRUM-66 lets them see
+   *           availability, but AC5 doesn't name them for bookings.
+   * Setup:    Signed in with only that role.
    * Expected: Availability is shown, but the bookings API is never called and there is no
    *           "Existing bookings" section. The real enforcement is the API's 403 (US67-R02).
    * Type:     error
    */
-  it('US67-F03 (AC5): Technical Support does not request or see the bookings list', async () => {
-    signInAs('TECHNICAL_SUPPORT');
+  // SCRUM-67-TC18
+  it.each(['TECHNICAL_SUPPORT', 'SAFETY_OFFICER'])('US67-F03 (AC5): %s does not request or see the bookings list', async (role) => {
+    signInAs(role);
     mockApi();
     await search();
     expect(await screen.findByRole('heading', { name: 'Helix Hall' })).toBeInTheDocument();
@@ -167,28 +175,12 @@ describe('SCRUM-67 Existing bookings list', () => {
    * Expected: A clear "nothing in this period" message instead of an empty table.
    * Type:     boundary
    */
+  // SCRUM-67-TC19
   it('US67-F04 (AC1): says so when the venue has no bookings in the period', async () => {
     signInAs('EVENT_COORDINATOR');
     mockApi({ bookings: [] });
     await search();
     expect(await screen.findByText('No confirmed bookings or active holds in this period.')).toBeInTheDocument();
-    expect(screen.queryByRole('table', { name: 'Existing bookings' })).not.toBeInTheDocument();
-  });
-
-  /*
-   * AC:       SCRUM-67 (error handling; also how an AC5 refusal reaches the user)
-   * Scenario: The bookings request fails while the availability request succeeds.
-   * Setup:    The bookings API throws "You do not have access to this action".
-   * Expected: The error is shown in the bookings section and the availability result is
-   *           still shown, so one failing call doesn't hide the other.
-   * Type:     error
-   */
-  it('US67-F05: shows a bookings error without hiding the availability result', async () => {
-    signInAs('EVENT_COORDINATOR');
-    mockApi({ bookingsError: 'You do not have access to this action' });
-    await search();
-    expect(await screen.findByText('You do not have access to this action')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Helix Hall' })).toBeInTheDocument();
     expect(screen.queryByRole('table', { name: 'Existing bookings' })).not.toBeInTheDocument();
   });
 
@@ -202,6 +194,7 @@ describe('SCRUM-67 Existing bookings list', () => {
    *           is never hidden. (b) The empty-period message is shown instead of a crash.
    * Type:     error
    */
+  // SCRUM-67-TC20
   it('US67-F07 (AC1): falls back to the event id, and copes with a reply without bookings', async () => {
     signInAs('EVENT_COORDINATOR');
     mockApi({ bookings: [{ ...CONFIRMED, eventId: 60, eventName: null }] });
@@ -214,23 +207,41 @@ describe('SCRUM-67 Existing bookings list', () => {
     expect(await screen.findByText('No confirmed bookings or active holds in this period.')).toBeInTheDocument();
   });
 
+});
+
+describe('SCRUM-67 page guards: bookings error and late replies', () => {
   /*
-   * AC:       SCRUM-67 AC4 (display side)
-   * Scenario: The user checks Helix Hall, then a breakout room, and Helix Hall's bookings
-   *           reply arrives only after the breakout room search.
-   * Setup:    Venue 7's bookings call is held open; venue 8's answers straight away with
-   *           its own booking. Venue 7's late reply is (a) a success with Helix Hall's
-   *           "Leadership Forum" or (b) an error.
-   * Expected: Only the breakout room's booking is shown, with no error, under the heading
-   *           "Existing bookings at Breakout Room". A late reply
-   *           from the earlier search must not put another venue's bookings (or its
-   *           error) under the venue being viewed.
-   * Type:     conflict
+   * AC: SCRUM-67 AC1 (cannot fail this way: a failed bookings call looks like no bookings, or
+   *     hides the availability result). The user is an Event Coordinator, who AC5 allows.
+   * Scenario: The bookings request fails while the availability request succeeds.
+   * Setup: The bookings API throws "You do not have access to this action". The API is mocked.
+   * Expected: The error is shown and the availability heading is still shown. No bookings table.
+   * Type: error
    */
+  // SCRUM-67-TC26
+  it('US67-F05: shows a bookings error without hiding the availability result', async () => {
+    signInAs('EVENT_COORDINATOR');
+    mockApi({ bookingsError: 'You do not have access to this action' });
+    await search();
+    expect(await screen.findByText('You do not have access to this action')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Helix Hall' })).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Existing bookings' })).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC: SCRUM-67 AC4 (cannot fail this way: one venue's bookings are shown under another
+   *     venue's heading).
+   * Scenario: The user checks Helix Hall, then a breakout room, and Helix Hall's reply arrives late.
+   * Setup: Venue 7's bookings call is held open. Venue 8 answers with its own booking.
+   *        Venue 7's late reply either succeeds with Leadership Forum or fails. The API is mocked.
+   * Expected: Only the breakout room's booking is shown, under "Existing bookings at Breakout Room".
+   * Type: conflict
+   */
+  // SCRUM-67-TC27
   it.each([
     ['succeeds', (late) => late.resolve({ venue: { id: 7, name: 'Helix Hall' }, bookings: [CONFIRMED] })],
     ['fails', (late) => late.reject(new Error('Venue 7 bookings failed'))],
-  ])('US67-F06 (AC4): a late reply from an earlier search that %s is ignored', async (_label, settleLate) => {
+  ])('US67-F06: a late reply from an earlier search that %s is ignored', async (_label, settleLate) => {
     signInAs('EVENT_COORDINATOR');
     const late = {};
     const lateReply = new Promise((resolve, reject) => Object.assign(late, { resolve, reject }));
@@ -254,7 +265,6 @@ describe('SCRUM-67 Existing bookings list', () => {
       settleLate(late);
       await lateReply.catch(() => {});
     });
-    // Venue 7's booking and error never appear under the breakout room.
     expect(screen.queryByText('Leadership Forum')).not.toBeInTheDocument();
     expect(screen.queryByText('Venue 7 bookings failed')).not.toBeInTheDocument();
     expect(screen.getByText('Board offsite')).toBeInTheDocument();

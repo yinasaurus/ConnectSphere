@@ -148,6 +148,7 @@ describe('TC-DRAFT-04 (Draft Saving & Resuming)', () => {
    * Expected: Copy says submit goes to the unassigned queue, and does not promise auto-assignment.
    * Type: normal
    */
+  // SCRUM-28-TC20
   it('tells the organiser that submit queues the request instead of auto-assigning a Coordinator', async () => {
     render(
       <MemoryRouter initialEntries={['/app/events/new']}>

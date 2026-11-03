@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
-import { LIVE_REFRESH_MS, ROLE_LABELS, ROLES } from '../constants';
+import { INTERNAL_ROLES, LIVE_REFRESH_MS, ROLE_LABELS, ROLES } from '../constants';
 import { api } from '../api';
 
 /**
@@ -85,7 +85,7 @@ export default function Layout() {
             <NavLink to="/app/venues" end>Venues</NavLink>
           )}
           {/* SCRUM-66 AC6: same roles as the route in App.jsx. */}
-          {hasRole(ROLES.EVENT_COORDINATOR, ROLES.VENUE_STAFF, ROLES.TECHNICAL_SUPPORT) && (
+          {hasRole(...INTERNAL_ROLES) && (
             <NavLink to="/app/venues/availability">Venue availability</NavLink>
           )}
           {hasRole(ROLES.EVENT_COORDINATOR, ROLES.TECHNICAL_SUPPORT) && (

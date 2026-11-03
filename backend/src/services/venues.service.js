@@ -30,7 +30,7 @@ function mapVenue(row) {
   };
 }
 
-// SCUM-7 AC4: same rule as the route validator, repeated so the service is safe on its own.
+// SCRUM-7 AC4: same rule as the route validator, repeated so the service is safe on its own.
 function isValidCapacity(value) {
   return Number.isInteger(value) && value >= 1;
 }
@@ -493,7 +493,7 @@ async function createVenue(user, payload) {
     throw httpError(403, 'Only venue staff can manage the catalogue', 'FORBIDDEN');
   }
   if (!payload.name) throw httpError(400, 'Venue name is required', 'VALIDATION_ERROR');
-  // SCUM-7 AC4: a venue without a capacity is incomplete, so it is never saved.
+  // SCRUM-7 AC4: a venue without a capacity is incomplete, so it is never saved.
   if (!isValidCapacity(payload.capacity)) {
     throw httpError(400, 'Venue capacity must be a whole number of at least 1', 'VALIDATION_ERROR');
   }

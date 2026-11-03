@@ -131,6 +131,7 @@ describe('SCRUM-54 role identification after login', () => {
    * Expected: The login payload identifies them as a Lead (roles includes EVENT_COORDINATOR_LEAD).
    * Type: normal
    */
+  // SCRUM-54-TC01
   it('identifies an Event Coordinator Lead as a Lead after a valid login', async () => {
     const res = await login('lead@connectsphere.sg');
     expect(res.status).toBe(200);
@@ -145,6 +146,7 @@ describe('SCRUM-54 role identification after login', () => {
    * Expected: The login payload identifies them as a Safety Officer.
    * Type: normal
    */
+  // SCRUM-54-TC02
   it('identifies a Safety Officer as a Safety Officer after a valid login', async () => {
     const res = await login('safety@connectsphere.sg');
     expect(res.status).toBe(200);
@@ -159,6 +161,7 @@ describe('SCRUM-54 role identification after login', () => {
    * Expected: Both roles are present in the same session payload so both functions can be used.
    * Type: normal
    */
+  // SCRUM-54-TC03
   it('returns every held role in the same session for a Coordinator + Lead account', async () => {
     const res = await login('leadcoord@connectsphere.sg');
     expect(res.status).toBe(200);
@@ -172,6 +175,7 @@ describe('SCRUM-54 role identification after login', () => {
    * Expected: They are not identified as a Lead or Safety Officer.
    * Type: boundary
    */
+  // SCRUM-54-TC04
   it('does not identify a Coordinator-only account as Lead or Safety Officer', async () => {
     const res = await login('coordinator@connectsphere.sg');
     expect(res.status).toBe(200);

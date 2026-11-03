@@ -7,7 +7,7 @@ const db = require('../src/config/db');
 const service = require('../src/services/events.service');
 const { ROLES } = require('../src/constants/roles');
 
-describe('SCUM-13 event ownership and assigned coordinator permissions', () => {
+describe('SCRUM-13 event ownership and assigned coordinator permissions', () => {
   const organiser = { id: 1, organisationId: 10, roles: [ROLES.EVENT_ORGANISER] };
   const coordinator = { id: 2, roles: [ROLES.EVENT_COORDINATOR] };
   let event;

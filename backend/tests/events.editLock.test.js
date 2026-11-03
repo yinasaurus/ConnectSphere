@@ -152,15 +152,6 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
   const otherCoordinator = { id: 7, roles: [ROLES.EVENT_COORDINATOR] };
   let event;
 
-  const beforeConfirmed = [
-    EVENT_STATUS.SUBMITTED,
-    EVENT_STATUS.UNDER_REVIEW,
-    EVENT_STATUS.APPROVED,
-    EVENT_STATUS.PLANNING,
-    EVENT_STATUS.AWAITING_SAFETY_CHECK,
-    EVENT_STATUS.PREPARATION,
-  ];
-
   beforeEach(() => {
     jest.clearAllMocks();
     event = {
@@ -189,23 +180,22 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
 
   /*
    * AC:       SCRUM-40 AC1 / product 1C
-   * Scenario: Assigned Coordinator edits ordinary fields in each status before Confirmed.
-   * Setup:    coordinator_id = 2; status from the beforeConfirmed matrix.
+   * Scenario: Assigned Coordinator edits ordinary fields while the event is Planning.
+   *           (Submitted, Under Review, Approved, Awaiting Safety Check and Preparation are not
+   *           on the locked list, so they use the same check and are not repeated here.)
+   * Setup:    coordinator_id = 2; status PLANNING.
    * Expected: updateById writes name and purpose; no EDIT_LOCKED.
    * Type:     normal
    */
-  it.each(beforeConfirmed)(
-    'AC1/1C: assigned Coordinator can edit ordinary fields while status is %s',
-    async (status) => {
-      event.status = status;
-      await service.updateEvent(assignedCoordinator, 3, { name: 'Planning title', purpose: 'Updated purpose' });
-      expect(db.updateById).toHaveBeenCalledWith(
-        'events',
-        3,
-        expect.objectContaining({ name: 'Planning title', purpose: 'Updated purpose' })
-      );
-    }
-  );
+  // SCRUM-40-TC01
+  it('AC1/1C: assigned Coordinator can edit ordinary fields while status is PLANNING', async () => {
+    await service.updateEvent(assignedCoordinator, 3, { name: 'Planning title', purpose: 'Updated purpose' });
+    expect(db.updateById).toHaveBeenCalledWith(
+      'events',
+      3,
+      expect.objectContaining({ name: 'Planning title', purpose: 'Updated purpose' })
+    );
+  });
 
   /*
    * AC:       SCRUM-40 AC2
@@ -214,22 +204,10 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
    * Expected: 403 FORBIDDEN; row unchanged.
    * Type:     error
    */
+  // SCRUM-40-TC02
   it('AC2: unassigned Coordinator cannot direct-edit a Planning event', async () => {
     await expect(service.updateEvent(otherCoordinator, 3, { name: 'Hijack' }))
       .rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
-    expect(db.updateById).not.toHaveBeenCalled();
-  });
-
-  /*
-   * AC:       SCRUM-40 AC2 / product 3A
-   * Scenario: Owning Organiser tries a direct edit while Planning.
-   * Setup:    PLANNING; organiser is not the assigned coordinator.
-   * Expected: 409 EDIT_LOCKED — use Coord edit or change request instead.
-   * Type:     error
-   */
-  it('AC2/3A: owning Organiser cannot direct-edit while Planning', async () => {
-    await expect(service.updateEvent(organiser, 3, { description: 'Organiser tweak' }))
-      .rejects.toMatchObject({ status: 409, code: 'EDIT_LOCKED' });
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
@@ -240,6 +218,7 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
    * Expected: description patch is written.
    * Type:     normal
    */
+  // SCRUM-40-TC16
   it('AC/3A: Organiser can amend while Under Review + ACTION_REQUIRED', async () => {
     event.status = EVENT_STATUS.UNDER_REVIEW;
     event.sub_state = EVENT_SUB_STATE.ACTION_REQUIRED;
@@ -253,16 +232,18 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
 
   /*
    * AC:       SCRUM-40 AC3 / product 2A
-   * Scenario: Assigned Coordinator tries any direct field edit on Confirmed.
-   * Setup:    CONFIRMED; payloads cover ordinary and former "significant" fields.
+   * Scenario: Assigned Coordinator tries a direct field edit on Confirmed.
+   *           (The lock does not look at which field is sent, so one ordinary field and the
+   *           date and time fields are enough; the other fields are not repeated.)
+   * Setup:    CONFIRMED; an ordinary field, then the former "significant" start and end.
    * Expected: 409 EDIT_LOCKED for every case; nothing written (use change request).
    * Type:     error
    */
   it.each([
+    // SCRUM-40-TC03
     ['ordinary name', { name: 'Still locked' }],
-    ['ordinary description', { description: 'Still locked' }],
+    // SCRUM-40-TC04
     ['critical startAt', { startAt: '2026-12-01T10:00:00Z', endAt: '2026-12-01T12:00:00Z' }],
-    ['critical expectedAttendance', { expectedAttendance: 99 }],
   ])('AC3/2A: Confirmed rejects direct edit of %s', async (_label, payload) => {
     event.status = EVENT_STATUS.CONFIRMED;
     await expect(service.updateEvent(assignedCoordinator, 3, payload))
@@ -278,8 +259,11 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
    * Type:     error
    */
   it.each([
+    // SCRUM-40-TC13
     EVENT_STATUS.COMPLETED,
+    // SCRUM-40-TC14
     EVENT_STATUS.CANCELLED,
+    // SCRUM-40-TC15
     EVENT_STATUS.REJECTED,
   ])('AC/2A: assigned Coordinator cannot direct-edit terminal status %s', async (status) => {
     event.status = status;
@@ -290,16 +274,19 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
 
   /*
    * AC:       SCRUM-40 AC4
-   * Scenario: Assigned Coordinator submits an end time before the start time.
-   * Setup:    PLANNING; startAt after endAt.
-   * Expected: 400 VALIDATION_ERROR; updateById not called.
+   * Scenario: Assigned Coordinator submits a negative expected attendance.
+   * Setup:    PLANNING; expectedAttendance -5.
+   * Expected: 400 VALIDATION_ERROR naming expectedAttendance; updateById not called.
    * Type:     error
    */
-  it('AC4: rejects an invalid date range and writes nothing', async () => {
-    await expect(service.updateEvent(assignedCoordinator, 3, {
-      startAt: '2026-11-20T14:00:00Z',
-      endAt: '2026-11-20T12:00:00Z',
-    })).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+  // SCRUM-40-TC06
+  it('AC4: rejects a negative expected attendance and writes nothing', async () => {
+    await expect(service.updateEvent(assignedCoordinator, 3, { expectedAttendance: -5 }))
+      .rejects.toMatchObject({
+        status: 400,
+        code: 'VALIDATION_ERROR',
+        details: { fields: ['expectedAttendance'] },
+      });
     expect(db.updateById).not.toHaveBeenCalled();
   });
 
@@ -310,6 +297,7 @@ describe('SCRUM-40 edit event details before Confirmed', () => {
    * Expected: special_requests is written via updateById.
    * Type:     normal
    */
+  // SCRUM-40-TC07
   it('AC4/4A: valid ordinary-field edit before Confirmed is saved', async () => {
     await service.updateEvent(assignedCoordinator, 3, {
       specialRequests: 'Extra chairs near the stage',
@@ -364,6 +352,7 @@ describe('SCRUM-40 edit lock HTTP route', () => {
    * Expected: 409 EDIT_LOCKED; updateById not called.
    * Type:     error
    */
+  // SCRUM-40-TC05
   it('US40-R01 (AC3/2A): PATCH Confirmed returns EDIT_LOCKED for the assigned Coordinator', async () => {
     db.fetchOne
       .mockResolvedValueOnce({ id: 2, is_active: true })

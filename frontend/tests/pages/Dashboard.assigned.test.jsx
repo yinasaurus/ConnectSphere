@@ -10,8 +10,8 @@ import { useAuth } from '../../src/auth';
 jest.mock('../../src/api', () => ({ api: jest.fn() }));
 jest.mock('../../src/auth', () => ({ useAuth: jest.fn() }));
 
-function renderDashboard(roles) {
-  api.mockImplementation(async (path) => (path === '/api/events' ? { events: [] } : { unread: 0 }));
+function renderDashboard(roles, events = []) {
+  api.mockImplementation(async (path) => (path === '/api/events' ? { events } : { unread: 0 }));
   useAuth.mockReturnValue({
     user: { id: 2, fullName: 'Chloe Lim', roles },
     hasRole: (...wanted) => wanted.some((role) => roles.includes(role)),
@@ -29,6 +29,7 @@ function renderDashboard(roles) {
  * Expected: View all goes to Events with Assigned to me already on.
  * Type: normal
  */
+// SCRUM-83-TC01
 it('sends a Coordinator View all to the assigned filter', async () => {
   renderDashboard(['EVENT_COORDINATOR']);
 
@@ -41,8 +42,27 @@ it('sends a Coordinator View all to the assigned filter', async () => {
  * Expected: View all still opens the full Events list.
  * Type: boundary
  */
+// SCRUM-83-TC02
 it('sends an Organiser View all to the full events list', async () => {
   renderDashboard(['EVENT_ORGANISER']);
 
   expect(await screen.findByRole('link', { name: 'View all' })).toHaveAttribute('href', '/app/events');
+});
+
+/*
+ * Scenario: A Coordinator has nine events assigned to them.
+ * Setup: Events 1 to 9, all with coordinatorId 2, returned in start order.
+ * Expected: Upcoming lists the first 8. The ninth is left for View all.
+ * Type: boundary
+ */
+// SCRUM-83-TC07
+it('lists at most 8 assigned events in Upcoming', async () => {
+  const nine = Array.from({ length: 9 }, (_, index) => ({
+    id: index + 1, name: `Assigned ${index + 1}`, status: 'PLANNING', coordinatorId: 2,
+  }));
+  renderDashboard(['EVENT_COORDINATOR'], nine);
+
+  expect(await screen.findByRole('link', { name: 'Assigned 8' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Assigned 1' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Assigned 9' })).not.toBeInTheDocument();
 });

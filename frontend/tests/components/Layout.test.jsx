@@ -30,6 +30,7 @@ describe('SCRUM-54 layout role recognition and nav limits', () => {
    * Expected: The header shows the Lead label, and Lead-only nav is present.
    * Type: normal
    */
+  // SCRUM-54-TC27
   it('shows the Lead label and Lead-only links after a Lead logs in', () => {
     mount(['EVENT_COORDINATOR_LEAD']);
     expect(screen.getByText('Lead')).toBeInTheDocument();
@@ -44,6 +45,7 @@ describe('SCRUM-54 layout role recognition and nav limits', () => {
    * Expected: The header shows "Safety Officer". They do not get Lead-only nav.
    * Type: normal
    */
+  // SCRUM-54-TC28
   it('shows the Safety Officer label and not Lead-only links', () => {
     mount(['SAFETY_OFFICER']);
     expect(screen.getByText('Safety Officer')).toBeInTheDocument();
@@ -60,6 +62,7 @@ describe('SCRUM-54 layout role recognition and nav limits', () => {
    * Expected: Both role pills show, and they get Coordinator drafts plus Lead queue links.
    * Type: normal
    */
+  // SCRUM-54-TC29
   it('shows functions of every held role for a Coordinator + Lead hybrid', () => {
     mount(['EVENT_COORDINATOR', 'EVENT_COORDINATOR_LEAD']);
     expect(screen.getByText('Event Coordinator')).toBeInTheDocument();
@@ -76,6 +79,7 @@ describe('SCRUM-54 layout role recognition and nav limits', () => {
    * Expected: Unassigned queue and Assignments links are not offered.
    * Type: error
    */
+  // SCRUM-54-TC30
   it('hides the unassigned queue and assignment overview from a Coordinator who is not a Lead', () => {
     mount(['EVENT_COORDINATOR']);
     expect(screen.queryByRole('link', { name: 'Unassigned queue' })).not.toBeInTheDocument();
@@ -92,6 +96,7 @@ describe('SCRUM-82 Sign out stays in the sidebar', () => {
    * Expected: A Sign out button is present.
    * Type:     normal
    */
+  // SCRUM-82-TC01
   it('shows Sign out for an Event Coordinator', () => {
     mount(['EVENT_COORDINATOR']);
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
@@ -104,6 +109,7 @@ describe('SCRUM-82 Sign out stays in the sidebar', () => {
    * Expected: Sign out is still present.
    * Type:     boundary
    */
+  // SCRUM-82-TC02
   it('shows Sign out for a Coordinator + Lead hybrid', () => {
     mount(['EVENT_COORDINATOR', 'EVENT_COORDINATOR_LEAD']);
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
