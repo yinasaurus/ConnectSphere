@@ -6,6 +6,7 @@ import { useAuth } from '../../src/auth';
 import Layout from '../../src/components/Layout';
 import EventDetail from '../../src/pages/EventDetail';
 import UnassignedQueue from '../../src/pages/UnassignedQueue';
+import { formatDateTime } from '../../src/formatDateTime';
 
 jest.mock('../../src/api', () => ({
   api: jest.fn(),
@@ -119,10 +120,10 @@ describe('SCRUM-65 Unassigned queue (Lead)', () => {
     expect(screen.getByText('Boardroom')).toBeInTheDocument();
     expect(screen.getByText('HDMI cable')).toBeInTheDocument();
     expect(screen.getByText(
-      `${new Date(queuedEvent.startAt).toLocaleString()} – ${new Date(queuedEvent.endAt).toLocaleString()}`
+      `${formatDateTime(queuedEvent.startAt)} – ${formatDateTime(queuedEvent.endAt)}`
     )).toBeInTheDocument();
     expect(screen.getByText(
-      `${new Date('2026-11-02T02:00:00.000Z').toLocaleString()} – ${new Date('2026-11-02T04:00:00.000Z').toLocaleString()}`
+      `${formatDateTime('2026-11-02T02:00:00.000Z')} – ${formatDateTime('2026-11-02T04:00:00.000Z')}`
     )).toBeInTheDocument();
     expect(screen.getByText(/date\/time/i)).toBeInTheDocument();
     expect(api).toHaveBeenCalledWith('/api/events/unassigned-queue');
@@ -345,6 +346,6 @@ describe('SCRUM-65 Unassigned queue (Lead)', () => {
 
     await screen.findByText('Town Hall');
     expect(screen.queryByText('TBC')).not.toBeInTheDocument();
-    expect(screen.getByText(new Date(queuedEvent.startAt).toLocaleString())).toBeInTheDocument();
+    expect(screen.getByText(formatDateTime(queuedEvent.startAt))).toBeInTheDocument();
   });
 });

@@ -5,6 +5,7 @@ import { useAuth } from '../auth';
 import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
 import Button from '../components/Button';
+import { formatDateTime } from '../formatDateTime';
 
 export default function Dashboard() {
   const { user, hasRole } = useAuth();
@@ -133,7 +134,7 @@ export default function Dashboard() {
               <tr key={event.id}>
                 <td><Link to={`/app/events/${event.id}`}>{event.name}</Link></td>
                 <td><StatusBadge status={event.status} subState={event.subState} /></td>
-                <td>{event.startAt ? new Date(event.startAt).toLocaleString() : 'TBC'}</td>
+                <td>{event.startAt ? formatDateTime(event.startAt) : 'TBC'}</td>
                 {/* SCRUM-29 AC1: assigned Coordinator's name, or "Unassigned" until the Lead assigns. */}
                 <td>{event.coordinatorName || 'Unassigned'}</td>
               </tr>

@@ -4,19 +4,7 @@ import { api } from '../api';
 import { displayError } from '../displayError';
 import Button from '../components/Button';
 import AlertBanner from '../components/AlertBanner';
-
-// Keep date/time output consistent between the live window and saved requests.
-function formatTime(value) {
-  return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatDate(value) {
-  return new Date(value).toLocaleDateString('en-GB');
-}
-
-function formatSubmittedDate(value) {
-  return new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
+import { formatDate, formatTime } from '../formatDateTime';
 
 // Keep database status constants readable while retaining their status-specific CSS class.
 function formatStatus(status) {
@@ -127,7 +115,7 @@ function BookingRequest({ booking, event, venues }) {
         {window
           ? `Occupied ${formatTime(window.start)} to ${formatTime(window.end)}`
           : 'Occupied window unavailable'}
-        {booking.created_at && ` · Submitted ${formatSubmittedDate(booking.created_at)}`}
+        {booking.created_at && ` · Submitted ${formatDate(booking.created_at)}`}
       </p>
       {/* Venue suitability is advisory (do not restrict) and isolated/independant to this individual venue request. */}
       <div

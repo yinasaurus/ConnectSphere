@@ -3,6 +3,7 @@ import { api } from '../api';
 import { displayError } from '../displayError';
 import AlertBanner from './AlertBanner';
 import Button from './Button';
+import { formatDateTime } from '../formatDateTime';
 
 const PAGE_SIZE = 10;
 
@@ -59,8 +60,8 @@ export default function UnavailabilityList({ venues, refreshKey }) {
             <tr key={period.id}>
               <td>{venueName(period.venue_id)}</td>
               <td>{period.reason}</td>
-              <td>{new Date(period.start_at).toLocaleString()}</td>
-              <td>{new Date(period.end_at).toLocaleString()}</td>
+              <td>{formatDateTime(period.start_at)}</td>
+              <td>{formatDateTime(period.end_at)}</td>
             </tr>
           ))}
         </tbody>

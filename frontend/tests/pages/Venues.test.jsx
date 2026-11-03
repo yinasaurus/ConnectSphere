@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/auth';
 import Venues from '../../src/pages/Venues';
+import { formatDateTime } from '../../src/formatDateTime';
 
 jest.mock('../../src/api', () => ({
   api: jest.fn(),
@@ -1224,7 +1225,7 @@ describe('SCRUM-75 holds on the Venues page', () => {
     expect(within(row).getByText('HELD')).toBeInTheDocument();
     expect(within(row).queryByText('APPROVED')).not.toBeInTheDocument();
     expect(within(row).getByTestId('hold-expiry-900')).toHaveTextContent(
-      new Date(held.hold_expires_at).toLocaleString()
+      formatDateTime(held.hold_expires_at)
     );
   });
 });
@@ -1258,7 +1259,7 @@ describe('SCRUM-76 expired holds on the Venues page', () => {
     const row = await screen.findByTestId('booking-row-903');
     expect(within(row).getByText('EXPIRED')).toBeInTheDocument();
     expect(within(row).getByTestId('hold-expiry-903')).toHaveTextContent(
-      `Hold expired ${new Date('2026-11-18T09:00:00.000Z').toLocaleString()}`
+      `Hold expired ${formatDateTime('2026-11-18T09:00:00.000Z')}`
     );
   });
 });

@@ -3,6 +3,7 @@ import { api } from '../api';
 import { displayError } from '../displayError';
 import Button from './Button';
 import AlertBanner from './AlertBanner';
+import { formatDateTime } from '../formatDateTime';
 
 // <input type="datetime-local"> gives local time without a zone; send it as ISO (UTC).
 function toIso(localValue) {
@@ -89,8 +90,8 @@ export default function PlaceHoldCard({ venues, onPlaced }) {
 
         {selectedEvent && (
           <p className="muted" data-testid="hold-event-window">
-            <strong>Held for:</strong> {new Date(selectedEvent.startAt).toLocaleString()}
-            {selectedEvent.endAt ? ` to ${new Date(selectedEvent.endAt).toLocaleString()}` : ''}
+            <strong>Held for:</strong> {formatDateTime(selectedEvent.startAt)}
+            {selectedEvent.endAt ? ` to ${formatDateTime(selectedEvent.endAt)}` : ''}
             {' '}(expiry must be no later than the event start)
           </p>
         )}

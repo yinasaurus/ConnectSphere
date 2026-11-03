@@ -5,6 +5,7 @@ import { useAuth } from '../auth';
 import { ROLES } from '../constants';
 import Button from '../components/Button';
 import AlertBanner from '../components/AlertBanner';
+import { formatDateTime } from '../formatDateTime';
 
 /**
  * Purpose: catalogue plus reservation requests. Technical Support can check whether
@@ -36,7 +37,7 @@ function availabilityLabel(check) {
  */
 function formatCheckWindow(from, to) {
   if (!from || !to) return '';
-  return `${new Date(from).toLocaleString()} – ${new Date(to).toLocaleString()}`;
+  return `${formatDateTime(from)} – ${formatDateTime(to)}`;
 }
 
 export default function Equipment() {

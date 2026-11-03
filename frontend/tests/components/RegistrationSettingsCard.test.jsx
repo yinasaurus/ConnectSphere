@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RegistrationSettingsCard from '../../src/components/RegistrationSettingsCard';
+import { formatDateTime } from '../../src/formatDateTime';
 
 /**
  * SCRUM-63: the assigned Coordinator's registration card.
@@ -110,7 +111,7 @@ describe('SCRUM-63 RegistrationSettingsCard', () => {
     ['after registration is enabled', enabledEvent],
   ])('US63-F09: shows the event date, time and expected attendance %s', (_label, ev) => {
     render(<RegistrationSettingsCard event={ev} onRun={jest.fn()} />);
-    const start = new Date(ev.startAt).toLocaleString();
+    const start = formatDateTime(ev.startAt);
     expect(screen.getAllByText((_text, el) => el.textContent.includes(`Event: ${start}`)).length).toBeGreaterThan(0);
     expect(screen.getByText('40 (maximum capacity cannot be higher)')).toBeInTheDocument();
   });

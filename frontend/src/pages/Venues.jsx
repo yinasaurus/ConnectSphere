@@ -11,6 +11,7 @@ import { LAYOUTS, ROLES } from '../constants';
 import Button from '../components/Button';
 import StatusBadge from '../components/StatusBadge';
 import AlertBanner from '../components/AlertBanner';
+import { formatDateTime } from '../formatDateTime';
 
 const BOOKING_PAGE_SIZE = 10;
 
@@ -109,9 +110,9 @@ function PendingBookingCard({ booking, onDecide }) {
     }
   }
 
-  const bookingWindow = `${new Date(booking.start_at).toLocaleString()} – ${new Date(booking.end_at).toLocaleString()}`;
+  const bookingWindow = `${formatDateTime(booking.start_at)} – ${formatDateTime(booking.end_at)}`;
   const eventWindow = booking.event_start_at
-    ? `${new Date(booking.event_start_at).toLocaleString()} – ${new Date(booking.event_end_at).toLocaleString()}`
+    ? `${formatDateTime(booking.event_start_at)} – ${formatDateTime(booking.event_end_at)}`
     : 'TBC';
 
   return (
@@ -244,8 +245,8 @@ function BookingRow({ booking, onApprove }) {
         {needsClear && <span className="needs-review-flag">Requires review</span>}
       </td>
       <td>
-        {booking.start_at ? new Date(booking.start_at).toLocaleString() : '—'}
-        {booking.end_at && ` – ${new Date(booking.end_at).toLocaleString()}`}
+        {booking.start_at ? formatDateTime(booking.start_at) : '—'}
+        {booking.end_at && ` – ${formatDateTime(booking.end_at)}`}
       </td>
       <td>
         {isRejected && booking.decision_reason && (
@@ -260,12 +261,12 @@ function BookingRow({ booking, onApprove }) {
         )}
         {isHeld && booking.hold_expires_at && (
           <span style={{ fontSize: '0.85rem' }} data-testid={`hold-expiry-${booking.id}`}>
-            Hold expires {new Date(booking.hold_expires_at).toLocaleString()}
+            Hold expires {formatDateTime(booking.hold_expires_at)}
           </span>
         )}
         {isExpired && booking.hold_expires_at && (
           <span className="muted" style={{ fontSize: '0.85rem' }} data-testid={`hold-expiry-${booking.id}`}>
-            Hold expired {new Date(booking.hold_expires_at).toLocaleString()}
+            Hold expired {formatDateTime(booking.hold_expires_at)}
           </span>
         )}
         {needsClear && onApprove && (
@@ -697,7 +698,7 @@ export default function Venues() {
                 </div>
                 <div className="roles">
                   <span className="pill">{updateForm.isActive ? 'Active' : 'Inactive'}</span>
-                  {updateForm.updatedAt && <span className="pill">Updated {new Date(updateForm.updatedAt).toLocaleString()}</span>}
+                  {updateForm.updatedAt && <span className="pill">Updated {formatDateTime(updateForm.updatedAt)}</span>}
                 </div>
               </div>
               <div className="grid-2">

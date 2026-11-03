@@ -4,6 +4,7 @@ import { api } from '../api';
 import { displayError } from '../displayError';
 import Button from '../components/Button';
 import AlertBanner from '../components/AlertBanner';
+import { formatDateTime as formatSingaporeDateTime } from '../formatDateTime';
 
 const STANDARD_EQUIPMENT_TYPES = [
   'AUDIO',
@@ -16,16 +17,7 @@ const STANDARD_EQUIPMENT_TYPES = [
 ];
 
 function formatDateTime(value) {
-  if (!value) return 'TBC';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return 'TBC';
-  return d.toLocaleString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatSingaporeDateTime(value) || 'TBC';
 }
 
 function toDateTimeLocal(isoString) {

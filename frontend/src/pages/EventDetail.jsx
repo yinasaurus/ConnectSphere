@@ -12,15 +12,7 @@ import StatusBadge from '../components/StatusBadge';
 import { LIVE_REFRESH_MS, ROLES } from '../constants';
 import Button from '../components/Button';
 import AlertBanner from '../components/AlertBanner';
-
-// Format each saved booking window and submitted date for the event's request list.
-function formatBookingTime(value) {
-  return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatSubmittedDate(value) {
-  return new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
+import { formatDate, formatDateTime, formatTime } from '../formatDateTime';
 
 // Show API status constants as readable labels in the event's booking card.
 function formatBookingStatus(status) {
@@ -286,7 +278,7 @@ export default function EventDetail() {
           <div className="card">
             <h3>Request details</h3>
             <p>{event.description || 'No description yet.'}</p>
-            <p><strong>When:</strong> {event.startAt ? `${new Date(event.startAt).toLocaleString()} – ${new Date(event.endAt).toLocaleString()}` : 'TBC'}</p>
+            <p><strong>When:</strong> {event.startAt ? `${formatDateTime(event.startAt)} – ${formatDateTime(event.endAt)}` : 'TBC'}</p>
             <p><strong>Attendance:</strong> {event.expectedAttendance || '—'}</p>
             <p><strong>Layout:</strong> {event.layoutPreference || '—'}</p>
             <p><strong>Accessibility:</strong> {event.accessibilityNeeds || 'None recorded'}</p>
@@ -305,7 +297,7 @@ export default function EventDetail() {
               )}
               {event.safetyCheck.decidedAt && (
                 <p className="muted">
-                  Recorded {new Date(event.safetyCheck.decidedAt).toLocaleString()}
+                  Recorded {formatDateTime(event.safetyCheck.decidedAt)}
                 </p>
               )}
             </div>
@@ -522,8 +514,8 @@ export default function EventDetail() {
               {changeRequests.map((row) => (
                 <div key={row.id} style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
                   <p><strong>{row.status}</strong></p>
-                  {row.startAt && <p>Proposed start: {new Date(row.startAt).toLocaleString()}</p>}
-                  {row.endAt && <p>Proposed end: {new Date(row.endAt).toLocaleString()}</p>}
+                  {row.startAt && <p>Proposed start: {formatDateTime(row.startAt)}</p>}
+                  {row.endAt && <p>Proposed end: {formatDateTime(row.endAt)}</p>}
                   {row.expectedAttendance != null && <p>Proposed attendance: {row.expectedAttendance}</p>}
                   {row.venueRequirements && <p>Proposed venue requirements: {row.venueRequirements}</p>}
                   {row.equipmentNotes && <p>Proposed equipment requirements: {row.equipmentNotes}</p>}
@@ -728,13 +720,13 @@ export default function EventDetail() {
                   <p className="muted" style={{ margin: '3px 0', fontSize: '0.88rem' }}>
                     <strong>Booking window:</strong>{' '}
                     {booking.start_at && booking.end_at
-                      ? `${new Date(booking.start_at).toLocaleString()} – ${new Date(booking.end_at).toLocaleString()}`
+                      ? `${formatDateTime(booking.start_at)} – ${formatDateTime(booking.end_at)}`
                       : 'TBC'}
                   </p>
                   {event.startAt && (
                     <p className="muted" style={{ margin: '3px 0', fontSize: '0.88rem' }}>
                       <strong>Event date:</strong>{' '}
-                      {`${new Date(event.startAt).toLocaleString()} – ${new Date(event.endAt).toLocaleString()}`}
+                      {`${formatDateTime(event.startAt)} – ${formatDateTime(event.endAt)}`}
                     </p>
                   )}
                   {booking.status === 'PENDING' && (
@@ -867,13 +859,13 @@ export default function EventDetail() {
                 </div>
                 <p className="muted" style={{ margin: '2px 0', fontSize: '0.85rem' }}>
                   {booking.start_at && booking.end_at
-                    ? `Occupied ${formatBookingTime(
+                    ? `Occupied ${formatTime(
                       new Date(new Date(booking.start_at).getTime() - Number(booking.setup_minutes || 0) * 60_000)
-                    )} to ${formatBookingTime(
+                    )} to ${formatTime(
                       new Date(new Date(booking.end_at).getTime() + Number(booking.teardown_minutes || 0) * 60_000)
                     )}`
                     : 'Occupied window unavailable'}
-                  {booking.created_at && ` · Submitted ${formatSubmittedDate(booking.created_at)}`}
+                  {booking.created_at && ` · Submitted ${formatDate(booking.created_at)}`}
                 </p>
                 {/* SCRUM-18 AC7: Coordinator sees the rejection reason and suggested alternative. */}
                 {booking.status === 'REJECTED' && booking.decision_reason && (
@@ -956,7 +948,7 @@ export default function EventDetail() {
                 )}
                 {(item.start_at && item.end_at) && (
                   <p className="muted" style={{ margin: '2px 0', fontSize: '0.82rem' }}>
-                    Timing: {new Date(item.start_at).toLocaleString()} – {new Date(item.end_at).toLocaleString()}
+                    Timing: {formatDateTime(item.start_at)} – {formatDateTime(item.end_at)}
                   </p>
                 )}
                 {item.decision_reason && (

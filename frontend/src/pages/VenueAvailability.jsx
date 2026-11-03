@@ -5,6 +5,7 @@ import { useAuth } from '../auth';
 import { ROLES } from '../constants';
 import Button from '../components/Button';
 import AlertBanner from '../components/AlertBanner';
+import { formatDateTime } from '../formatDateTime';
 
 // SCRUM-66: venue availability view. The backend decides what is available
 // (GET /api/venues/:id/availability); this page only picks the range and shows it.
@@ -20,7 +21,7 @@ const REASON_LABELS = {
 };
 
 function formatTime(value) {
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }
 
 export default function VenueAvailability() {

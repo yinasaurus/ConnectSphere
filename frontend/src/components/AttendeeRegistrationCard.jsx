@@ -1,4 +1,5 @@
 import Button from './Button';
+import { formatDateTime } from '../formatDateTime';
 
 const STATE_TEXT = {
   OPEN: 'Registration is open.',
@@ -16,7 +17,7 @@ const MY_STATUS_TEXT = {
 };
 
 function when(value) {
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }
 
 function stateText(status) {

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { displayError } from '../displayError';
 import AlertBanner from '../components/AlertBanner';
+import { formatDateTime } from '../formatDateTime';
 
 /**
  * Purpose: format start/end so the Lead can compare request times at a glance.
@@ -11,9 +12,9 @@ import AlertBanner from '../components/AlertBanner';
  */
 function formatQueueDateTime(startAt, endAt) {
   if (!startAt) return 'TBC';
-  const start = new Date(startAt).toLocaleString();
+  const start = formatDateTime(startAt);
   if (!endAt) return start;
-  return `${start} – ${new Date(endAt).toLocaleString()}`;
+  return `${start} – ${formatDateTime(endAt)}`;
 }
 
 /**

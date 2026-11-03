@@ -5,6 +5,7 @@ import { displayError } from '../displayError';
 import { useAuth } from '../auth';
 import Button from '../components/Button';
 import AlertBanner from '../components/AlertBanner';
+import { formatDateTime } from '../formatDateTime';
 
 export default function Drafts() {
   const { user } = useAuth();
@@ -34,7 +35,7 @@ export default function Drafts() {
           <Link key={draft.id} to={`/app/events/${draft.id}/edit`} className="card" style={{ textDecoration: 'none' }}>
             <h3>{draft.name || 'Untitled event request'}</h3>
             <p className="muted">{draft.purpose || 'No purpose set yet'}</p>
-            <p>Last saved {new Date(draft.updatedAt).toLocaleString()}</p>
+            <p>Last saved {formatDateTime(draft.updatedAt)}</p>
           </Link>
         ))}
         {!loading && !drafts.length && <div className="card muted">No drafts yet. Start a new event request and save it as a draft.</div>}

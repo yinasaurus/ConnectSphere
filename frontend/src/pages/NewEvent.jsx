@@ -341,9 +341,9 @@ export default function NewEvent() {
           {fieldErrors.venueRequirements && <span className="field-hint">{fieldErrors.venueRequirements} is required.</span>}
           <label htmlFor="eventEquipmentNotes">Equipment notes</label>
           <textarea id="eventEquipmentNotes" value={form.equipmentNotes} onChange={(e) => set('equipmentNotes', e.target.value)} />
-          <label htmlFor="eventRegistrationRequired">
+          <label className="checkbox-field" htmlFor="eventRegistrationRequired">
             <input id="eventRegistrationRequired" type="checkbox" checked={form.registrationRequired} onChange={(e) => set('registrationRequired', e.target.checked)} />
-            {' '}Attendee registration required
+            Attendee registration required
           </label>
           <div className="actions">
             {isCoordinatorEdit ? (

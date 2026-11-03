@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { displayError } from '../displayError';
 import AlertBanner from '../components/AlertBanner';
+import { formatDateTime } from '../formatDateTime';
 
 /**
  * Purpose: Safety Officer list of events awaiting a safety check.
@@ -50,7 +51,7 @@ export default function SafetyQueue() {
                 <td>
                   <Link to={`/app/events/${event.id}/safety-check`}>{event.name}</Link>
                 </td>
-                <td>{event.startAt ? new Date(event.startAt).toLocaleString() : 'TBC'}</td>
+                <td>{event.startAt ? formatDateTime(event.startAt) : 'TBC'}</td>
                 <td>{event.expectedAttendance ?? '—'}</td>
                 <td>{event.status}</td>
               </tr>

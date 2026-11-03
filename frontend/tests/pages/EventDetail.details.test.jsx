@@ -12,6 +12,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import EventDetail from '../../src/pages/EventDetail';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/auth';
+import { formatDateTime } from '../../src/formatDateTime';
 
 jest.mock('../../src/api', () => ({ api: jest.fn() }));
 jest.mock('../../src/auth', () => ({ useAuth: jest.fn() }));
@@ -84,7 +85,7 @@ describe('SCRUM-39 event details on the event page', () => {
     mockApi({ event: { ...EVENT, status } });
     renderAs(role, userId);
     expect(await screen.findByText('Leadership Forum')).toBeInTheDocument();
-    const when = `${new Date(EVENT.startAt).toLocaleString()} – ${new Date(EVENT.endAt).toLocaleString()}`;
+    const when = `${formatDateTime(EVENT.startAt)} – ${formatDateTime(EVENT.endAt)}`;
     // Each AC2 item is checked against its own label, so a value in the wrong place fails.
     expect(screen.getByText('When:').parentElement).toHaveTextContent(`When: ${when}`);
     expect(screen.getByText('Attendance:').parentElement).toHaveTextContent('Attendance: 120');

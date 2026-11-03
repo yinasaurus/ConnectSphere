@@ -2,9 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import Button from '../components/Button';
+import { formatMonth, singaporeDateKey } from '../formatDateTime';
+
+const VISIBLE_EVENTS = 3;
 
 export default function CalendarPage() {
   const [events, setEvents] = useState([]);
+  const [openDay, setOpenDay] = useState(null);
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -25,24 +29,37 @@ export default function CalendarPage() {
         </div>
         <div className="actions">
           <Button variant="ghost"  onClick={() => setCursor(addMonths(cursor, -1))}>Prev</Button>
-          <strong>{cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</strong>
+          <strong>{formatMonth(cursor)}</strong>
           <Button variant="ghost"  onClick={() => setCursor(addMonths(cursor, 1))}>Next</Button>
         </div>
       </div>
       <div className="calendar">
         {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-          <div key={day} className="muted">{day}</div>
+          <div key={day} className="cal-head">{day}</div>
         ))}
-        {cells.map((cell) => (
-          <div className="cal-cell" key={cell.key}>
-            <span>{cell.date.getDate()}</span>
-            {cell.events.map((event) => (
-              <Link className="cal-event" key={event.id} to={`/app/events/${event.id}`}>
-                {event.name}
-              </Link>
-            ))}
-          </div>
-        ))}
+        {cells.map((cell) => {
+          const expanded = openDay === cell.key;
+          const visible = expanded ? cell.events : cell.events.slice(0, VISIBLE_EVENTS);
+          const hidden = cell.events.length - visible.length;
+          return (
+            <div
+              className={`cal-cell${cell.inMonth ? '' : ' cal-outside'}${cell.isToday ? ' cal-today' : ''}`}
+              key={cell.key}
+            >
+              <span className="cal-day">{cell.date.getDate()}</span>
+              {visible.map((event) => (
+                <Link className="cal-event" key={event.id} to={`/app/events/${event.id}`} title={event.name}>
+                  {event.name}
+                </Link>
+              ))}
+              {hidden > 0 && (
+                <button type="button" className="cal-more" onClick={() => setOpenDay(cell.key)}>
+                  +{hidden} more
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
     </>
   );
@@ -60,11 +77,13 @@ function buildCells(cursor, events) {
   return Array.from({ length: 42 }, (_, index) => {
     const date = new Date(first);
     date.setDate(first.getDate() + index);
-    const key = date.toISOString().slice(0, 10);
+    const key = singaporeDateKey(date);
     return {
       key,
       date,
-      events: events.filter((event) => event.startAt && event.startAt.slice(0, 10) === key),
+      inMonth: date.getMonth() === cursor.getMonth(),
+      isToday: key === singaporeDateKey(new Date()),
+      events: events.filter((event) => singaporeDateKey(event.startAt) === key),
     };
   });
 }
