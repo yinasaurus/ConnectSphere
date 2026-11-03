@@ -55,7 +55,7 @@ describe('TC-DRAFT-04: Draft Saving & Resuming', () => {
   });
 });
 
-describe('SCUM-16: Request Clarification on Event Request', () => {
+describe('SCRUM-16: Request Clarification on Event Request', () => {
   const eventName = `Clarification Test ${Date.now()}`;
 
   it('allows coordinator to request clarification and organizer to inspect attention view and respond', () => {
