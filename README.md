@@ -2,6 +2,8 @@
 
 The IS212 Event Planning and Venue Booking System.
 
+Repository: https://github.com/yinasaurus/ConnectSphere
+
 | Layer | Choice |
 | --- | --- |
 | Frontend | React 18, Vite, React Router |
@@ -178,17 +180,7 @@ These come from the briefing and the G3/G4/G5 Q&A. If a later story disagrees, c
 | Booking decision notice (SCRUM-78): when Venue Staff approve or reject, only the event's assigned Coordinator is notified; the notice names the event and venue, and a rejection includes the reason and suggested alternative if staff gave them (no reason line otherwise); nothing is sent while the request is pending | `decideBooking` → `buildBookingDecisionNotice` → `notifyUser`, reason/alternative boxes on the event page |
 | Venue Staff and Attendee notices (SCRUM-46): a new booking request notifies every active Venue Staff member except the sender. An approved booking flagged by a critical change, or an event cancelled while one is still approved, notifies them again. An Attendee is told when their own registration is confirmed or withdrawn. Registered Attendees are told about a date, time or venue change and about cancellation. Notices start unread and are marked read on the Notifications page. | `notifyVenueStaff` / `notifyRegisteredAttendees` in `notifications.service` |
 
-Notification channel is in-app. The same `notifyUser()` helper can later send email without changing every feature.
-
-## Still not built
-
-- Email / reminder scheduler. Notices stay in-app.
-- Document uploads. The `event_documents` table exists and no screen uses it.
-- Programme / multi-session editor. The `event_sessions` table exists and no screen uses it.
-- Export or print of equipment lists.
-- Assigning a Coordinator by experience. Submit leaves the request unassigned.
-- Attendee self-registration of accounts.
-- Automatic cancellation of a booking on every change. Staff review the flagged row, and the Coordinator updates it.
+Notification channel is in-app.
 
 ## How to add a feature
 
